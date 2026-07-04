@@ -203,6 +203,23 @@ export function ArticleGeneratorApp() {
       (visualTone.mode === "upload" && visualTone.uploadedImageUrl);
     return Boolean(hasReference && hasTone);
   }, [referenceFiles, references, visualTone]);
+  const generateRequirementMessage = useMemo(() => {
+    if (canGenerate) return "";
+
+    const missing: string[] = [];
+    const hasReference =
+      references.some((item) => item.url?.trim() || item.text?.trim()) ||
+      referenceFiles.some((file) => file.ok && file.text?.trim());
+    const hasTone =
+      (visualTone.mode === "preset" && visualTone.preset) ||
+      (visualTone.mode === "custom" && visualTone.custom?.trim()) ||
+      (visualTone.mode === "upload" && visualTone.uploadedImageUrl);
+
+    if (!hasReference) missing.push("参照情報");
+    if (!hasTone) missing.push("画像トーン");
+
+    return `${missing.join("と")}を入力すると記事作成を開始できます。`;
+  }, [canGenerate, referenceFiles, references, visualTone]);
 
   const isGenerating = Boolean(activeGenerationJobId);
 
@@ -1195,7 +1212,8 @@ export function ArticleGeneratorApp() {
               AIO記事 半自動生成ツール
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
             <Badge variant={draft?.status === "approved" ? "success" : "default"}>
               {draft ? statusLabel(draft.status) : "未生成"}
             </Badge>
@@ -1212,6 +1230,15 @@ export function ArticleGeneratorApp() {
                   ? "記事の再作成"
                   : "AIによる記事作成"}
             </Button>
+            </div>
+            {generateRequirementMessage ? (
+              <div
+                data-testid="generate-requirement-message"
+                className="max-w-[360px] text-right text-xs text-slate-500"
+              >
+                {generateRequirementMessage}
+              </div>
+            ) : null}
           </div>
         </div>
       </header>

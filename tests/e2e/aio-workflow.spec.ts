@@ -258,6 +258,37 @@ test("API failure is shown in the UI without console errors or crashes", async (
   expect(errors()).toEqual([]);
 });
 
+test("primary generation CTA explains which required inputs are missing", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+
+  await login(page);
+  await expect(page.getByTestId("article-primary-button")).toBeDisabled();
+  await expect(page.getByTestId("generate-requirement-message")).toContainText(
+    "参照情報を入力すると記事作成を開始できます。",
+  );
+
+  await page.getByTestId("reference-text-0").fill("Reference text for requirement guidance.");
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
+  await expect(page.getByTestId("generate-requirement-message")).toBeHidden();
+
+  await page.getByTestId("visual-tone-mode-custom").click();
+  await expect(page.getByTestId("article-primary-button")).toBeDisabled();
+  await expect(page.getByTestId("generate-requirement-message")).toContainText(
+    "画像トーンを入力すると記事作成を開始できます。",
+  );
+
+  await page
+    .getByPlaceholder("例: 信頼感のある白背景、青と緑のアクセント、図解中心")
+    .fill("信頼感のある白背景、青のアクセント、図解中心");
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
+  await expect(page.getByTestId("generate-requirement-message")).toBeHidden();
+  expect(errors()).toEqual([]);
+});
+
 test("competitor research failure resets progress and remains recoverable", async ({
   page,
 }) => {
