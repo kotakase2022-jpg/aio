@@ -1,3 +1,5 @@
+import { ZodError } from "zod";
+
 export class ApiError extends Error {
   status: number;
   detail?: string;
@@ -19,6 +21,17 @@ export function errorJson(error: unknown) {
     return Response.json(
       { ok: false, error: error.message, detail: error.detail },
       { status: error.status },
+    );
+  }
+
+  if (error instanceof ZodError) {
+    return Response.json(
+      {
+        ok: false,
+        error: "入力内容が不正です。",
+        detail: error.issues.map((issue) => issue.message).join(" / "),
+      },
+      { status: 400 },
     );
   }
 
