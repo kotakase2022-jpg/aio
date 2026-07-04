@@ -9,7 +9,7 @@ import {
 
 describe("OpenAI live sandbox contract", () => {
   test(
-    "Responses API returns strict structured JSON with the configured model",
+    "Responses API contract passes before real generation samples are evaluated",
     async () => {
       loadLiveEnv();
       expectLiveContractEnabled();
@@ -18,7 +18,7 @@ describe("OpenAI live sandbox contract", () => {
       vi.resetModules();
 
       const { createStructuredResponse, getTextModel } = await import("@/lib/server/openai");
-      const result = await createStructuredResponse<{ ok: boolean; summary: string }>({
+      const health = await createStructuredResponse<{ ok: boolean; summary: string }>({
         instructions:
           "Return JSON only. Keep the summary short and mention AIO article generation.",
         input: "Live sandbox contract check for AIO article generation.",
@@ -37,20 +37,8 @@ describe("OpenAI live sandbox contract", () => {
       });
 
       expect(getTextModel()).toBeTruthy();
-      expect(result.ok).toBe(true);
-      expect(result.summary.length).toBeGreaterThan(8);
-    },
-    90_000,
-  );
-
-  test(
-    "real article generation samples stay specific across multiple themes",
-    async () => {
-      loadLiveEnv();
-      expectLiveContractEnabled();
-      expectRequiredEnv(["OPENAI_API_KEY"]);
-      applyOpenAILiveModelOverride();
-      vi.resetModules();
+      expect(health.ok).toBe(true);
+      expect(health.summary.length).toBeGreaterThan(8);
 
       const { generateAioArticle } = await import("@/lib/server/article-generation");
       const minScore = Number(cleanEnvValue(process.env.AIO_LIVE_GENERATION_MIN_SCORE) || 75);
@@ -95,7 +83,7 @@ describe("OpenAI live sandbox contract", () => {
         expect(improvements, sample.name).not.toContain("参照情報の固有語彙");
       }
     },
-    420_000,
+    480_000,
   );
 });
 
