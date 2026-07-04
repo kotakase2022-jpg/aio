@@ -300,6 +300,70 @@ test("user can stop an in-progress generation job from the primary CTA", async (
   expect(errors()).toEqual([]);
 });
 
+test("uploaded visual tone image is sent to generation as upload mode", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  let uploadCalls = 0;
+  let generationVisualTone: Record<string, unknown> | undefined;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/upload-image", async (route) => {
+    uploadCalls += 1;
+    await route.fulfill({
+      json: {
+        ok: true,
+        url: "data:image/png;base64,dXBsb2FkZWQtdG9uZQ==",
+        path: "article-inserts/uploaded-tone.png",
+        filename: "tone.png",
+        storageMode: "local",
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+
+    const body = route.request().postDataJSON() as {
+      form?: { visualTone?: Record<string, unknown> };
+    };
+    generationVisualTone = body.form?.visualTone;
+    await route.fulfill({ json: { ok: true, job: completedJob } });
+  });
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    await route.fulfill({ json: { ok: true, job: completedJob } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for uploaded visual tone.");
+  await page.getByTestId("visual-tone-mode-upload").click();
+  await expect(
+    page.getByText(
+      "画像アップロード方式では、AI画像生成は行わず、アップロード画像1枚を反映します。",
+    ),
+  ).toBeVisible();
+  await page.getByTestId("visual-tone-upload-input").setInputFiles({
+    name: "tone.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("uploaded-tone"),
+  });
+  await expect(page.locator('img[alt="挿入画像"]')).toHaveAttribute("src", /data:image\/png/);
+
+  await page.getByTestId("article-primary-button").click();
+
+  expect(uploadCalls).toBe(1);
+  expect(generationVisualTone).toMatchObject({
+    mode: "upload",
+    uploadedImageUrl: "data:image/png;base64,dXBsb2FkZWQtdG9uZQ==",
+    uploadedImagePath: "article-inserts/uploaded-tone.png",
+    uploadedImageName: "tone.png",
+  });
+  expect(errors()).toEqual([]);
+});
+
 async function login(page: Page) {
   await page.goto("/demo-login");
   await page.getByTestId("demo-access-code").fill("202607");

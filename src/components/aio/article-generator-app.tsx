@@ -1476,6 +1476,7 @@ export function ArticleGeneratorApp() {
                 ].map(([mode, label]) => (
                   <Button
                     key={mode}
+                    data-testid={`visual-tone-mode-${mode}`}
                     type="button"
                     variant={visualTone.mode === mode ? "default" : "secondary"}
                     onClick={() =>
@@ -1526,6 +1527,7 @@ export function ArticleGeneratorApp() {
                   label="挿入画像"
                   onFile={uploadToneImage}
                   previewUrl={visualTone.uploadedImageUrl}
+                  testId="visual-tone-upload-input"
                 />
               ) : null}
             </CardContent>
@@ -2093,10 +2095,12 @@ function UploadRow({
   label,
   onFile,
   previewUrl,
+  testId,
 }: {
   label: string;
   onFile: (file: File | null) => void;
   previewUrl?: string;
+  testId?: string;
 }) {
   return (
     <div className="rounded-md border border-dashed border-slate-300 p-3">
@@ -2107,6 +2111,7 @@ function UploadRow({
             <Upload className="size-4" />
             アップロード
             <input
+              data-testid={testId}
               type="file"
               accept="image/*"
               className="hidden"
