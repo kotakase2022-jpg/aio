@@ -234,6 +234,72 @@ test("stale generation job state is cleared with a Japanese recovery message", a
   expect(errors()).toEqual([]);
 });
 
+test("user can stop an in-progress generation job from the primary CTA", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const runningJob = {
+    ...createCompletedGenerationJob(),
+    id: "job-cancel-e2e",
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    steps: [
+      { id: "fetch_refs", label: "参照URL本文抽出", status: "running" as const, detail: "処理中" },
+      { id: "fetch_competitors", label: "競合URL本文抽出", status: "pending" as const },
+      { id: "merge_research", label: "競合調査統合", status: "pending" as const },
+      { id: "generate_outline", label: "記事構成案生成", status: "pending" as const },
+      { id: "generate_body", label: "AIO本文生成", status: "pending" as const },
+      { id: "generate_meta", label: "タイトル・メタ・FAQ生成", status: "pending" as const },
+      { id: "image_prompts", label: "画像プロンプト生成", status: "pending" as const },
+      { id: "images", label: "画像生成または反映", status: "pending" as const },
+      { id: "save", label: "ドラフト保存", status: "pending" as const },
+    ],
+  };
+  let cancelCalls = 0;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/generation-jobs/job-cancel-e2e/cancel", async (route) => {
+    cancelCalls += 1;
+    await route.fulfill({
+      json: {
+        ok: true,
+        job: {
+          ...runningJob,
+          status: "canceled",
+          error: "記事作成を停止しました。",
+        },
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-cancel-e2e", async (route) => {
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for cancel handling.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
+  await page.getByTestId("article-primary-button").click();
+
+  expect(cancelCalls).toBe(1);
+  await expect(page.getByText("記事作成を停止しました。")).toBeVisible();
+  await expect(page.getByTestId("article-primary-button")).toContainText("AIによる記事作成");
+  await expect(
+    page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
+  ).resolves.toBeNull();
+  expect(errors()).toEqual([]);
+});
+
 async function login(page: Page) {
   await page.goto("/demo-login");
   await page.getByTestId("demo-access-code").fill("202607");
