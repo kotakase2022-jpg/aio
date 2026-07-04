@@ -33,6 +33,7 @@ beforeEach(async () => {
   process.env.SUPABASE_SERVICE_ROLE_KEY = "";
   process.env.SUPABASE_GATEWAY_TOKEN = "";
   process.env.VERCEL = "";
+  vi.clearAllMocks();
   vi.resetModules();
 });
 
@@ -177,5 +178,89 @@ describe("article generation job runner", () => {
       "https://assets.example.com/featured.png",
     );
     expect(completed?.steps.every((step) => step.status === "done")).toBe(true);
+  });
+
+  test("marks the running generation steps as failed when article generation fails", async () => {
+    const { fetchUrlContent } = await import("@/lib/server/content");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    const { saveDraft } = await import("@/lib/server/drafts");
+    const { createGenerationJob, getGenerationJob } = await import(
+      "@/lib/server/generation-jobs"
+    );
+    const { runArticleGenerationJob } = await import(
+      "@/lib/server/article-generation-job-runner"
+    );
+
+    vi.mocked(fetchUrlContent).mockResolvedValueOnce({
+      url: "https://example.com/reference",
+      title: "Fetched reference",
+      text: "Fetched reference text",
+      ok: true,
+      sourceType: "url",
+    });
+    vi.mocked(generateAioArticle).mockRejectedValueOnce(new Error("OpenAI timeout"));
+    const job = await createGenerationJob({ inputPayload: sampleFormPayload });
+
+    await runArticleGenerationJob(job.id);
+
+    const failed = await getGenerationJob(job.id);
+    expect(failed?.status).toBe("failed");
+    expect(failed?.error).toBe("OpenAI timeout");
+    expect(failed?.draft).toBeUndefined();
+    expect(saveDraft).not.toHaveBeenCalled();
+    expect(failed?.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "fetch_refs", status: "done" }),
+        expect.objectContaining({ id: "generate_outline", status: "error", detail: "OpenAI timeout" }),
+        expect.objectContaining({ id: "generate_body", status: "error", detail: "OpenAI timeout" }),
+        expect.objectContaining({ id: "generate_meta", status: "error", detail: "OpenAI timeout" }),
+        expect.objectContaining({ id: "image_prompts", status: "error", detail: "OpenAI timeout" }),
+      ]),
+    );
+  });
+
+  test("continues saving a draft when image generation fails but records the image failure detail", async () => {
+    const { fetchUrlContent } = await import("@/lib/server/content");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    const { createArticleImagesForDraft } = await import("@/lib/server/article-images");
+    const { saveDraft } = await import("@/lib/server/drafts");
+    const { createGenerationJob, getGenerationJob } = await import(
+      "@/lib/server/generation-jobs"
+    );
+    const { runArticleGenerationJob } = await import(
+      "@/lib/server/article-generation-job-runner"
+    );
+
+    vi.mocked(fetchUrlContent).mockResolvedValueOnce({
+      url: "https://example.com/reference",
+      title: "Fetched reference",
+      text: "Fetched reference text",
+      ok: true,
+      sourceType: "url",
+    });
+    vi.mocked(generateAioArticle).mockResolvedValueOnce(sampleArticleResult);
+    vi.mocked(createArticleImagesForDraft).mockImplementationOnce(async (_article, _form, options) => {
+      options?.onImageFailure?.("featured", new Error("Image API timeout"));
+      return [];
+    });
+    vi.mocked(saveDraft).mockImplementationOnce(async (draft) => ({
+      draft,
+      storageMode: "local" as const,
+    }));
+    const job = await createGenerationJob({ inputPayload: sampleFormPayload });
+
+    await runArticleGenerationJob(job.id);
+
+    const completed = await getGenerationJob(job.id);
+    const savedDraft = vi.mocked(saveDraft).mock.calls.at(-1)?.[0] as ArticleDraft;
+    const imageStep = completed?.steps.find((step) => step.id === "images");
+
+    expect(completed?.status).toBe("completed");
+    expect(imageStep).toMatchObject({
+      status: "done",
+      detail: "0枚を反映・1枚失敗（本文のみ続行）",
+    });
+    expect(savedDraft.images).toEqual([]);
+    expect(savedDraft.editedBodyHtml).not.toContain("data-image-slot");
   });
 });
