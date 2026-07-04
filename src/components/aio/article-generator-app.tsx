@@ -2359,6 +2359,7 @@ function ArticlePreview({
     () =>
       evaluateArticleQuality(renderArticleHtml(draft), {
         primaryInfo: draft.inputPayload.primaryInfo,
+        closingText: draft.inputPayload.closingText,
       }),
     [draft],
   );

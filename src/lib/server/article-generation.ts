@@ -57,6 +57,10 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       typeof compactPayload.form.primaryInfo === "string"
         ? compactPayload.form.primaryInfo
         : undefined,
+    closingText:
+      typeof compactPayload.form.closingText === "string"
+        ? compactPayload.form.closingText
+        : undefined,
   });
 
   return {

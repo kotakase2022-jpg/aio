@@ -14,6 +14,7 @@ export type ArticleQualityEvaluation = {
 
 export type ArticleQualityContext = {
   primaryInfo?: string;
+  closingText?: string;
 };
 
 const genericPhrases = [
@@ -108,6 +109,20 @@ const primaryInfoStopWords = new Set([
 const firstPartyAttributionPattern =
   /(当社|弊社|自社|支援現場|現場|相談|ヒアリング|経験|観察|実務|お客様|クライアント|our|we|field support|support team|client|customer|observed|observation|experience)/i;
 
+const ctaStopWords = new Set([
+  ...primaryInfoStopWords,
+  "contact",
+  "please",
+  "get",
+  "let",
+  "相談",
+  "ください",
+  "お問い合わせ",
+  "問い合わせ",
+  "資料",
+  "請求",
+]);
+
 export function evaluateArticleQuality(
   html: string,
   context: ArticleQualityContext = {},
@@ -143,6 +158,11 @@ export function evaluateArticleQuality(
   const hasPrimaryInfoReflection =
     !shouldCheckPrimaryInfo ||
     (primaryInfoHitCount >= primaryInfoTargetHits && firstPartyAttributionPattern.test(text));
+  const ctaTerms = extractSignalTerms(context.closingText, ctaStopWords);
+  const ctaHitCount = ctaTerms.filter((term) => termAppearsInText(term, text)).length;
+  const ctaTargetHits = Math.min(3, Math.max(1, ctaTerms.length));
+  const shouldCheckCta = ctaTerms.length > 0;
+  const hasCtaReflection = !shouldCheckCta || ctaHitCount >= ctaTargetHits;
 
   const checks: ArticleQualityCheck[] = [
     {
@@ -188,6 +208,18 @@ export function evaluateArticleQuality(
             detail: hasPrimaryInfoReflection
               ? "入力された一次情報の固有語彙が、本文内で自社経験として自然に反映されています。"
               : `一次情報の固有語彙（${primaryInfoTerms.slice(0, 5).join("、")}）を、当社の経験・相談傾向・現場観察として本文に戻すと独自性が上がります。`,
+          },
+        ]
+      : []),
+    ...(shouldCheckCta
+      ? [
+          {
+            id: "cta-reflection",
+            label: "結び文章/CTAの反映",
+            passed: hasCtaReflection,
+            detail: hasCtaReflection
+              ? "入力された結び文章やCTAの意図が本文末尾に反映されています。"
+              : `結び文章/CTAの固有語彙（${ctaTerms.slice(0, 5).join("、")}）を、記事末尾の自然な誘導文として戻すと業務利用しやすくなります。`,
           },
         ]
       : []),
@@ -281,18 +313,22 @@ function normalizeText(text: string) {
 }
 
 function extractPrimaryInfoTerms(primaryInfo?: string) {
-  if (!primaryInfo?.trim()) {
+  return extractSignalTerms(primaryInfo, primaryInfoStopWords);
+}
+
+function extractSignalTerms(value: string | undefined, stopWords: Set<string>) {
+  if (!value?.trim()) {
     return [];
   }
 
   return uniqueItems(
-    primaryInfo
+    value
       .split(
         /[、。,.・\s（）()「」『』【】\[\]\/]+|では|には|から|まで|より|として|について|は|が|を|に|で|と|の|も|へ/g,
       )
       .map((term) => term.trim())
       .filter((term) => term.length >= 2)
-      .filter((term) => !primaryInfoStopWords.has(term.toLowerCase()))
+      .filter((term) => !stopWords.has(term.toLowerCase()))
       .filter((term) => !/^[0-9０-９]+$/.test(term)),
   ).slice(0, 12);
 }
