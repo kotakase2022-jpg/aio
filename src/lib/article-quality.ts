@@ -68,6 +68,15 @@ const editorialAnchorPatterns = [
   /(参照|出典|参考|未確認|断定しない|照合)/,
 ];
 
+const sectionEvidencePatterns = [
+  /[0-9０-９]/,
+  /(当社|弊社|自社|支援現場|現場|相談|ヒアリング|経験|観察|実務|お客様|クライアント)/,
+  /(判断基準|チェック|手順|比較|選定|優先順位|条件|例外|確認軸)/,
+  /(失敗|注意点|リスク|落とし穴|手戻り|未確認|断定しない| caveat|risk)/i,
+  /(費用|期間|担当|体制|工数|人数|頻度|期限|料金|給付基礎日額|補償開始日)/,
+  /(参照|出典|参考|source|sources|照合|根拠)/i,
+];
+
 const primaryInfoStopWords = new Set([
   "当社",
   "弊社",
@@ -244,6 +253,11 @@ export function evaluateArticleQuality(
   const headings = extractHeadings(html);
   const mechanicalHeadingHits = headings.filter(isMechanicalHeading).length;
   const hasEditorialHeadings = headings.length >= 2 && mechanicalHeadingHits === 0;
+  const headingSections = extractHeadingSections(html);
+  const thinSections = headingSections.filter(isThinHeadingSection);
+  const allowedThinSections = headingSections.length >= 2 ? 1 : 0;
+  const hasSectionSpecificity =
+    headingSections.length < 2 || thinSections.length <= allowedThinSections;
   const repeatedEndingRate = sentenceEndings.length
     ? Math.max(...Object.values(countItems(sentenceEndings))) / sentenceEndings.length
     : 0;
@@ -321,6 +335,17 @@ export function evaluateArticleQuality(
         editorialAnchorCount >= 3
           ? "現場例、判断基準、失敗/注意点、体制・費用感、参照意識などが複数含まれます。"
           : "現場例、判断基準、失敗/注意点、体制・費用感、参照意識のうち複数を本文に入れると、一般論から抜け出せます。",
+    },
+    {
+      id: "section-specificity",
+      label: "各セクションの濃さ",
+      passed: hasSectionSpecificity,
+      detail: hasSectionSpecificity
+        ? "H2/H3ごとの本文に、判断材料や現場文脈が一定量含まれています。"
+        : `薄いセクションが多くあります（例: ${thinSections
+            .slice(0, 3)
+            .map((section) => section.heading)
+            .join("、")}）。各H2/H3に数字、現場例、判断基準、失敗/注意点、体制・費用・期間、参照元のいずれかを2つ以上入れると、人間の編集記事らしくなります。`,
     },
     ...(shouldCheckTheme
       ? [
@@ -562,6 +587,34 @@ function extractHeadings(html: string) {
   }
 
   return headings.filter(Boolean);
+}
+
+function extractHeadingSections(html: string) {
+  const matches = Array.from(html.matchAll(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/gi));
+
+  return matches
+    .map((match, index) => {
+      const next = matches[index + 1];
+      const heading = normalizeText(stripHtml(match[1] ?? ""));
+      const bodyStart = (match.index ?? 0) + match[0].length;
+      const bodyEnd = next?.index ?? html.length;
+      const bodyText = normalizeText(stripHtml(html.slice(bodyStart, bodyEnd)));
+
+      return {
+        heading,
+        bodyText,
+      };
+    })
+    .filter((section) => section.heading);
+}
+
+function isThinHeadingSection(section: { heading: string; bodyText: string }) {
+  const evidenceCount = sectionEvidencePatterns.filter((pattern) =>
+    pattern.test(section.bodyText),
+  ).length;
+  const bodyLength = Array.from(section.bodyText).length;
+
+  return bodyLength < 70 || evidenceCount < 2;
 }
 
 function isMechanicalHeading(heading: string) {

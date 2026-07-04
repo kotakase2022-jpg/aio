@@ -36,6 +36,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "Avoid commodity content and generic AI-like filler. Do not lean on vague phrases such as 近年, 重要です, 注目されています, と言えるでしょう, いかがでしょうか, or 本記事では unless they are genuinely necessary and supported by the material.",
       "Avoid unsupported strong claims such as 必ず, 絶対に, 完全に, 誰でも, 唯一, すべて解決, or 確実に unless the source material proves them and the sentence includes conditions or caveats.",
       "Write as a human editor who has interviewed the business: each major section should include at least one concrete decision criterion, field example, operational caveat, failure pattern, or source-backed detail.",
+      "Avoid thin H2/H3 sections. Every H2/H3 body should include at least two concrete signals such as a number, field observation, decision criterion, failure/risk note, team/cost/timing detail, or source/caveat note.",
       "Across the full article, include at least three different types of editorial evidence: field observations, decision criteria, failure/risk notes, team/cost/timing details, and source/caveat notes.",
       "Make headings editorial and useful, not mechanical keyword strings. Vary sentence rhythm and endings so the body does not read like a template.",
       "Avoid generic H2/H3 labels such as 重要なポイント, メリット, デメリット, まとめ, 概要, 基本, 活用方法, or 注意点. Make each heading convey a concrete reader decision, failure pattern, comparison axis, or field-specific insight.",
@@ -46,7 +47,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     ].join("\n"),
     input: JSON.stringify({
       task:
-        "AIO最適化済みの記事ドラフトを日本語で生成してください。payload.form.regenerationInstruction がある場合は、既存入力を前提にその再作成方針を優先して、構成・本文・タイトル・FAQ・画像プロンプトを再作成してください。冒頭に結論、明確なH2/H3、定義文、箇条書き、必要なら表、FAQを含めてください。各H2では、一次情報・参照情報・競合情報から得られる具体例、判断基準、注意点、現場で起きる失敗パターンのいずれかを必ず入れ、根拠が薄い内容は断定しないでください。body_htmlはHTML込みで9000文字以内に収め、JSONを必ず最後まで閉じてください。結び文章が入力されている場合は、記事末尾に自然に反映してください。執筆者情報がある場合は本文末尾に「この記事の執筆者」ブロックを入れてください。payload.form.wordCount を目標文字数として本文量を調整してください。payload.form.imageCount が0の場合は image_prompts を空配列にし、1以上の場合は featured から順に指定枚数分だけ返してください。",
+        "AIO最適化済みの記事ドラフトを日本語で生成してください。payload.form.regenerationInstruction がある場合は、既存入力を前提にその再作成方針を優先して、構成・本文・タイトル・FAQ・画像プロンプトを再作成してください。冒頭に結論、明確なH2/H3、定義文、箇条書き、必要なら表、FAQを含めてください。各H2では、一次情報・参照情報・競合情報から得られる具体例、判断基準、注意点、現場で起きる失敗パターンのいずれかを必ず入れ、薄い1段落だけで終えないでください。根拠が薄い内容は断定しないでください。body_htmlはHTML込みで9000文字以内に収め、JSONを必ず最後まで閉じてください。結び文章が入力されている場合は、記事末尾に自然に反映してください。執筆者情報がある場合は本文末尾に「この記事の執筆者」ブロックを入れてください。payload.form.wordCount を目標文字数として本文量を調整してください。payload.form.imageCount が0の場合は image_prompts を空配列にし、1以上の場合は featured から順に指定枚数分だけ返してください。",
       payload: compactPayload,
     }),
     timeoutMs: 105_000,

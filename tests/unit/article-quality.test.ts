@@ -330,6 +330,45 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
+  test("flags articles where most H2/H3 sections are thin even if the article has structure", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+      <p>結論として、定義を明確にします。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用を比較します。</td></tr></table>
+      <ul><li>失敗例を確認します。</li><li>注意点を整理します。</li></ul>
+      <h2>導入前に整理すること</h2>
+      <p>準備と確認を進めます。</p>
+      <h3>公開前のチェック</h3>
+      <p>FAQとしてよくある質問に回答します。</p>
+      <p>出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "section-specificity", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("薄いセクション");
+    expect(result.score).toBeLessThan(90);
+  });
+
+  test("allows one short FAQ-style section when the other sections are concrete", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、最初の400文字以内に判断基準を示す必要があります。当社の支援現場では、10件中6件で承認担当と出典確認の手順が曖昧になり、公開直前の手戻りが起きていました。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、参照元にない数字を条件なしで書かないことです。</li></ul>
+      <h2>編集者が公開前に見るべき3つの確認軸</h2>
+      <p>1つ目は参照元との照合、2つ目は現場例の出どころ、3つ目はWordPress投稿前の承認状態です。担当者と期限を決めると、公開後の修正リスクを下げられます。</p>
+      <h2>FAQ</h2>
+      <p>よくある質問として、参照元にない情報をどう扱うべきかがあります。未確認情報は断定しません。</p>
+      <p>出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "section-specificity", passed: true }),
+    );
+    expect(result.score).toBeGreaterThanOrEqual(90);
+  });
+
   test("penalizes mechanical headings even when the body has structure", () => {
     const result = evaluateArticleQuality(`
       <h2>重要なポイント</h2>

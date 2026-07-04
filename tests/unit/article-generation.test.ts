@@ -186,6 +186,8 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("first 400 Japanese characters answer-first");
     expect(call?.instructions).toContain("at least three different types of editorial evidence");
     expect(call?.instructions).toContain("Avoid generic H2/H3 labels");
+    expect(call?.instructions).toContain("Avoid thin H2/H3 sections");
+    expect(call?.instructions).toContain("at least two concrete signals");
     expect(call?.instructions).toContain("concrete reader decision");
     expect(call?.instructions).toContain("Treat payload.form.theme as the editorial brief");
     expect(call?.instructions).toContain("comparison axes");
