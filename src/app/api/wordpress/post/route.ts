@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { errorJson, okJson } from "@/lib/server/http";
+import { ApiError, errorJson, okJson } from "@/lib/server/http";
 import { publishDraftToWordpress } from "@/lib/server/wordpress";
 import type { ArticleDraft } from "@/types/aio";
 
@@ -16,11 +16,20 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const body = schema.parse(await request.json());
+    const draft = body.draft as ArticleDraft;
+    if (draft.status !== "approved") {
+      throw new ApiError(
+        "承認済みドラフトのみWordPress投稿できます。",
+        409,
+        "先に「承認済みに変更」を押してから投稿してください。",
+      );
+    }
+
     const origin =
       request.headers.get("origin") ||
       `${new URL(request.url).protocol}//${new URL(request.url).host}`;
     const result = await publishDraftToWordpress({
-      draft: body.draft as ArticleDraft,
+      draft,
       connectionId: body.connectionId,
       connection: body.connection as Parameters<typeof publishDraftToWordpress>[0]["connection"],
       status: body.status,
