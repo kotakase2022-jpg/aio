@@ -302,7 +302,23 @@ async function ensureTerms(
       `${siteUrl}/wp-json/wp/v2/${type}?search=${encodeURIComponent(name)}&per_page=20`,
       { headers: { Authorization: authHeader } },
     );
-    const existing = (await searchResponse.json().catch(() => [])) as Array<{
+    const searchJson = (await searchResponse.json().catch(() => null)) as unknown;
+    if (!searchResponse.ok) {
+      throw new ApiError(
+        `Failed to search WordPress ${singularTerm(type)}.`,
+        searchResponse.status,
+        readWordpressError(searchJson) ?? searchResponse.statusText,
+      );
+    }
+    if (!Array.isArray(searchJson)) {
+      throw new ApiError(
+        `Unexpected WordPress ${type} search response.`,
+        502,
+        "WordPress REST API returned a non-list response while searching terms.",
+      );
+    }
+
+    const existing = searchJson as Array<{
       id: number;
       name: string;
     }>;
@@ -323,15 +339,32 @@ async function ensureTerms(
     };
     if (!createResponse.ok || !created.id) {
       throw new ApiError(
-        `Failed to create WordPress ${type.slice(0, -1)}.`,
+        `Failed to create WordPress ${singularTerm(type)}.`,
         createResponse.status,
-        created.message,
+        readWordpressError(created),
       );
     }
     ids.push(created.id);
   }
 
   return ids;
+}
+
+function singularTerm(type: "categories" | "tags") {
+  return type === "categories" ? "category" : "tag";
+}
+
+function readWordpressError(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  return typeof record.message === "string"
+    ? record.message
+    : typeof record.code === "string"
+      ? record.code
+      : undefined;
 }
 
 async function uploadMedia(

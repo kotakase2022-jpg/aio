@@ -130,4 +130,53 @@ describe("WordPress REST API contract", () => {
       await server.close();
     }
   });
+
+  test("stops before posting when WordPress term search fails", async () => {
+    const server = await createMockHttpServer((request, response) => {
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(
+          response,
+          {
+            code: "rest_cannot_view",
+            message: "Sorry, you are not allowed to list categories.",
+          },
+          401,
+        );
+        return;
+      }
+
+      sendJson(response, { message: `Unexpected route ${request.method} ${request.pathname}` }, 500);
+    });
+
+    try {
+      const { saveWordpressConnection, publishDraftToWordpress } = await import(
+        "@/lib/server/wordpress"
+      );
+      const connection = await saveWordpressConnection({
+        siteUrl: server.origin,
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      });
+
+      await expect(
+        publishDraftToWordpress({
+          draft: createSampleDraft({ status: "approved" }),
+          connectionId: connection.id,
+          status: "draft",
+          origin: "http://localhost",
+        }),
+      ).rejects.toMatchObject({
+        status: 401,
+        message: "Failed to search WordPress category.",
+        detail: "Sorry, you are not allowed to list categories.",
+      });
+
+      const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
+      expect(requestNames).toContain("GET /wp-json/wp/v2/categories");
+      expect(requestNames).not.toContain("POST /wp-json/wp/v2/media");
+      expect(requestNames).not.toContain("POST /wp-json/wp/v2/posts");
+    } finally {
+      await server.close();
+    }
+  });
 });
