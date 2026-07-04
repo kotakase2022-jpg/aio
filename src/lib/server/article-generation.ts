@@ -1,6 +1,7 @@
 import sanitizeHtml from "sanitize-html";
 import { articleGenerationSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
+import { evaluateArticleQuality } from "@/lib/article-quality";
 import { truncateText } from "@/lib/utils";
 import type { ArticleGenerationResult } from "@/types/aio";
 
@@ -46,10 +47,24 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     maxOutputTokens: 16_000,
   });
 
+  const sanitizedBodyHtml = sanitizeArticleHtml(result.body_html);
+  const qualityEvaluation = evaluateArticleQuality(sanitizedBodyHtml);
+
   return {
     ...result,
-    body_html: sanitizeArticleHtml(result.body_html),
+    body_html: sanitizedBodyHtml,
     image_prompts: normalizeImagePrompts(result, compactPayload.form),
+    aio_score_self_evaluation: {
+      score: Math.min(result.aio_score_self_evaluation.score, qualityEvaluation.score),
+      strengths: uniqueItems([
+        ...result.aio_score_self_evaluation.strengths,
+        ...qualityEvaluation.strengths.map((item) => `編集品質チェック: ${item}`),
+      ]).slice(0, 8),
+      improvements: uniqueItems([
+        ...qualityEvaluation.improvements,
+        ...result.aio_score_self_evaluation.improvements,
+      ]).slice(0, 8),
+    },
   } satisfies ArticleGenerationResult;
 }
 
@@ -247,4 +262,8 @@ function normalizeImageCount(value: unknown) {
 function normalizeWordCount(value: unknown) {
   const parsed = Number(value);
   return [1000, 2000, 3000, 4000, 5000, 6000].includes(parsed) ? parsed : 3000;
+}
+
+function uniqueItems(items: string[]) {
+  return Array.from(new Set(items.filter((item) => item.trim())));
 }

@@ -78,4 +78,29 @@ describe("generateAioArticle", () => {
     expect(input.payload.form.primaryInfo).toContain("one-person contractors");
     expect(input.payload.form.primaryInfo).toContain("LINE");
   });
+
+  test("caps self-evaluation when the generated body looks generic", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      body_html:
+        "<h2>重要なポイント</h2><p>近年、多くの企業で注目されています。さまざまな取り組みが重要です。重要です。</p>",
+      aio_score_self_evaluation: {
+        score: 98,
+        strengths: ["High claimed score"],
+        improvements: [],
+      },
+    });
+
+    const result = await generateAioArticle({
+      form: sampleFormPayload,
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.aio_score_self_evaluation.score).toBeLessThan(90);
+    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain("凡庸表現");
+  });
 });

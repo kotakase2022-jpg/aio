@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { evaluateArticleQuality } from "@/lib/article-quality";
 import { formatJaDateTime } from "@/lib/date";
 import { cn, joinCsv, splitCsv } from "@/lib/utils";
 import type {
@@ -2210,6 +2211,10 @@ function ArticlePreview({
   onRegenerateImages: () => void;
 }) {
   const canRegenerateImages = draft.images.some((image) => image.source === "generated");
+  const qualityEvaluation = useMemo(
+    () => evaluateArticleQuality(renderArticleHtml(draft)),
+    [draft],
+  );
   const [copyStatus, setCopyStatus] = useState("");
   const copyStatusTimerRef = useRef<number | null>(null);
 
@@ -2316,6 +2321,28 @@ function ArticlePreview({
               <li key={item}>{item}</li>
             ))}
           </ul>
+        </InfoPanel>
+        <InfoPanel title="編集品質チェック">
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-semibold">{qualityEvaluation.score}</span>
+            <span className="text-sm text-slate-500">/ 100</span>
+          </div>
+          <div className="mt-3 space-y-2 text-xs leading-5">
+            {qualityEvaluation.checks.map((check) => (
+              <div
+                key={check.id}
+                className={cn(
+                  "rounded-md border px-3 py-2",
+                  check.passed
+                    ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                    : "border-amber-200 bg-amber-50 text-amber-900",
+                )}
+              >
+                <div className="font-semibold">{check.label}</div>
+                <div className="mt-0.5">{check.detail}</div>
+              </div>
+            ))}
+          </div>
         </InfoPanel>
         <InfoPanel title="出典URL">
           <div className="space-y-2 text-sm">

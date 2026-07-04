@@ -53,6 +53,8 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
   ).toBeVisible();
+  await expect(page.getByText("編集品質チェック")).toBeVisible();
+  await expect(page.getByText("AI風の汎用表現")).toBeVisible();
   await expect(page.locator('img[alt="AIO workflow hero image"]').first()).toHaveAttribute(
     "src",
     /data:image\/png/,
