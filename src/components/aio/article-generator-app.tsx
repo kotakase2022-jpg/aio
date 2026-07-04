@@ -345,10 +345,13 @@ export function ArticleGeneratorApp() {
       return;
     }
 
-    const effectiveFormPayload = regenerationInstruction.trim()
+    const trimmedRegenerationInstruction = regenerationInstruction.trim();
+    const previousDraft = draft;
+    const isRegeneration = Boolean(trimmedRegenerationInstruction && previousDraft);
+    const effectiveFormPayload = trimmedRegenerationInstruction
       ? {
           ...formPayload,
-          regenerationInstruction: regenerationInstruction.trim(),
+          regenerationInstruction: trimmedRegenerationInstruction,
         }
       : formPayload;
     let editableResearch: CompetitorResearchResult | null;
@@ -361,7 +364,7 @@ export function ArticleGeneratorApp() {
 
     if (typeof window !== "undefined") {
       setActiveError("");
-      setDraft(null);
+      setDraft(isRegeneration ? previousDraft : null);
       setTab("preview");
       setSteps(generationSteps);
       setFetchedReferences([]);
@@ -381,6 +384,9 @@ export function ArticleGeneratorApp() {
         applyGenerationJob(started.job);
         await pollGenerationJob(started.job.id);
       } catch (error) {
+        if (isRegeneration && previousDraft) {
+          setDraft(previousDraft);
+        }
         setActiveError(readError(error));
         markRunningAsError(readError(error));
       }
@@ -392,7 +398,7 @@ export function ArticleGeneratorApp() {
     const { signal } = controller;
 
     setActiveError("");
-    setDraft(null);
+    setDraft(isRegeneration ? previousDraft : null);
     setTab("preview");
     setSteps(generationSteps);
 
@@ -482,11 +488,17 @@ export function ArticleGeneratorApp() {
       updateStep("save", "done", `保存先: ${saved.storageMode}`);
     } catch (error) {
       if (isAbortError(error)) {
+        if (isRegeneration && previousDraft) {
+          setDraft(previousDraft);
+        }
         setActiveError("記事作成を停止しました。");
         markRunningAsError("ユーザー操作により停止しました。");
         return;
       }
 
+      if (isRegeneration && previousDraft) {
+        setDraft(previousDraft);
+      }
       setActiveError(readError(error));
       markRunningAsError(readError(error));
     } finally {

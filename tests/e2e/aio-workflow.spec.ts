@@ -293,6 +293,51 @@ test("image regeneration failure shows a recoverable error and resets progress",
   expect(errors()).toEqual([]);
 });
 
+test("article regeneration start failure keeps the existing draft visible", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generation-jobs$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    generationJobFailureCall: 2,
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for article regeneration failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeVisible();
+  await page
+    .getByTestId("article-regeneration-instruction")
+    .fill("Keep the existing article visible if the regeneration job cannot start.");
+  await page.getByTestId("article-regeneration-start").click();
+
+  expect(calls.articleGenerationJobs).toBe(2);
+  expect(calls.articleRegenerationInstruction).toContain("existing article visible");
+  await expect(page.getByText("記事再作成ジョブを開始できませんでした。").first()).toBeVisible();
+  await expect(page.getByText("記事再作成ジョブを開始できませんでした。")).toHaveCount(2);
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("article-primary-button")).toContainText("記事の再作成");
+  expect(errors()).toEqual([]);
+});
+
 test("file extraction failure is visible and does not block generation with manual fallback", async ({
   page,
 }) => {
@@ -830,7 +875,11 @@ async function login(page: Page) {
 async function mockCommonApiRoutes(
   page: Page,
   completedJob: ReturnType<typeof createCompletedGenerationJob>,
-  options: { themeCandidatesShouldFail?: boolean; generateImageShouldFail?: boolean } = {},
+  options: {
+    themeCandidatesShouldFail?: boolean;
+    generateImageShouldFail?: boolean;
+    generationJobFailureCall?: number;
+  } = {},
 ) {
   let latestCompletedJob = completedJob;
   const calls = {
@@ -917,6 +966,14 @@ async function mockCommonApiRoutes(
     calls.articleCompetitorFileNames =
       body.form?.competitorFiles?.map((file) => file.name ?? "") ?? [];
     calls.articleCompetitorResearchSummary = body.competitorResearch?.summary ?? "";
+    if (options.generationJobFailureCall === calls.articleGenerationJobs) {
+      await route.fulfill({
+        status: 500,
+        json: { ok: false, error: "記事再作成ジョブを開始できませんでした。" },
+      });
+      return;
+    }
+
     latestCompletedJob = buildCompletedJobForForm(completedJob, body.form ?? {});
     await route.fulfill({ json: { ok: true, job: latestCompletedJob } });
   });
