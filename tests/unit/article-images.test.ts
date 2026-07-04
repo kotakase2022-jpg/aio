@@ -60,4 +60,41 @@ describe("article image helpers", () => {
     expect(images[0].url).toBe("https://assets.example.com/featured.png");
     expect(storeAsset).toHaveBeenCalledWith(expect.objectContaining({ filename: "featured.png" }));
   });
+
+  test("keeps the article draft usable when one generated image fails", async () => {
+    const { generateImageBase64 } = await import("@/lib/server/openai");
+    const { createArticleImagesForDraft } = await import("@/lib/server/article-images");
+    const failures: string[] = [];
+    vi.mocked(generateImageBase64)
+      .mockRejectedValueOnce(new Error("image timeout"))
+      .mockResolvedValueOnce(Buffer.from("image").toString("base64"));
+
+    const images = await createArticleImagesForDraft(
+      {
+        ...sampleArticleResult,
+        image_prompts: [
+          ...sampleArticleResult.image_prompts,
+          {
+            slot: "inline-1",
+            purpose: "Inline image",
+            prompt: "Clean inline explanatory visual",
+            alt_text: "Inline AIO workflow image",
+          },
+        ],
+      },
+      {
+        ...sampleFormPayload,
+        imageCount: 2,
+      },
+      {
+        onImageFailure: (slot, error) => {
+          failures.push(`${slot}:${error instanceof Error ? error.message : "unknown"}`);
+        },
+      },
+    );
+
+    expect(images).toHaveLength(1);
+    expect(images[0].slot).toBe("inline-1");
+    expect(failures).toEqual(["featured:image timeout"]);
+  });
 });

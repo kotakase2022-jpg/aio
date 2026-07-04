@@ -94,8 +94,20 @@ export async function runArticleGenerationJob(jobId: string) {
 
     await assertGenerationJobActive(jobId);
     await updateGenerationStep(jobId, "images", "running");
-    const images = await createArticleImagesForDraft(article, freshJob.inputPayload);
-    await updateGenerationStep(jobId, "images", "done", `${images.length}枚を反映`);
+    const imageFailures: string[] = [];
+    const images = await createArticleImagesForDraft(article, freshJob.inputPayload, {
+      onImageFailure: (slot, error) => {
+        imageFailures.push(`${slot}: ${errorMessage(error)}`);
+      },
+    });
+    await updateGenerationStep(
+      jobId,
+      "images",
+      "done",
+      imageFailures.length
+        ? `${images.length}枚を反映・${imageFailures.length}枚失敗（本文のみ続行）`
+        : `${images.length}枚を反映`,
+    );
 
     await assertGenerationJobActive(jobId);
     await updateGenerationStep(jobId, "save", "running");
@@ -264,4 +276,8 @@ function escapeHtml(value: string) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "画像生成に失敗しました。";
 }
