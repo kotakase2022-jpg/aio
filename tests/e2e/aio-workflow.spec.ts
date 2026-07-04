@@ -224,6 +224,60 @@ test("API failure is shown in the UI without console errors or crashes", async (
   expect(errors()).toEqual([]);
 });
 
+test("invalid editable competitor research JSON can be fixed before generation", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob);
+  await login(page);
+
+  await page.getByTestId("reference-text-0").fill("Reference text for invalid JSON recovery.");
+  await page.getByTestId("competitor-research-button").click();
+  await expect(page.getByTestId("competitor-research-json")).toHaveValue(
+    /Generic automation LP/,
+  );
+
+  await page.getByTestId("competitor-research-json").fill("{ invalid competitor json");
+  await page.getByTestId("article-primary-button").click();
+
+  await expect(page.getByTestId("competitor-research-json-error")).toContainText(
+    "競合調査JSONの形式を確認してください。",
+  );
+  await expect(page.getByTestId("article-primary-button")).toContainText("AIによる記事作成");
+  expect(calls.articlePrimaryInfo).toBe("");
+  expect(calls.articleGenerationJobs).toBe(0);
+
+  await page.getByTestId("competitor-research-json").fill(
+    JSON.stringify(
+      {
+        ...competitorResearchFixture,
+        summary: "Recovered competitor JSON summary",
+      },
+      null,
+      2,
+    ),
+  );
+  await expect(page.getByTestId("competitor-research-json-error")).toBeHidden();
+  await page.getByTestId("article-primary-button").click();
+
+  expect(calls.articleCompetitorResearchSummary).toBe("Recovered competitor JSON summary");
+  expect(calls.articleGenerationJobs).toBe(1);
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("stale generation job state is cleared with a Japanese recovery message", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/generation-jobs\/stale-job$/],
@@ -518,6 +572,7 @@ async function mockCommonApiRoutes(
     competitorResearch: 0,
     extractFile: 0,
     themeCandidateCompetitorSummary: "",
+    articleGenerationJobs: 0,
     articlePrimaryInfo: "",
     articleCompetitorResearchSummary: "",
     articleCompetitorFileNames: [] as string[],
@@ -581,6 +636,7 @@ async function mockCommonApiRoutes(
       };
       competitorResearch?: { summary?: string };
     };
+    calls.articleGenerationJobs += 1;
     calls.articlePrimaryInfo = body.form?.primaryInfo ?? "";
     calls.articleCompetitorFileNames =
       body.form?.competitorFiles?.map((file) => file.name ?? "") ?? [];

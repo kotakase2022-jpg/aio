@@ -114,6 +114,7 @@ export function ArticleGeneratorApp() {
   const [competitorResearch, setCompetitorResearch] =
     useState<CompetitorResearchResult | null>(null);
   const [competitorJson, setCompetitorJson] = useState("");
+  const [competitorJsonError, setCompetitorJsonError] = useState("");
   const [researchLoading, setResearchLoading] = useState(false);
   const [researchProgress, setResearchProgress] = useState(0);
   const [themeCandidateLoading, setThemeCandidateLoading] = useState(false);
@@ -304,6 +305,7 @@ export function ArticleGeneratorApp() {
       );
       setCompetitorResearch(result.result);
       setCompetitorJson(JSON.stringify(result.result, null, 2));
+      setCompetitorJsonError("");
       setResearchProgress(100);
     } catch (error) {
       setResearchProgress(0);
@@ -349,6 +351,13 @@ export function ArticleGeneratorApp() {
           regenerationInstruction: regenerationInstruction.trim(),
         }
       : formPayload;
+    let editableResearch: CompetitorResearchResult | null;
+    try {
+      editableResearch = parseCompetitorResearch();
+    } catch (error) {
+      setActiveError(readError(error));
+      return;
+    }
 
     if (typeof window !== "undefined") {
       setActiveError("");
@@ -360,7 +369,6 @@ export function ArticleGeneratorApp() {
       persistReusableInputs(effectiveFormPayload);
 
       try {
-        const editableResearch = parseCompetitorResearch();
         updateStep("fetch_refs", "running", "サーバー側ジョブを開始しています");
         const started = await apiPost<{ job: GenerationJob }>("/api/generation-jobs", {
           form: effectiveFormPayload,
@@ -410,7 +418,6 @@ export function ArticleGeneratorApp() {
       );
 
       updateStep("merge_research", "running");
-      const editableResearch = parseCompetitorResearch();
       updateStep(
         "merge_research",
         "done",
@@ -982,13 +989,19 @@ export function ArticleGeneratorApp() {
 
   function parseCompetitorResearch() {
     if (!competitorJson.trim()) {
+      setCompetitorJsonError("");
       return competitorResearch;
     }
 
     try {
-      return JSON.parse(competitorJson) as CompetitorResearchResult;
+      const parsed = JSON.parse(competitorJson) as CompetitorResearchResult;
+      setCompetitorJsonError("");
+      return parsed;
     } catch {
-      throw new Error("競合調査JSONの形式を確認してください。");
+      const message =
+        "競合調査JSONの形式を確認してください。括弧・カンマ・引用符が崩れていないか確認してください。";
+      setCompetitorJsonError(message);
+      throw new Error(message);
     }
   }
 
@@ -1265,9 +1278,22 @@ export function ArticleGeneratorApp() {
                 <Textarea
                   data-testid="competitor-research-json"
                   value={competitorJson}
-                  onChange={(event) => setCompetitorJson(event.target.value)}
+                  onChange={(event) => {
+                    setCompetitorJson(event.target.value);
+                    if (competitorJsonError) {
+                      setCompetitorJsonError("");
+                    }
+                  }}
                   className="min-h-64 font-mono text-xs"
                 />
+              ) : null}
+              {competitorJsonError ? (
+                <p
+                  data-testid="competitor-research-json-error"
+                  className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700"
+                >
+                  {competitorJsonError}
+                </p>
               ) : null}
               <FetchFailures results={fetchedCompetitors} />
             </CardContent>
