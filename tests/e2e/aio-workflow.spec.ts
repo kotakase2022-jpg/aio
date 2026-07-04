@@ -249,6 +249,32 @@ test("API failure is shown in the UI without console errors or crashes", async (
   expect(errors()).toEqual([]);
 });
 
+test("competitor research failure resets progress and remains recoverable", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/competitor-research$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    competitorResearchShouldFail: true,
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for competitor research failure.");
+  await page
+    .getByTestId("competitor-text-0")
+    .fill("Competitor memo for recoverable research failure.");
+  await page.getByTestId("competitor-research-button").click();
+
+  expect(calls.competitorResearch).toBe(1);
+  await expect(page.getByText("競合情報調査に失敗しました。")).toBeVisible();
+  await expect(page.getByTestId("competitor-research-button")).toBeEnabled();
+  await expect(page.getByTestId("competitor-research-progress")).toBeHidden();
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
+  expect(errors()).toEqual([]);
+});
+
 test("image regeneration failure shows a recoverable error and resets progress", async ({
   page,
 }) => {
@@ -877,6 +903,7 @@ async function mockCommonApiRoutes(
   completedJob: ReturnType<typeof createCompletedGenerationJob>,
   options: {
     themeCandidatesShouldFail?: boolean;
+    competitorResearchShouldFail?: boolean;
     generateImageShouldFail?: boolean;
     generationJobFailureCall?: number;
   } = {},
@@ -926,6 +953,14 @@ async function mockCommonApiRoutes(
 
   await page.route("**/api/competitor-research", async (route) => {
     calls.competitorResearch += 1;
+    if (options.competitorResearchShouldFail) {
+      await route.fulfill({
+        status: 500,
+        json: { ok: false, error: "競合情報調査に失敗しました。" },
+      });
+      return;
+    }
+
     await route.fulfill({ json: { ok: true, result: competitorResearchFixture } });
   });
 
