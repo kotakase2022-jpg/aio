@@ -4,9 +4,12 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  Check,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
+  ClipboardCopy,
+  Download,
   FileText,
   Loader2,
   Maximize2,
@@ -125,11 +128,7 @@ export function ArticleGeneratorApp() {
   const [fetchedCompetitors, setFetchedCompetitors] = useState<FetchResult[]>([]);
   const [draft, setDraft] = useState<ArticleDraft | null>(null);
   const [tab, setTab] = useState<"preview" | "edit">("preview");
-  const [activeGenerationJobId, setActiveGenerationJobId] = useState<string | null>(() =>
-    typeof window === "undefined"
-      ? null
-      : window.localStorage.getItem(activeGenerationJobStorageKey),
-  );
+  const [activeGenerationJobId, setActiveGenerationJobId] = useState<string | null>(null);
   const [generationLogs, setGenerationLogs] = useState<GenerationLogSummary[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsExpanded, setLogsExpanded] = useState(false);
@@ -1134,7 +1133,9 @@ export function ArticleGeneratorApp() {
                   ["参照", "#references"],
                   ["競合", "#competitors"],
                   ["テーマ", "#theme"],
+                  ["一次情報", "#primary-info"],
                   ["画像", "#visual-tone"],
+                  ["文字数", "#word-count"],
                   ["承認", "#approval"],
                   ["WordPress", "#wordpress"],
                 ].map(([label, href]) => (
@@ -2209,6 +2210,40 @@ function ArticlePreview({
   onRegenerateImages: () => void;
 }) {
   const canRegenerateImages = draft.images.some((image) => image.source === "generated");
+  const [copyStatus, setCopyStatus] = useState("");
+  const copyStatusTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyStatusTimerRef.current) {
+        window.clearTimeout(copyStatusTimerRef.current);
+      }
+    };
+  }, []);
+
+  function showCopyStatus(message: string) {
+    setCopyStatus(message);
+    if (copyStatusTimerRef.current) {
+      window.clearTimeout(copyStatusTimerRef.current);
+    }
+    copyStatusTimerRef.current = window.setTimeout(() => {
+      setCopyStatus("");
+    }, 2600);
+  }
+
+  async function handleCopy(label: string, value: string) {
+    try {
+      await copyTextToClipboard(value);
+      showCopyStatus(`${label}をコピーしました。`);
+    } catch {
+      showCopyStatus("コピーできませんでした。本文HTML欄から手動でコピーしてください。");
+    }
+  }
+
+  function handleDownload() {
+    downloadArticleHtml(draft);
+    showCopyStatus("HTMLファイルを書き出しました。");
+  }
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-6">
@@ -2217,6 +2252,60 @@ function ArticlePreview({
         <div dangerouslySetInnerHTML={{ __html: renderArticleHtml(draft) }} />
       </article>
       <aside className="space-y-4">
+        <InfoPanel title="コピー/出力">
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              data-testid="copy-title-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => handleCopy("タイトル", draft.editedTitle)}
+            >
+              <ClipboardCopy />
+              タイトル
+            </Button>
+            <Button
+              data-testid="copy-meta-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => handleCopy("メタ", draft.editedMetaDescription)}
+            >
+              <ClipboardCopy />
+              メタ
+            </Button>
+            <Button
+              data-testid="copy-body-html-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => handleCopy("本文HTML", renderArticleHtml(draft))}
+            >
+              <ClipboardCopy />
+              本文HTML
+            </Button>
+            <Button
+              data-testid="download-html-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleDownload}
+            >
+              <Download />
+              HTML出力
+            </Button>
+          </div>
+          {copyStatus ? (
+            <div
+              data-testid="copy-export-status"
+              className="mt-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700"
+              aria-live="polite"
+            >
+              <Check className="size-4" />
+              {copyStatus}
+            </div>
+          ) : null}
+        </InfoPanel>
         <InfoPanel title="AIO自己評価">
           <div className="text-3xl font-semibold">
             {draft.aiResult.aio_score_self_evaluation.score}
@@ -2743,6 +2832,81 @@ function renderArticleHtml(draft: ArticleDraft) {
   }, draft.editedBodyHtml);
 }
 
+async function copyTextToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+      // Fall back for browsers that block Clipboard API outside a granted context.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+
+  if (!copied) {
+    throw new Error("Clipboard copy failed.");
+  }
+}
+
+function downloadArticleHtml(draft: ArticleDraft) {
+  const html = buildExportArticleHtml(draft);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${safeDownloadName(draft.editedSlug || draft.editedTitle || "aio-article")}.html`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function buildExportArticleHtml(draft: ArticleDraft) {
+  return [
+    "<!doctype html>",
+    '<html lang="ja">',
+    "<head>",
+    '<meta charset="utf-8" />',
+    `<title>${escapeHtml(draft.editedTitle)}</title>`,
+    draft.editedMetaDescription
+      ? `<meta name="description" content="${escapeHtml(draft.editedMetaDescription)}" />`
+      : "",
+    "</head>",
+    "<body>",
+    "<article>",
+    `<h1>${escapeHtml(draft.editedTitle)}</h1>`,
+    renderArticleHtml(draft),
+    "</article>",
+    "</body>",
+    "</html>",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function safeDownloadName(value: string) {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 80) || "aio-article"
+  );
+}
+
 function replaceImageReferences(
   html: string,
   previousImage: ArticleImage,
@@ -2974,6 +3138,10 @@ function normalizeErrorMessage(message: string) {
     .replaceAll(
       "unsupported Unicode escape sequence",
       "保存できない制御文字が含まれていたため、保存用に安全化してください",
+    )
+    .replaceAll(
+      "Generation job not found.",
+      "生成ジョブが見つかりません。古い生成状態をクリアし、もう一度「AIによる記事作成」を実行してください。",
     )
     .replaceAll("\\u0000 cannot be converted to text", "null文字は保存できません");
 }

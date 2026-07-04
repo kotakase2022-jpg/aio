@@ -29,13 +29,17 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "The article must be useful for AI answer engines: clear definitions, concise sentences, structured headings, lists, tables, FAQ, and source notes.",
       "Treat payload.form.primaryInfo as high-priority first-party information. Use it to add original field observations, concrete examples, company-specific viewpoints, caveats, and practical nuance so the article does not become commodity content.",
       "When primaryInfo is provided, weave it naturally into the introduction, examples, body sections, and key takeaways. Do not overstate it as universal fact; attribute it as company experience or observed tendency when appropriate.",
+      "Avoid commodity content and generic AI-like filler. Do not lean on vague phrases such as 近年, 重要です, 注目されています, と言えるでしょう, いかがでしょうか, or 本記事では unless they are genuinely necessary and supported by the material.",
+      "Write as a human editor who has interviewed the business: each major section should include at least one concrete decision criterion, field example, operational caveat, failure pattern, or source-backed detail.",
+      "Make headings editorial and useful, not mechanical keyword strings. Vary sentence rhythm and endings so the body does not read like a template.",
+      "In aio_score_self_evaluation, explicitly judge concreteness, use of first-party information, source fidelity, and absence of AI-like generic phrasing.",
       "Respect payload.form.wordCount as the target Japanese character count. Natural variance is acceptable, but stay close to the requested scale.",
       "Respect payload.form.imageCount when creating image_prompts. Return zero image_prompts when imageCount is 0, otherwise return exactly that many prompts up to 3.",
       "Return only JSON matching the schema. body_html must be safe article HTML, not Markdown.",
     ].join("\n"),
     input: JSON.stringify({
       task:
-        "AIO最適化済みの記事ドラフトを日本語で生成してください。payload.form.regenerationInstruction がある場合は、既存入力を前提にその再作成方針を優先して、構成・本文・タイトル・FAQ・画像プロンプトを再作成してください。冒頭に結論、明確なH2/H3、定義文、箇条書き、必要なら表、FAQを含めてください。body_htmlはHTML込みで9000文字以内に収め、JSONを必ず最後まで閉じてください。結び文章が入力されている場合は、記事末尾に自然に反映してください。執筆者情報がある場合は本文末尾に「この記事の執筆者」ブロックを入れてください。payload.form.wordCount を目標文字数として本文量を調整してください。payload.form.imageCount が0の場合は image_prompts を空配列にし、1以上の場合は featured から順に指定枚数分だけ返してください。",
+        "AIO最適化済みの記事ドラフトを日本語で生成してください。payload.form.regenerationInstruction がある場合は、既存入力を前提にその再作成方針を優先して、構成・本文・タイトル・FAQ・画像プロンプトを再作成してください。冒頭に結論、明確なH2/H3、定義文、箇条書き、必要なら表、FAQを含めてください。各H2では、一次情報・参照情報・競合情報から得られる具体例、判断基準、注意点、現場で起きる失敗パターンのいずれかを必ず入れ、根拠が薄い内容は断定しないでください。body_htmlはHTML込みで9000文字以内に収め、JSONを必ず最後まで閉じてください。結び文章が入力されている場合は、記事末尾に自然に反映してください。執筆者情報がある場合は本文末尾に「この記事の執筆者」ブロックを入れてください。payload.form.wordCount を目標文字数として本文量を調整してください。payload.form.imageCount が0の場合は image_prompts を空配列にし、1以上の場合は featured から順に指定枚数分だけ返してください。",
       payload: compactPayload,
     }),
     timeoutMs: 105_000,

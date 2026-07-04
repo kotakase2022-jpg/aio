@@ -152,7 +152,11 @@ export async function runArticleGenerationJob(jobId: string) {
 async function requireJob(jobId: string) {
   const job = await getGenerationJob(jobId);
   if (!job) {
-    throw new ApiError("Generation job not found.", 404);
+    throw new ApiError(
+      "生成ジョブが見つかりません。",
+      404,
+      "古い生成状態をクリアし、もう一度「AIによる記事作成」を実行してください。",
+    );
   }
 
   return job;

@@ -58,6 +58,19 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     /data:image\/png/,
   );
 
+  await page.getByTestId("copy-title-button").click();
+  await expect(page.getByTestId("copy-export-status")).toContainText(
+    "タイトルをコピーしました。",
+  );
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByTestId("download-html-button").click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("aio-content-operations-guide.html");
+  await expect(page.getByTestId("copy-export-status")).toContainText(
+    "HTMLファイルを書き出しました。",
+  );
+
   await page.getByTestId("image-regenerate-all-button").click();
   await page
     .getByTestId("image-regeneration-instruction")
@@ -116,6 +129,37 @@ test("API failure is shown in the UI without console errors or crashes", async (
 
   await expect(page.getByTestId("theme-candidates-error")).toContainText("theme candidate failed");
   await expect(page.getByTestId("article-primary-button")).toBeEnabled();
+  expect(errors()).toEqual([]);
+});
+
+test("stale generation job state is cleared with a Japanese recovery message", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generation-jobs\/stale-job$/],
+  });
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/generation-jobs/stale-job", async (route) => {
+    await route.fulfill({
+      status: 404,
+      json: { ok: false, error: "Generation job not found." },
+    });
+  });
+
+  await page.goto("/demo-login");
+  await page.evaluate(() => {
+    window.localStorage.setItem("aio-active-generation-job-id", "stale-job");
+  });
+  await page.getByTestId("demo-access-code").fill("202607");
+  await page.getByTestId("demo-login-submit").click();
+  await page.waitForURL("**/");
+
+  await expect(page.getByText("生成ジョブが見つかりません。")).toBeVisible();
+  await expect(page.getByTestId("article-primary-button")).toContainText("AIによる記事作成");
+  await expect(
+    page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
+  ).resolves.toBeNull();
   expect(errors()).toEqual([]);
 });
 
