@@ -131,6 +131,29 @@ describe("evaluateArticleQuality", () => {
     expect(result.improvements.join(" ")).toContain("結び文章/CTAの固有語彙");
   });
 
+  test("flags closing CTA terms that appear only outside the ending section", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+        <p>AIO記事の運用設計について無料相談をご希望の方は、問い合わせフォームからご相談ください。この記事では、その前提となる判断基準を整理します。</p>
+        <p>結論として、導入前には判断基準を決める必要があります。当社の支援現場では、10件の相談で公開前の確認手順が課題でした。</p>
+        <table><tr><th>判断基準</th><td>担当、期間、費用を比較します。</td></tr></table>
+        <ul><li>失敗例を確認します。</li><li>注意点を整理します。</li></ul>
+        <h2>公開前に確認すべき情報</h2>
+        <p>${"参照元と照合し、未確認情報は断定しません。".repeat(120)}</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      {
+        closingText:
+          "AIO記事の運用設計について無料相談をご希望の方は、問い合わせフォームからご相談ください。",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "cta-reflection", passed: false }),
+    );
+  });
+
   test("flags generic AI-like and underspecified article HTML", () => {
     const result = evaluateArticleQuality(`
       <h2>重要なポイント</h2>

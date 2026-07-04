@@ -159,7 +159,10 @@ export function evaluateArticleQuality(
     !shouldCheckPrimaryInfo ||
     (primaryInfoHitCount >= primaryInfoTargetHits && firstPartyAttributionPattern.test(text));
   const ctaTerms = extractSignalTerms(context.closingText, ctaStopWords);
-  const ctaHitCount = ctaTerms.filter((term) => termAppearsInText(term, text)).length;
+  const closingTextWindow = text.slice(-1400);
+  const ctaHitCount = ctaTerms.filter((term) =>
+    termAppearsInText(term, closingTextWindow),
+  ).length;
   const ctaTargetHits = Math.min(3, Math.max(1, ctaTerms.length));
   const shouldCheckCta = ctaTerms.length > 0;
   const hasCtaReflection = !shouldCheckCta || ctaHitCount >= ctaTargetHits;
