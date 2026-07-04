@@ -364,6 +364,55 @@ test("uploaded visual tone image is sent to generation as upload mode", async ({
   expect(errors()).toEqual([]);
 });
 
+test("previous closing text and author inputs can be reused from local storage", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+
+  await page.goto("/demo-login");
+  await page.evaluate(() => {
+    window.localStorage.setItem(
+      "aio-last-closing-text",
+      "前回保存した問い合わせ誘導文です。",
+    );
+    window.localStorage.setItem(
+      "aio-last-author",
+      JSON.stringify({
+        name: "前回 太郎",
+        title: "編集責任者",
+        bio: "AIO記事の編集と公開前レビューを担当しています。",
+        imageUrl: "https://example.com/previous-author.png",
+      }),
+    );
+  });
+  await page.getByTestId("demo-access-code").fill("202607");
+  await page.getByTestId("demo-login-submit").click();
+  await page.waitForURL("**/");
+
+  await page.getByTestId("closing-reuse-checkbox").setChecked(true);
+  await expect(page.getByTestId("closing-textarea")).toHaveValue(
+    "前回保存した問い合わせ誘導文です。",
+  );
+  await expect(page.getByText("前回の結び文章を反映しました。")).toBeVisible();
+
+  await page.getByTestId("author-reuse-checkbox").setChecked(true);
+  await expect(page.getByTestId("author-name-input")).toHaveValue("前回 太郎");
+  await expect(page.getByTestId("author-title-input")).toHaveValue("編集責任者");
+  await expect(page.getByTestId("author-bio-textarea")).toHaveValue(
+    "AIO記事の編集と公開前レビューを担当しています。",
+  );
+  await expect(page.getByText("前回の執筆者情報を反映しました。")).toBeVisible();
+  await expect(page.locator('img[alt="執筆者画像"]')).toHaveAttribute(
+    "src",
+    "https://example.com/previous-author.png",
+  );
+  expect(errors()).toEqual([]);
+});
+
 async function login(page: Page) {
   await page.goto("/demo-login");
   await page.getByTestId("demo-access-code").fill("202607");

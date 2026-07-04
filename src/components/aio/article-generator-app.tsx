@@ -1336,6 +1336,7 @@ export function ArticleGeneratorApp() {
                   </span>
                   <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
                     <input
+                      data-testid="closing-reuse-checkbox"
                       type="checkbox"
                       checked={closingReuseChecked}
                       onChange={(event) => togglePreviousClosing(event.target.checked)}
@@ -1345,6 +1346,7 @@ export function ArticleGeneratorApp() {
                   </label>
                 </div>
                 <Textarea
+                  data-testid="closing-textarea"
                   value={closingText}
                   onChange={(event) => setClosingText(event.target.value)}
                   placeholder="自社LPへの誘導文、問い合わせ導線、CTA"
@@ -1359,6 +1361,7 @@ export function ArticleGeneratorApp() {
                     <span className="text-sm font-medium text-slate-700">執筆者名</span>
                     <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
                       <input
+                        data-testid="author-reuse-checkbox"
                         type="checkbox"
                         checked={authorReuseChecked}
                         onChange={(event) => togglePreviousAuthor(event.target.checked)}
@@ -1368,6 +1371,7 @@ export function ArticleGeneratorApp() {
                     </label>
                   </div>
                   <Input
+                    data-testid="author-name-input"
                     value={author.name ?? ""}
                     onChange={(event) =>
                       setAuthor((current) => ({ ...current, name: event.target.value }))
@@ -1379,6 +1383,7 @@ export function ArticleGeneratorApp() {
                 </div>
                 <Field label="肩書き">
                   <Input
+                    data-testid="author-title-input"
                     value={author.title ?? ""}
                     onChange={(event) =>
                       setAuthor((current) => ({ ...current, title: event.target.value }))
@@ -1388,6 +1393,7 @@ export function ArticleGeneratorApp() {
               </div>
               <Field label="紹介文">
                 <Textarea
+                  data-testid="author-bio-textarea"
                   value={author.bio ?? ""}
                   onChange={(event) =>
                     setAuthor((current) => ({ ...current, bio: event.target.value }))
