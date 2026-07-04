@@ -2321,7 +2321,13 @@ function GenerationLogsPanel({
                       </Badge>
                     </td>
                     <td className="px-3 py-3">
-                      <Button type="button" variant="secondary" size="sm" onClick={() => onOpen(log.id)}>
+                      <Button
+                        data-testid={`generation-log-open-${log.id}`}
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onOpen(log.id)}
+                      >
                         開く
                       </Button>
                     </td>

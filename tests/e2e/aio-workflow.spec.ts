@@ -289,6 +289,79 @@ test("invalid editable competitor research JSON can be fixed before generation",
   expect(errors()).toEqual([]);
 });
 
+test("generation logs show previous output and can reopen a saved draft", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.id = "job-log-e2e";
+  completedJob.draftId = "draft-log-e2e";
+  completedJob.wordpressPostStatus = "draft";
+  completedJob.wordpressPostUrl = "https://wordpress.example.com/recovered-log-article";
+  completedJob.inputPayload = {
+    ...completedJob.inputPayload,
+    theme: "ログから再利用するAIO記事",
+  };
+  completedJob.draft = {
+    ...completedJob.draft!,
+    id: "draft-log-e2e",
+    editedTitle: "Recovered Log Article",
+    editedSlug: "recovered-log-article",
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({
+      json: {
+        ok: true,
+        logs: [
+          {
+            id: "job-log-e2e",
+            status: "completed",
+            createdAt: "2026-07-02T00:00:00.000Z",
+            updatedAt: "2026-07-02T00:02:00.000Z",
+            completedAt: "2026-07-02T00:02:00.000Z",
+            inputSummary: "ログから再利用するAIO記事 / 参照1件 / 競合1件",
+            outputTitle: "Recovered Log Article",
+            outputSlug: "recovered-log-article",
+            draftStatus: "posted",
+            wordpressPostStatus: "draft",
+            wordpressPostUrl: "https://wordpress.example.com/recovered-log-article",
+          },
+        ],
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-log-e2e", async (route) => {
+    await route.fulfill({ json: { ok: true, job: completedJob } });
+  });
+
+  await login(page);
+  await expect(page.getByTestId("generation-logs-panel")).toContainText("1件");
+  await expect(page.getByTestId("generation-logs-content")).toBeHidden();
+  await page.getByTestId("generation-logs-toggle").click();
+
+  await expect(page.getByTestId("generation-logs-content")).toContainText(
+    "ログから再利用するAIO記事",
+  );
+  await expect(page.getByTestId("generation-logs-content")).toContainText(
+    "Recovered Log Article",
+  );
+  await expect(page.getByTestId("generation-logs-content")).toContainText("recovered-log-article");
+  await expect(page.getByTestId("generation-logs-content")).toContainText("下書き投稿");
+  await expect(page.getByTestId("generation-logs-content")).toContainText("完了");
+
+  await page.getByTestId("generation-log-open-job-log-e2e").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "Recovered Log Article" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("download-html-button")).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("stale generation job state is cleared with a Japanese recovery message", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/generation-jobs\/stale-job$/],
