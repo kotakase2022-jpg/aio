@@ -746,6 +746,50 @@ test("draft approval failure keeps the editable draft visible and recoverable", 
   expect(errors()).toEqual([]);
 });
 
+test("copy failure shows manual recovery guidance without breaking the draft preview", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: () => Promise.reject(new Error("clipboard denied")),
+      },
+    });
+    document.execCommand = () => false;
+  });
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for clipboard failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("copy-body-html-button").click();
+
+  await expect(page.getByTestId("copy-export-status")).toContainText("コピーできませんでした。");
+  await expect(page.getByTestId("copy-export-status")).toContainText(
+    "本文HTML欄から手動でコピーしてください。",
+  );
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("stale generation job state is cleared with a Japanese recovery message", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/generation-jobs\/stale-job$/],
