@@ -512,9 +512,13 @@ export function ArticleGeneratorApp() {
   async function stopGeneration() {
     const jobId = activeGenerationJobId;
     if (jobId) {
-      await apiPost<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}/cancel`, {}).catch(
-        () => undefined,
-      );
+      try {
+        await apiPost<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}/cancel`, {});
+      } catch (error) {
+        setActiveError(`記事作成の停止に失敗しました。${readError(error)}`);
+        void loadGenerationLogs();
+        return;
+      }
       generationPollingRef.current = null;
       setActiveGenerationJobId(null);
       window.localStorage.removeItem(activeGenerationJobStorageKey);

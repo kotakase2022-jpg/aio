@@ -1012,6 +1012,63 @@ test("user can stop an in-progress generation job from the primary CTA", async (
   expect(errors()).toEqual([]);
 });
 
+test("generation cancel failure keeps the job active and recoverable", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generation-jobs\/job-cancel-failure-e2e\/cancel$/],
+  });
+  const runningJob = {
+    ...createCompletedGenerationJob(),
+    id: "job-cancel-failure-e2e",
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    steps: [
+      { id: "generate_body", label: "AIO本文生成", status: "running" as const, detail: "処理中" },
+    ],
+  };
+  let cancelCalls = 0;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/generation-jobs/job-cancel-failure-e2e/cancel", async (route) => {
+    cancelCalls += 1;
+    await route.fulfill({
+      status: 500,
+      json: { ok: false, error: "生成停止に失敗しました。" },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-cancel-failure-e2e", async (route) => {
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for cancel failure handling.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
+  await page.getByTestId("article-primary-button").click();
+
+  expect(cancelCalls).toBe(1);
+  await expect(page.getByText(/記事作成の停止に失敗しました。/)).toBeVisible();
+  await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
+  await expect(
+    page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
+  ).resolves.toBe("job-cancel-failure-e2e");
+  await expect(page.getByTestId("reference-text-0")).toHaveValue(
+    "Reference text for cancel failure handling.",
+  );
+  expect(errors()).toEqual([]);
+});
+
 test("failed generation job shows recovery guidance and clears active state", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   const runningJob = {
