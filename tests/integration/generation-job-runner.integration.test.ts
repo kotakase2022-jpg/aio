@@ -263,4 +263,57 @@ describe("article generation job runner", () => {
     expect(savedDraft.images).toEqual([]);
     expect(savedDraft.editedBodyHtml).not.toContain("data-image-slot");
   });
+
+  test("saves a text-only draft without injected figures when imageCount is zero", async () => {
+    const { fetchUrlContent } = await import("@/lib/server/content");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    const { createArticleImagesForDraft } = await import("@/lib/server/article-images");
+    const { saveDraft } = await import("@/lib/server/drafts");
+    const { createGenerationJob, getGenerationJob } = await import(
+      "@/lib/server/generation-jobs"
+    );
+    const { runArticleGenerationJob } = await import(
+      "@/lib/server/article-generation-job-runner"
+    );
+
+    vi.mocked(fetchUrlContent).mockResolvedValueOnce({
+      url: "https://example.com/reference",
+      title: "Fetched reference",
+      text: "Fetched reference text",
+      ok: true,
+      sourceType: "url",
+    });
+    vi.mocked(generateAioArticle).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      image_prompts: [],
+    });
+    vi.mocked(createArticleImagesForDraft).mockResolvedValueOnce([]);
+    vi.mocked(saveDraft).mockImplementationOnce(async (draft) => ({
+      draft,
+      storageMode: "local" as const,
+    }));
+    const job = await createGenerationJob({
+      inputPayload: {
+        ...sampleFormPayload,
+        imageCount: 0,
+      },
+    });
+
+    await runArticleGenerationJob(job.id);
+
+    const completed = await getGenerationJob(job.id);
+    const savedDraft = vi.mocked(saveDraft).mock.calls.at(-1)?.[0] as ArticleDraft;
+    const imageStep = completed?.steps.find((step) => step.id === "images");
+
+    expect(completed?.status).toBe("completed");
+    expect(createArticleImagesForDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ image_prompts: [] }),
+      expect.objectContaining({ imageCount: 0 }),
+      expect.objectContaining({ onImageFailure: expect.any(Function) }),
+    );
+    expect(imageStep).toMatchObject({ status: "done" });
+    expect(savedDraft.images).toEqual([]);
+    expect(savedDraft.editedBodyHtml).toBe(sampleArticleResult.body_html);
+    expect(savedDraft.editedBodyHtml).not.toContain("<figure");
+  });
 });
