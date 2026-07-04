@@ -100,10 +100,10 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByTestId("theme-textarea")).toHaveValue(/AIO Content Operations Guide/);
   await page
     .getByTestId("primary-info-textarea")
-    .fill("In our field support, small teams often approve AI drafts in chat before formal review.");
+    .fill("当社の支援現場では、一人親方の事務作業はLINEでのやり取りが多く帳票不在も多い。");
 
   await page.getByTestId("article-primary-button").click();
-  expect(calls.articlePrimaryInfo).toContain("small teams");
+  expect(calls.articlePrimaryInfo).toContain("一人親方");
   expect(calls.articleCompetitorResearchSummary).toBe("Edited competitor summary for E2E");
   expect(calls.articleCompetitorFileNames).toEqual(["competitor.txt"]);
   await expect(
@@ -111,6 +111,8 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   ).toBeVisible();
   await expect(page.getByText("編集品質チェック")).toBeVisible();
   await expect(page.getByText("AI風の汎用表現")).toBeVisible();
+  await expect(page.getByText("一次情報の反映")).toBeVisible();
+  await expect(page.getByText(/一次情報の固有語彙/)).toBeVisible();
   await page.getByTestId("quality-improve-regenerate-button").click();
   await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeVisible();
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
@@ -648,6 +650,7 @@ async function mockCommonApiRoutes(
   completedJob: ReturnType<typeof createCompletedGenerationJob>,
   options: { themeCandidatesShouldFail?: boolean } = {},
 ) {
+  let latestCompletedJob = completedJob;
   const calls = {
     saveDraft: 0,
     approveDraft: 0,
@@ -725,11 +728,12 @@ async function mockCommonApiRoutes(
     calls.articleCompetitorFileNames =
       body.form?.competitorFiles?.map((file) => file.name ?? "") ?? [];
     calls.articleCompetitorResearchSummary = body.competitorResearch?.summary ?? "";
-    await route.fulfill({ json: { ok: true, job: completedJob } });
+    latestCompletedJob = buildCompletedJobForForm(completedJob, body.form ?? {});
+    await route.fulfill({ json: { ok: true, job: latestCompletedJob } });
   });
 
   await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
-    await route.fulfill({ json: { ok: true, job: completedJob } });
+    await route.fulfill({ json: { ok: true, job: latestCompletedJob } });
   });
 
   await page.route("**/api/generate-image", async (route) => {
@@ -814,6 +818,30 @@ async function mockCommonApiRoutes(
   });
 
   return calls;
+}
+
+function buildCompletedJobForForm(
+  completedJob: ReturnType<typeof createCompletedGenerationJob>,
+  form: Record<string, unknown>,
+) {
+  const inputPayload = {
+    ...completedJob.inputPayload,
+    ...form,
+  };
+
+  return {
+    ...completedJob,
+    inputPayload,
+    draft: completedJob.draft
+      ? {
+          ...completedJob.draft,
+          inputPayload: {
+            ...completedJob.draft.inputPayload,
+            ...form,
+          },
+        }
+      : completedJob.draft,
+  };
 }
 
 function collectUnexpectedBrowserErrors(
