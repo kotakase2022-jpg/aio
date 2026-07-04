@@ -17,6 +17,8 @@ type OpenAIImageResponse = {
 
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 const DEFAULT_OPENAI_TIMEOUT_MS = 105_000;
+const DEFAULT_OPENAI_MAX_RETRIES = 2;
+const DEFAULT_OPENAI_RETRY_BASE_DELAY_MS = 750;
 
 export function getTextModel() {
   return cleanEnvValue(process.env.OPENAI_TEXT_MODEL) || "gpt-5.5";
@@ -62,47 +64,63 @@ async function callOpenAIJson<T extends { error?: { message?: string; code?: str
   body: Record<string, unknown>,
   options: { timeoutMs?: number } = {},
 ) {
-  const controller = new AbortController();
   const timeoutMs = options.timeoutMs ?? DEFAULT_OPENAI_TIMEOUT_MS;
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const maxRetries = getRetryCount();
 
-  let response: Response;
-  try {
-    response = await fetch(`${OPENAI_BASE_URL}${path}`, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${getOpenAIKey()}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetch(`${OPENAI_BASE_URL}${path}`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${getOpenAIKey()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new ApiError(
+          "OpenAI API request timed out.",
+          504,
+          "入力量を減らすか、時間をおいて再実行してください。",
+        );
+      }
+
+      if (attempt < maxRetries) {
+        await wait(getRetryDelayMs(attempt));
+        continue;
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const json = (await response.json().catch(() => ({}))) as T;
+
+    if (!response.ok) {
+      if (isRetryableOpenAIStatus(response.status, json.error) && attempt < maxRetries) {
+        await wait(getRetryDelayMs(attempt, response.headers.get("retry-after")));
+        continue;
+      }
+
+      const openAIError = formatOpenAIError(response.status, json.error);
       throw new ApiError(
-        "OpenAI API request timed out.",
-        504,
-        "入力量を減らすか、時間をおいて再実行してください。",
+        openAIError.message,
+        response.status,
+        openAIError.detail,
       );
     }
 
-    throw error;
-  } finally {
-    clearTimeout(timer);
+    return json;
   }
 
-  const json = (await response.json().catch(() => ({}))) as T;
-
-  if (!response.ok) {
-    const openAIError = formatOpenAIError(response.status, json.error);
-    throw new ApiError(
-      openAIError.message,
-      response.status,
-      openAIError.detail,
-    );
-  }
-
-  return json;
+  throw new ApiError("OpenAI API request failed.", 502);
 }
 
 export async function createStructuredResponse<T>({
@@ -217,6 +235,50 @@ function formatOpenAIError(
     message: "OpenAI API request failed.",
     detail,
   };
+}
+
+function isRetryableOpenAIStatus(
+  status: number,
+  error: { message?: string; code?: string } | undefined,
+) {
+  const code = cleanEnvValue(error?.code);
+  if (code === "insufficient_quota" || code === "billing_hard_limit_reached") {
+    return false;
+  }
+
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function getRetryCount() {
+  const configured = Number(cleanEnvValue(process.env.OPENAI_MAX_RETRIES));
+  if (Number.isFinite(configured) && configured >= 0) {
+    return Math.min(Math.floor(configured), 4);
+  }
+
+  return DEFAULT_OPENAI_MAX_RETRIES;
+}
+
+function getRetryDelayMs(attempt: number, retryAfterHeader?: string | null) {
+  const retryAfter = Number(cleanEnvValue(retryAfterHeader ?? undefined));
+  if (Number.isFinite(retryAfter) && retryAfter >= 0) {
+    return Math.min(retryAfter * 1000, 10_000);
+  }
+
+  const configured = Number(cleanEnvValue(process.env.OPENAI_RETRY_BASE_DELAY_MS));
+  const baseDelay =
+    Number.isFinite(configured) && configured >= 0
+      ? configured
+      : DEFAULT_OPENAI_RETRY_BASE_DELAY_MS;
+
+  return Math.min(baseDelay * (attempt + 1), 10_000);
+}
+
+function wait(ms: number) {
+  if (ms <= 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function extractOutputText(json: OpenAIResponse) {

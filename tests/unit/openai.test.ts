@@ -11,6 +11,8 @@ describe("OpenAI server wrapper", () => {
     process.env.OPENAI_API_KEY = "test-key";
     process.env.OPENAI_TEXT_MODEL = " gpt-5.5 ";
     process.env.OPENAI_IMAGE_MODEL = "gpt-image-2";
+    process.env.OPENAI_RETRY_BASE_DELAY_MS = "0";
+    process.env.OPENAI_MAX_RETRIES = "2";
   });
 
   test("normalizes configured model names", () => {
@@ -66,6 +68,65 @@ describe("OpenAI server wrapper", () => {
         "OpenAIの利用上限またはレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
       detail: "rate_limit / quota exceeded",
     });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("retries transient OpenAI rate limits before returning a structured response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json(
+            { error: { message: "try again shortly", code: "rate_limit" } },
+            { status: 429 },
+          ),
+        )
+        .mockResolvedValueOnce(
+          Response.json(
+            { error: { message: "temporary overload", code: "server_error" } },
+            { status: 500 },
+          ),
+        )
+        .mockResolvedValueOnce(
+          Response.json({ output_text: JSON.stringify({ value: "recovered" }) }),
+        ),
+    );
+
+    await expect(
+      createStructuredResponse<{ value: string }>({
+        instructions: "Return JSON.",
+        input: "{}",
+        schemaName: "retry_schema",
+        schema: { type: "object" },
+      }),
+    ).resolves.toEqual({ value: "recovered" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("does not retry OpenAI insufficient quota errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error: {
+              message: "You exceeded your current quota.",
+              code: "insufficient_quota",
+            },
+          },
+          { status: 429 },
+        ),
+      ),
+    );
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 429,
+      message:
+        "OpenAIの利用上限またはレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+      detail: "insufficient_quota / You exceeded your current quota.",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   test.each([
