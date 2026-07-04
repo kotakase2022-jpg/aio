@@ -706,6 +706,46 @@ test("draft save failure keeps edits visible and recoverable", async ({ page }) 
   expect(errors()).toEqual([]);
 });
 
+test("draft approval failure keeps the editable draft visible and recoverable", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/approve-draft$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    approveDraftShouldFail: true,
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for draft approval failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("draft-edit-tab").click();
+  await page.getByTestId("draft-title-input").fill("Edited title kept after approval failure");
+  await page.getByTestId("approve-draft-button").click();
+
+  expect(calls.approveDraft).toBe(1);
+  await expect(page.getByText("ドラフト承認に失敗しました。")).toBeVisible();
+  await expect(page.getByTestId("draft-title-input")).toHaveValue(
+    "Edited title kept after approval failure",
+  );
+  await expect(page.getByTestId("approve-draft-button")).toBeEnabled();
+  await expect(page.getByTestId("wordpress-post-button")).toBeDisabled();
+  await expect(page.getByTestId("draft-action-message")).toBeHidden();
+  expect(errors()).toEqual([]);
+});
+
 test("stale generation job state is cleared with a Japanese recovery message", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/generation-jobs\/stale-job$/],
@@ -997,6 +1037,7 @@ async function mockCommonApiRoutes(
     generationJobFailureCall?: number;
     wordpressPostShouldFail?: boolean;
     saveDraftShouldFail?: boolean;
+    approveDraftShouldFail?: boolean;
   } = {},
 ) {
   let latestCompletedJob = completedJob;
@@ -1156,6 +1197,14 @@ async function mockCommonApiRoutes(
 
   await page.route("**/api/approve-draft", async (route) => {
     calls.approveDraft += 1;
+    if (options.approveDraftShouldFail) {
+      await route.fulfill({
+        status: 500,
+        json: { ok: false, error: "ドラフト承認に失敗しました。" },
+      });
+      return;
+    }
+
     const body = route.request().postDataJSON() as { draft?: Record<string, unknown> };
     await route.fulfill({
       json: {
