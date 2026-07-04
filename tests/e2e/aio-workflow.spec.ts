@@ -38,6 +38,15 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await login(page);
 
   await expect(page.getByText("AIO記事 半自動生成ツール")).toBeVisible();
+  await expect(page.getByTestId("generation-logs-panel")).toBeVisible();
+  await expect(page.getByTestId("generation-logs-content")).toBeHidden();
+  await page.getByTestId("generation-logs-toggle").click();
+  await expect(page.getByTestId("generation-logs-content")).toContainText(
+    "まだ生成ログはありません。",
+  );
+  await page.getByTestId("generation-logs-toggle").click();
+  await expect(page.getByTestId("generation-logs-content")).toBeHidden();
+
   await page.locator('a[href="#theme"]').click();
   await expect(page).toHaveURL(/#theme/);
 
@@ -56,6 +65,13 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await page
     .getByTestId("competitor-text-0")
     .fill("Competitor emphasizes generic automation and one-click publishing.");
+  await page.getByTestId("competitor-file-input").setInputFiles({
+    name: "competitor.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Uploaded competitor file text"),
+  });
+  await expect(page.getByText("competitor.txt")).toBeVisible();
+
   await page.getByTestId("competitor-research-button").click();
   expect(calls.competitorResearch).toBe(1);
   await expect(page.getByTestId("competitor-research-progress")).toHaveAttribute(
@@ -89,6 +105,7 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await page.getByTestId("article-primary-button").click();
   expect(calls.articlePrimaryInfo).toContain("small teams");
   expect(calls.articleCompetitorResearchSummary).toBe("Edited competitor summary for E2E");
+  expect(calls.articleCompetitorFileNames).toEqual(["competitor.txt"]);
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
   ).toBeVisible();
@@ -104,6 +121,10 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     "src",
     /data:image\/png/,
   );
+  await page.getByTestId("fullscreen-preview-button").click();
+  await expect(page.getByRole("dialog", { name: "全画面プレビュー" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "全画面プレビュー" })).toBeHidden();
 
   await page.getByTestId("copy-title-button").click();
   await expect(page.getByTestId("copy-export-status")).toContainText(
@@ -431,9 +452,11 @@ async function mockCommonApiRoutes(
     generateImage: 0,
     generateImagePrompts: [] as string[],
     competitorResearch: 0,
+    extractFile: 0,
     themeCandidateCompetitorSummary: "",
     articlePrimaryInfo: "",
     articleCompetitorResearchSummary: "",
+    articleCompetitorFileNames: [] as string[],
     wordpressConnect: 0,
     wordpressPost: 0,
   };
@@ -443,7 +466,22 @@ async function mockCommonApiRoutes(
   });
 
   await page.route("**/api/extract-file-content", async (route) => {
-    await route.fulfill({ json: extractFileSuccess });
+    calls.extractFile += 1;
+    const name = calls.extractFile === 1 ? "reference.txt" : "competitor.txt";
+    await route.fulfill({
+      json: {
+        ...extractFileSuccess,
+        attachment: {
+          ...extractFileSuccess.attachment,
+          id: `file-${calls.extractFile}`,
+          name,
+          text:
+            calls.extractFile === 1
+              ? "Uploaded reference file text for AIO article generation."
+              : "Uploaded competitor file text for AIO article generation.",
+        },
+      },
+    });
   });
 
   await page.route("**/api/competitor-research", async (route) => {
@@ -473,10 +511,15 @@ async function mockCommonApiRoutes(
       return;
     }
     const body = route.request().postDataJSON() as {
-      form?: { primaryInfo?: string };
+      form?: {
+        primaryInfo?: string;
+        competitorFiles?: Array<{ name?: string }>;
+      };
       competitorResearch?: { summary?: string };
     };
     calls.articlePrimaryInfo = body.form?.primaryInfo ?? "";
+    calls.articleCompetitorFileNames =
+      body.form?.competitorFiles?.map((file) => file.name ?? "") ?? [];
     calls.articleCompetitorResearchSummary = body.competitorResearch?.summary ?? "";
     await route.fulfill({ json: { ok: true, job: completedJob } });
   });

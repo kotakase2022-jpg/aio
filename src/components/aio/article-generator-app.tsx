@@ -2180,7 +2180,7 @@ function GenerationLogsPanel({
   onOpen: (jobId: string) => void;
 }) {
   return (
-    <Card>
+    <Card data-testid="generation-logs-panel">
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -2193,7 +2193,13 @@ function GenerationLogsPanel({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Badge variant="default">{logs.length}件</Badge>
-            <Button type="button" variant="secondary" size="sm" onClick={onToggle}>
+            <Button
+              data-testid="generation-logs-toggle"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onToggle}
+            >
               {expanded ? <ChevronUp /> : <ChevronDown />}
               {expanded ? "閉じる" : "開く"}
             </Button>
@@ -2205,7 +2211,7 @@ function GenerationLogsPanel({
         </div>
       </CardHeader>
       {expanded ? (
-        <CardContent>
+        <CardContent data-testid="generation-logs-content">
         {logs.length === 0 ? (
           <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
             まだ生成ログはありません。
