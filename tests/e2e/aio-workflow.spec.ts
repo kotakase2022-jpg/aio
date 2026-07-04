@@ -99,11 +99,15 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByText("反映しました")).toBeVisible();
   await expect(page.getByTestId("theme-textarea")).toHaveValue(/AIO Content Operations Guide/);
   await page
+    .getByTestId("closing-textarea")
+    .fill("AIO記事の運用設計について無料相談をご希望の方は、問い合わせフォームからご相談ください。");
+  await page
     .getByTestId("primary-info-textarea")
     .fill("当社の支援現場では、一人親方の事務作業はLINEでのやり取りが多く帳票不在も多い。");
 
   await page.getByTestId("article-primary-button").click();
   expect(calls.articlePrimaryInfo).toContain("一人親方");
+  expect(calls.articleClosingText).toContain("無料相談");
   expect(calls.articleCompetitorResearchSummary).toBe("Edited competitor summary for E2E");
   expect(calls.articleCompetitorFileNames).toEqual(["competitor.txt"]);
   await expect(
@@ -113,6 +117,8 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByText("AI風の汎用表現")).toBeVisible();
   await expect(page.getByText("一次情報の反映")).toBeVisible();
   await expect(page.getByText(/一次情報の固有語彙/)).toBeVisible();
+  await expect(page.getByText("結び文章/CTAの反映")).toBeVisible();
+  await expect(page.getByText(/結び文章\/CTAの固有語彙/)).toBeVisible();
   await page.getByTestId("quality-improve-regenerate-button").click();
   await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeVisible();
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
@@ -122,10 +128,16 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     /一次情報の固有語彙/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(/一人親方/);
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /結び文章\/CTAの固有語彙/,
+  );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(/無料相談/);
   await page.getByTestId("article-regeneration-start").click();
   expect(calls.articleGenerationJobs).toBe(2);
   expect(calls.articleRegenerationInstruction).toContain("一次情報の固有語彙");
   expect(calls.articleRegenerationInstruction).toContain("一人親方");
+  expect(calls.articleRegenerationInstruction).toContain("結び文章/CTAの固有語彙");
+  expect(calls.articleRegenerationInstruction).toContain("無料相談");
   await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeHidden();
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
@@ -672,6 +684,7 @@ async function mockCommonApiRoutes(
     themeCandidateCompetitorSummary: "",
     articleGenerationJobs: 0,
     articlePrimaryInfo: "",
+    articleClosingText: "",
     articleRegenerationInstruction: "",
     articleCompetitorResearchSummary: "",
     articleCompetitorFileNames: [] as string[],
@@ -731,6 +744,7 @@ async function mockCommonApiRoutes(
     const body = route.request().postDataJSON() as {
       form?: {
         primaryInfo?: string;
+        closingText?: string;
         regenerationInstruction?: string;
         competitorFiles?: Array<{ name?: string }>;
       };
@@ -738,6 +752,7 @@ async function mockCommonApiRoutes(
     };
     calls.articleGenerationJobs += 1;
     calls.articlePrimaryInfo = body.form?.primaryInfo ?? "";
+    calls.articleClosingText = body.form?.closingText ?? "";
     calls.articleRegenerationInstruction = body.form?.regenerationInstruction ?? "";
     calls.articleCompetitorFileNames =
       body.form?.competitorFiles?.map((file) => file.name ?? "") ?? [];
