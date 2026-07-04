@@ -499,6 +499,95 @@ test("reference file extraction failure can be retried without duplicate rows", 
   expect(errors()).toEqual([]);
 });
 
+test("competitor file extraction retry replaces the failed row before generation", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/extract-file-content$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  let extractionCalls = 0;
+  let generationCompetitorFiles: Array<{ ok?: boolean; name?: string; text?: string }> = [];
+  const filePayload = {
+    name: "retry-competitor.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    buffer: Buffer.from("retry competitor content"),
+  };
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/extract-file-content", async (route) => {
+    extractionCalls += 1;
+    if (extractionCalls === 1) {
+      await route.fulfill({
+        status: 422,
+        json: {
+          ok: false,
+          error: "DOCXから十分な本文を抽出できませんでした。",
+          detail: "競合資料を再添付してください。",
+        },
+      });
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        ok: true,
+        attachment: {
+          ...extractFileSuccess.attachment,
+          id: "retry-competitor-success",
+          name: filePayload.name,
+          type: filePayload.mimeType,
+          size: filePayload.buffer.length,
+          text: "Retried competitor file text about pricing tables and onboarding gaps.",
+          textLength: 67,
+        },
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+
+    const body = route.request().postDataJSON() as {
+      form?: { competitorFiles?: Array<{ ok?: boolean; name?: string; text?: string }> };
+    };
+    generationCompetitorFiles = body.form?.competitorFiles ?? [];
+    await route.fulfill({
+      json: { ok: true, job: buildCompletedJobForForm(completedJob, body.form ?? {}) },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    await route.fulfill({ json: { ok: true, job: completedJob } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for competitor retry.");
+  await page.getByTestId("competitor-file-input").setInputFiles(filePayload);
+  await expect(page.getByText("retry-competitor.docx")).toHaveCount(1);
+  await expect(page.getByText(/解析エラー/)).toBeVisible();
+  await expect(page.getByText(/競合資料を再添付してください/)).toBeVisible();
+
+  await page.getByTestId("competitor-file-input").setInputFiles(filePayload);
+  await expect(page.getByText("retry-competitor.docx")).toHaveCount(1);
+  await expect(page.getByText(/解析済み/)).toBeVisible();
+  await expect(page.getByText(/解析エラー/)).toBeHidden();
+
+  await page.getByTestId("article-primary-button").click();
+  expect(generationCompetitorFiles).toEqual([
+    expect.objectContaining({
+      name: "retry-competitor.docx",
+      ok: true,
+      text: expect.stringContaining("pricing tables"),
+    }),
+  ]);
+  expect(extractionCalls).toBe(2);
+  expect(errors()).toEqual([]);
+});
+
 test("invalid editable competitor research JSON can be fixed before generation", async ({
   page,
 }) => {
