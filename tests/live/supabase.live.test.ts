@@ -20,12 +20,24 @@ describe("Supabase live sandbox contract", () => {
       vi.resetModules();
 
       const { createCompletedGenerationJob } = await import("../fixtures/article");
-      const { saveGenerationJob, getGenerationJob, listGenerationJobs } = await import(
-        "@/lib/server/generation-jobs"
-      );
+      const {
+        getGenerationJob,
+        listGenerationJobs,
+        markGenerationJobWordpressPost,
+        saveGenerationJob,
+      } = await import("@/lib/server/generation-jobs");
+      const id = `live-contract-${Date.now()}`;
+      const baseJob = createCompletedGenerationJob();
       const job = {
-        ...createCompletedGenerationJob(),
-        id: `live-contract-${Date.now()}`,
+        ...baseJob,
+        id,
+        draftId: `${id}-draft`,
+        draft: baseJob.draft
+          ? {
+              ...baseJob.draft,
+              id: `${id}-draft`,
+            }
+          : baseJob.draft,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       } satisfies GenerationJob;
@@ -37,6 +49,16 @@ describe("Supabase live sandbox contract", () => {
 
         expect(loaded?.id).toBe(job.id);
         expect(listed.some((item) => item.id === job.id)).toBe(true);
+
+        await markGenerationJobWordpressPost({
+          draftId: `${id}-draft`,
+          status: "draft",
+          postUrl: "https://sandbox.example.com/live-contract-draft/",
+        });
+        const posted = await getGenerationJob(job.id);
+        expect(posted?.wordpressPostStatus).toBe("draft");
+        expect(posted?.wordpressPostUrl).toBe("https://sandbox.example.com/live-contract-draft/");
+        expect(posted?.draft?.status).toBe("posted");
       } finally {
         const cleanup = await deleteSupabaseArticleInput(job.id);
         expect(cleanup.ok).toBe(true);

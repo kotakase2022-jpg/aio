@@ -13,12 +13,13 @@ import {
 
 describe("WordPress live sandbox contract", () => {
   test(
-    "creates and deletes a disposable sandbox draft post",
+    "creates and deletes a disposable sandbox draft post with featured media",
     async () => {
       loadLiveEnv();
       expectLiveContractEnabled();
       expectNonProductionConfirmed();
       expect(cleanEnvValue(process.env.AIO_LIVE_WORDPRESS_ALLOW_POST)).toBe("1");
+      expect(cleanEnvValue(process.env.AIO_LIVE_WORDPRESS_ALLOW_MEDIA)).toBe("1");
       expectRequiredEnv([
         "WORDPRESS_SANDBOX_SITE_URL",
         "WORDPRESS_SANDBOX_USERNAME",
@@ -32,6 +33,7 @@ describe("WordPress live sandbox contract", () => {
       const slug = `aio-live-contract-${Date.now()}`;
       const authHeader = basicAuth(username, applicationPassword);
       let postId: number | undefined;
+      let mediaId: number | undefined;
 
       process.env.AIO_LOCAL_DATA_DIR = tempDir;
       process.env.NEXT_PUBLIC_SUPABASE_URL = "";
@@ -60,11 +62,21 @@ describe("WordPress live sandbox contract", () => {
           editedSlug: slug,
           editedMetaDescription: "Disposable sandbox draft created by AIO live contract tests.",
           editedBodyHtml:
-            "<h2>AIO live contract</h2><p>This disposable draft verifies WordPress REST draft posting and cleanup.</p>",
+            "<h2>AIO live contract</h2><p>This disposable draft verifies WordPress REST draft posting, featured media upload, and cleanup.</p>",
           faqItems: [],
           tags: [],
           categories: [],
-          images: [],
+          images: [
+            {
+              id: `${slug}-featured`,
+              slot: "featured",
+              url: `data:image/png;base64,${tinyPngBase64}`,
+              path: `generated/${slug}.png`,
+              prompt: "Disposable live contract featured image",
+              altText: "Disposable AIO live contract featured image",
+              source: "generated",
+            },
+          ],
         });
 
         const result = await publishDraftToWordpress({
@@ -75,14 +87,20 @@ describe("WordPress live sandbox contract", () => {
         });
         const posts = await findWordpressPostsBySlug(siteUrl, authHeader, slug);
         postId = posts[0]?.id;
+        mediaId = posts[0]?.featured_media;
 
         expect(result.draft.status).toBe("posted");
         expect(result.postUrl.length).toBeGreaterThan(0);
         expect(postId).toBeGreaterThan(0);
+        expect(mediaId).toBeGreaterThan(0);
       } finally {
         if (postId) {
           const cleanup = await deleteWordpressPost(siteUrl, authHeader, postId);
           expect(cleanup.ok).toBe(true);
+        }
+        if (mediaId) {
+          const mediaCleanup = await deleteWordpressMedia(siteUrl, authHeader, mediaId);
+          expect(mediaCleanup.ok).toBe(true);
         }
         await rm(tempDir, { recursive: true, force: true });
       }
@@ -90,6 +108,9 @@ describe("WordPress live sandbox contract", () => {
     120_000,
   );
 });
+
+const tinyPngBase64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
 async function findWordpressPostsBySlug(siteUrl: string, authHeader: string, slug: string) {
   const response = await fetch(
@@ -101,11 +122,23 @@ async function findWordpressPostsBySlug(siteUrl: string, authHeader: string, slu
     },
   );
   expect(response.ok).toBe(true);
-  return (await response.json()) as Array<{ id?: number }>;
+  return (await response.json()) as Array<{ id?: number; featured_media?: number }>;
 }
 
 async function deleteWordpressPost(siteUrl: string, authHeader: string, postId: number) {
   const response = await fetch(`${siteUrl}/wp-json/wp/v2/posts/${postId}?force=true`, {
+    method: "DELETE",
+    headers: { Authorization: authHeader },
+  });
+  return {
+    ok: response.ok,
+    status: response.status,
+    detail: await response.text().catch(() => ""),
+  };
+}
+
+async function deleteWordpressMedia(siteUrl: string, authHeader: string, mediaId: number) {
+  const response = await fetch(`${siteUrl}/wp-json/wp/v2/media/${mediaId}?force=true`, {
     method: "DELETE",
     headers: { Authorization: authHeader },
   });

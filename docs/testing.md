@@ -115,13 +115,14 @@ WORDPRESS_SANDBOX_SITE_URL=
 WORDPRESS_SANDBOX_USERNAME=
 WORDPRESS_SANDBOX_APPLICATION_PASSWORD=
 AIO_LIVE_WORDPRESS_ALLOW_POST=1
+AIO_LIVE_WORDPRESS_ALLOW_MEDIA=1
 AIO_LIVE_CONFIRM_NON_PRODUCTION=1
 WORDPRESS_ENCRYPTION_KEY=
 ```
 
-`test:live:wordpress` creates a disposable draft post with no media, tags, or categories, verifies
-it through the REST API, and deletes it in cleanup. Use only a sandbox WordPress user that can
-create and delete posts.
+`test:live:wordpress` creates a disposable draft post with a tiny featured image, verifies it
+through the REST API, and deletes both the post and uploaded media in cleanup. Use only a sandbox
+WordPress user that can create and delete posts and media.
 
 If any live test fails, do not mark the external integration risk as resolved. Fix the
 implementation or sandbox configuration, rerun the failing live command, and keep failure output out
