@@ -65,6 +65,7 @@ Do not make tests pass by weakening the tests. The following are forbidden:
 - `test.skip`, `describe.skip`, `it.skip`, `test.describe.skip`
 - `test.todo`, `describe.todo`, `it.todo`, `test.describe.todo`
 - `test.fixme`, `describe.fixme`, `it.fixme`, `test.describe.fixme`
+- `test.describe.serial.only`, `test.describe.parallel.skip`, and equivalent serial/parallel variants
 - `test.describe.configure({ mode: "skip" })`
 - Commenting out large blocks of tests
 - Replacing an E2E business flow with a render-only smoke test

@@ -389,13 +389,14 @@ test("previous closing text and author inputs can be reused from local storage",
   page,
 }) => {
   const errors = collectUnexpectedBrowserErrors(page);
+  const previousAuthorImageUrl = "data:image/png;base64,cHJldmlvdXMtYXV0aG9y";
 
   await page.route("**/api/generation-logs", async (route) => {
     await route.fulfill({ json: { ok: true, logs: [] } });
   });
 
   await page.goto("/demo-login");
-  await page.evaluate(() => {
+  await page.evaluate((imageUrl) => {
     window.localStorage.setItem(
       "aio-last-closing-text",
       "前回保存した問い合わせ誘導文です。",
@@ -406,10 +407,10 @@ test("previous closing text and author inputs can be reused from local storage",
         name: "前回 太郎",
         title: "編集責任者",
         bio: "AIO記事の編集と公開前レビューを担当しています。",
-        imageUrl: "https://example.com/previous-author.png",
+        imageUrl,
       }),
     );
-  });
+  }, previousAuthorImageUrl);
   await page.getByTestId("demo-access-code").fill("202607");
   await page.getByTestId("demo-login-submit").click();
   await page.waitForURL("**/");
@@ -429,7 +430,7 @@ test("previous closing text and author inputs can be reused from local storage",
   await expect(page.getByText("前回の執筆者情報を反映しました。")).toBeVisible();
   await expect(page.locator('img[alt="執筆者画像"]')).toHaveAttribute(
     "src",
-    "https://example.com/previous-author.png",
+    previousAuthorImageUrl,
   );
   expect(errors()).toEqual([]);
 });

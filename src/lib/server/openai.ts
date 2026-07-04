@@ -94,10 +94,11 @@ async function callOpenAIJson<T extends { error?: { message?: string; code?: str
   const json = (await response.json().catch(() => ({}))) as T;
 
   if (!response.ok) {
+    const openAIError = formatOpenAIError(response.status, json.error);
     throw new ApiError(
-      json.error?.message ?? "OpenAI API request failed.",
+      openAIError.message,
       response.status,
-      json.error?.code,
+      openAIError.detail,
     );
   }
 
@@ -169,6 +170,53 @@ export async function generateImageBase64(prompt: string) {
   }
 
   return image.b64_json;
+}
+
+function formatOpenAIError(
+  status: number,
+  error: { message?: string; code?: string } | undefined,
+) {
+  const code = cleanEnvValue(error?.code);
+  const rawMessage = cleanEnvValue(error?.message);
+  const combined = `${code} ${rawMessage}`;
+  const detail = [code, rawMessage].filter(Boolean).join(" / ") || undefined;
+
+  if (status === 401 || /invalid.*key|incorrect.*api.*key|unauthorized/i.test(combined)) {
+    return {
+      message:
+        "OpenAI APIキーが無効、または未承認です。Vercel Environment Variablesまたは.env.localのOPENAI_API_KEYを確認してください。",
+      detail,
+    };
+  }
+
+  if (status === 429 || /rate|quota|limit/i.test(combined)) {
+    return {
+      message:
+        "OpenAIの利用上限またはレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+      detail,
+    };
+  }
+
+  if (status >= 500) {
+    return {
+      message:
+        "OpenAI側で一時的なエラーが発生しました。数分後に再実行してください。繰り返す場合は入力量を減らしてください。",
+      detail,
+    };
+  }
+
+  if (status === 400) {
+    return {
+      message:
+        "OpenAIへのリクエスト内容が不正です。入力テキスト、添付ファイル、画像生成指示を短くして再実行してください。",
+      detail,
+    };
+  }
+
+  return {
+    message: "OpenAI API request failed.",
+    detail,
+  };
 }
 
 function extractOutputText(json: OpenAIResponse) {

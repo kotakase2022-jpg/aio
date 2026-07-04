@@ -9,6 +9,8 @@ const e2ePattern = /[/\\]tests[/\\]e2e[/\\].+\.(test|spec)\.(ts|tsx|js|jsx)$/;
 const forbiddenPatterns = [
   /\btest\.only\s*\(/,
   /\btest\.describe\.only\s*\(/,
+  /\btest\.describe\.(?:serial|parallel)\.(?:only|skip|todo|fixme)\s*\(/,
+  /\btest\.(?:serial|parallel)\.(?:only|skip|todo|fixme)\s*\(/,
   /\bdescribe\.only\s*\(/,
   /\bit\.only\s*\(/,
   /\btest\.skip\s*\(/,

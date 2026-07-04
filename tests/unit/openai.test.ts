@@ -62,9 +62,48 @@ describe("OpenAI server wrapper", () => {
 
     await expect(generateImageBase64("prompt")).rejects.toMatchObject({
       status: 429,
-      detail: "rate_limit",
+      message:
+        "OpenAIの利用上限またはレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+      detail: "rate_limit / quota exceeded",
     });
   });
+
+  test.each([
+    [
+      401,
+      "invalid_api_key",
+      "Incorrect API key provided",
+      "OpenAI APIキーが無効、または未承認です。",
+    ],
+    [
+      400,
+      "invalid_request_error",
+      "Input is too long",
+      "OpenAIへのリクエスト内容が不正です。",
+    ],
+    [
+      500,
+      "server_error",
+      "Temporary upstream failure",
+      "OpenAI側で一時的なエラーが発生しました。",
+    ],
+  ])(
+    "maps OpenAI HTTP %i errors to Japanese recovery messages",
+    async (status, code, message, expectedMessage) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json({ error: { message, code } }, { status }),
+        ),
+      );
+
+      await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+        status,
+        message: expect.stringContaining(expectedMessage),
+        detail: `${code} / ${message}`,
+      });
+    },
+  );
 
   test("returns generated image base64 when present", async () => {
     vi.stubGlobal(
