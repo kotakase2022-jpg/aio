@@ -134,6 +134,7 @@ export function ArticleGeneratorApp() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [draftActionMessage, setDraftActionMessage] = useState("");
   const [posting, setPosting] = useState(false);
   const [imageRegenerating, setImageRegenerating] = useState(false);
   const [imageRegenerationDialogOpen, setImageRegenerationDialogOpen] = useState(false);
@@ -149,6 +150,8 @@ export function ArticleGeneratorApp() {
   const [connection, setConnection] = useState<WordpressConnection | null>(null);
   const [isFullscreenPreviewOpen, setFullscreenPreviewOpen] = useState(false);
   const [wpConnectionError, setWpConnectionError] = useState("");
+  const [wpConnectionMessage, setWpConnectionMessage] = useState("");
+  const [wpPostMessage, setWpPostMessage] = useState("");
   const [wpForm, setWpForm] = useState({
     siteUrl: "",
     username: "",
@@ -622,11 +625,13 @@ export function ArticleGeneratorApp() {
     if (!draft) return;
     setSaving(true);
     setActiveError("");
+    setDraftActionMessage("");
     try {
       const saved = await apiPost<{ draft: ArticleDraft }>("/api/save-draft", {
         draft: prepareDraftForSave(draft),
       });
       setDraft({ ...draft, updatedAt: saved.draft.updatedAt });
+      setDraftActionMessage("編集内容を保存しました。");
     } catch (error) {
       setActiveError(readError(error));
     } finally {
@@ -638,6 +643,7 @@ export function ArticleGeneratorApp() {
     if (!draft) return;
     setSaving(true);
     setActiveError("");
+    setDraftActionMessage("");
     try {
       const approved = await apiPost<{ draft: ArticleDraft }>("/api/approve-draft", {
         draftId: draft.id,
@@ -648,6 +654,7 @@ export function ArticleGeneratorApp() {
         status: "approved",
         updatedAt: approved.draft.updatedAt,
       });
+      setDraftActionMessage("承認済みに変更しました。WordPress投稿が可能です。");
     } catch (error) {
       setActiveError(readError(error));
     } finally {
@@ -657,6 +664,8 @@ export function ArticleGeneratorApp() {
 
   function updateWordpressForm(patch: Partial<typeof wpForm>) {
     setWpConnectionError("");
+    setWpConnectionMessage("");
+    setWpPostMessage("");
     setWpForm((current) => ({
       ...current,
       ...patch,
@@ -666,6 +675,8 @@ export function ArticleGeneratorApp() {
   async function connectWordpress() {
     setActiveError("");
     setWpConnectionError("");
+    setWpConnectionMessage("");
+    setWpPostMessage("");
     const validationMessage = validateWordpressForm(wpForm);
     if (validationMessage) {
       setWpConnectionError(validationMessage);
@@ -679,6 +690,7 @@ export function ArticleGeneratorApp() {
       );
       setConnection(result.connection);
       setWpForm((current) => ({ ...current, applicationPassword: "" }));
+      setWpConnectionMessage("WordPress接続情報を保存しました。");
     } catch (error) {
       setWpConnectionError(normalizeWordpressConnectionError(readError(error)));
     }
@@ -688,6 +700,7 @@ export function ArticleGeneratorApp() {
     if (!draft || !connection) return;
     setPosting(true);
     setActiveError("");
+    setWpPostMessage("");
     try {
       const result = await apiPost<{ postUrl: string; draft: ArticleDraft }>(
         "/api/wordpress/post",
@@ -705,6 +718,11 @@ export function ArticleGeneratorApp() {
         updatedAt: result.draft.updatedAt,
       });
       void loadGenerationLogs();
+      setWpPostMessage(
+        wpForm.status === "publish"
+          ? "WordPressへ公開投稿しました。"
+          : "WordPressへ下書き投稿しました。",
+      );
     } catch (error) {
       setActiveError(readError(error));
     } finally {
@@ -1648,27 +1666,38 @@ export function ArticleGeneratorApp() {
                 <CardHeader>
                   <CardTitle>保存・承認</CardTitle>
                 </CardHeader>
-                <CardContent className="flex flex-wrap items-center gap-3">
-                  <Button
-                    data-testid="save-draft-button"
-                    variant="secondary"
-                    onClick={saveCurrentDraft}
-                    disabled={saving}
-                  >
-                    {saving ? <Loader2 className="animate-spin" /> : <Save />}
-                    編集内容を保存
-                  </Button>
-                  <Button
-                    data-testid="approve-draft-button"
-                    onClick={approveCurrentDraft}
-                    disabled={saving}
-                  >
-                    <CheckCircle2 />
-                    承認済みに変更
-                  </Button>
-                  <Badge variant={draft.status === "approved" ? "success" : "default"}>
-                    {statusLabel(draft.status)}
-                  </Badge>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      data-testid="save-draft-button"
+                      variant="secondary"
+                      onClick={saveCurrentDraft}
+                      disabled={saving}
+                    >
+                      {saving ? <Loader2 className="animate-spin" /> : <Save />}
+                      編集内容を保存
+                    </Button>
+                    <Button
+                      data-testid="approve-draft-button"
+                      onClick={approveCurrentDraft}
+                      disabled={saving}
+                    >
+                      <CheckCircle2 />
+                      承認済みに変更
+                    </Button>
+                    <Badge variant={draft.status === "approved" ? "success" : "default"}>
+                      {statusLabel(draft.status)}
+                    </Badge>
+                  </div>
+                  {draftActionMessage ? (
+                    <div
+                      data-testid="draft-action-message"
+                      className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+                      aria-live="polite"
+                    >
+                      {draftActionMessage}
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
 
@@ -1725,8 +1754,18 @@ export function ArticleGeneratorApp() {
                       {wpConnectionError}
                     </div>
                   ) : null}
+                  {wpConnectionMessage ? (
+                    <div
+                      data-testid="wordpress-connection-message"
+                      className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+                      aria-live="polite"
+                    >
+                      {wpConnectionMessage}
+                    </div>
+                  ) : null}
                   <div className="flex items-center gap-3">
                     <select
+                      data-testid="wordpress-status-select"
                       value={wpForm.status}
                       onChange={(event) =>
                         updateWordpressForm({
@@ -1739,6 +1778,7 @@ export function ArticleGeneratorApp() {
                       <option value="publish">公開</option>
                     </select>
                     <Button
+                      data-testid="wordpress-post-button"
                       onClick={postToWordpress}
                       disabled={!connection || draft.status !== "approved" || posting}
                     >
@@ -1759,6 +1799,15 @@ export function ArticleGeneratorApp() {
                       </a>
                     ) : null}
                   </div>
+                  {wpPostMessage ? (
+                    <div
+                      data-testid="wordpress-post-message"
+                      className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+                      aria-live="polite"
+                    >
+                      {wpPostMessage}
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
             </>

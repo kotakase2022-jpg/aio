@@ -111,15 +111,39 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
 
   await page.getByTestId("save-draft-button").click();
   expect(calls.saveDraft).toBe(1);
+  await expect(page.getByTestId("draft-action-message")).toContainText(
+    "編集内容を保存しました。",
+  );
 
   await page.getByTestId("approve-draft-button").click();
   expect(calls.approveDraft).toBe(1);
+  await expect(page.getByTestId("draft-action-message")).toContainText(
+    "承認済みに変更しました。",
+  );
   await expect(page.getByTestId("wordpress-site-url")).toBeVisible();
 
   await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
   await page.getByTestId("wordpress-username").fill("editor");
   await page.getByTestId("wordpress-connect-button").click();
   await expect(page.getByText("Application Passwordを入力してください。")).toBeVisible();
+
+  await page.getByTestId("wordpress-application-password").fill("app password");
+  await page.getByTestId("wordpress-connect-button").click();
+  expect(calls.wordpressConnect).toBe(1);
+  await expect(page.getByTestId("wordpress-connection-message")).toContainText(
+    "WordPress接続情報を保存しました。",
+  );
+
+  await expect(page.getByTestId("wordpress-post-button")).toBeEnabled();
+  await page.getByTestId("wordpress-post-button").click();
+  expect(calls.wordpressPost).toBe(1);
+  await expect(page.getByTestId("wordpress-post-message")).toContainText(
+    "WordPressへ下書き投稿しました。",
+  );
+  await expect(page.getByRole("link", { name: "投稿URL" })).toHaveAttribute(
+    "href",
+    "https://wordpress.example.com/aio-content-operations-guide",
+  );
 
   expect(errors()).toEqual([]);
 });
@@ -189,6 +213,8 @@ async function mockCommonApiRoutes(
     generateImage: 0,
     generateImagePrompts: [] as string[],
     articlePrimaryInfo: "",
+    wordpressConnect: 0,
+    wordpressPost: 0,
   };
 
   await page.route("**/api/generation-logs", async (route) => {
@@ -268,6 +294,42 @@ async function mockCommonApiRoutes(
           status: "approved",
           updatedAt: "2026-07-02T00:01:00.000Z",
         },
+      },
+    });
+  });
+
+  await page.route("**/api/wordpress/connect", async (route) => {
+    calls.wordpressConnect += 1;
+    await route.fulfill({
+      json: {
+        ok: true,
+        connection: {
+          id: "wp-connection-1",
+          siteUrl: "https://wordpress.example.com",
+          username: "editor",
+          createdAt: "2026-07-02T00:02:00.000Z",
+        },
+      },
+    });
+  });
+
+  await page.route("**/api/wordpress/post", async (route) => {
+    calls.wordpressPost += 1;
+    const body = route.request().postDataJSON() as {
+      draft?: Record<string, unknown>;
+      status?: "draft" | "publish";
+    };
+    await route.fulfill({
+      json: {
+        ok: true,
+        postUrl: "https://wordpress.example.com/aio-content-operations-guide",
+        draft: {
+          ...(body.draft ?? completedJob.draft),
+          status: "posted",
+          wordpressPostUrl: "https://wordpress.example.com/aio-content-operations-guide",
+          updatedAt: "2026-07-02T00:03:00.000Z",
+        },
+        wordpressStatus: body.status ?? "draft",
       },
     });
   });
