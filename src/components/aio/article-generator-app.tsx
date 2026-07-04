@@ -134,6 +134,7 @@ export function ArticleGeneratorApp() {
   const [generationLogs, setGenerationLogs] = useState<GenerationLogSummary[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsExpanded, setLogsExpanded] = useState(false);
+  const [logsError, setLogsError] = useState("");
   const [saving, setSaving] = useState(false);
   const [draftActionMessage, setDraftActionMessage] = useState("");
   const [posting, setPosting] = useState(false);
@@ -616,11 +617,12 @@ export function ArticleGeneratorApp() {
 
   async function loadGenerationLogs() {
     setLogsLoading(true);
+    setLogsError("");
     try {
       const result = await apiGet<{ logs: GenerationLogSummary[] }>("/api/generation-logs");
       setGenerationLogs(result.logs);
     } catch (error) {
-      setActiveError(readError(error));
+      setLogsError(readError(error));
     } finally {
       setLogsLoading(false);
     }
@@ -1657,6 +1659,7 @@ export function ArticleGeneratorApp() {
           <GenerationLogsPanel
             logs={generationLogs}
             loading={logsLoading}
+            error={logsError}
             expanded={logsExpanded}
             onToggle={() => setLogsExpanded((current) => !current)}
             onRefresh={loadGenerationLogs}
@@ -2245,6 +2248,7 @@ function FetchFailures({ results }: { results: FetchResult[] }) {
 function GenerationLogsPanel({
   logs,
   loading,
+  error,
   expanded,
   onToggle,
   onRefresh,
@@ -2252,6 +2256,7 @@ function GenerationLogsPanel({
 }: {
   logs: GenerationLogSummary[];
   loading: boolean;
+  error: string;
   expanded: boolean;
   onToggle: () => void;
   onRefresh: () => void;
@@ -2290,7 +2295,14 @@ function GenerationLogsPanel({
       </CardHeader>
       {expanded ? (
         <CardContent data-testid="generation-logs-content">
-        {logs.length === 0 ? (
+        {error ? (
+          <div
+            data-testid="generation-logs-error"
+            className="rounded-md border border-rose-200 bg-rose-50 p-4 text-sm leading-6 text-rose-800"
+          >
+            {error}
+          </div>
+        ) : logs.length === 0 ? (
           <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
             まだ生成ログはありません。
           </div>

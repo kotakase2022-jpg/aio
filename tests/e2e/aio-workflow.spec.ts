@@ -579,6 +579,32 @@ test("generation logs show previous output and can reopen a saved draft", async 
   expect(errors()).toEqual([]);
 });
 
+test("generation log loading failure stays local to the logs panel", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generation-logs$/],
+  });
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({
+      status: 503,
+      json: { ok: false, error: "生成ログの取得に失敗しました。" },
+    });
+  });
+
+  await login(page);
+  await expect(page.getByTestId("generation-logs-panel")).toBeVisible();
+  await page.getByTestId("generation-logs-toggle").click();
+
+  await expect(page.getByTestId("generation-logs-error")).toContainText(
+    "生成ログの取得に失敗しました。",
+  );
+  await page.getByTestId("reference-text-0").fill("Reference text after log failure.");
+  await expect(page.getByTestId("reference-text-0")).toHaveValue(
+    "Reference text after log failure.",
+  );
+  expect(errors()).toEqual([]);
+});
+
 test("approved drafts can be published to WordPress with Japanese publish status", async ({
   page,
 }) => {
