@@ -676,6 +676,46 @@ test("WordPress post failure keeps the approved draft recoverable", async ({ pag
   expect(errors()).toEqual([]);
 });
 
+test("WordPress connection validation errors are normalized near the connection form", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/wordpress\/connect$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    wordpressConnectShouldReturnRawValidation: true,
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for WordPress connection failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("approve-draft-button").click();
+  await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+  await page.getByTestId("wordpress-username").fill("editor");
+  await page.getByTestId("wordpress-application-password").fill("app password");
+  await page.getByTestId("wordpress-connect-button").click();
+
+  expect(calls.wordpressConnect).toBe(1);
+  await expect(page.getByText("Application Passwordを入力してください。")).toBeVisible();
+  await expect(page.getByTestId("wordpress-connection-message")).toBeHidden();
+  await expect(page.getByTestId("wordpress-post-button")).toBeDisabled();
+  expect(errors()).toEqual([]);
+});
+
 test("draft save failure keeps edits visible and recoverable", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/save-draft$/],
@@ -1089,6 +1129,7 @@ async function mockCommonApiRoutes(
     generateImageShouldFail?: boolean;
     generationJobFailureCall?: number;
     wordpressPostShouldFail?: boolean;
+    wordpressConnectShouldReturnRawValidation?: boolean;
     saveDraftShouldFail?: boolean;
     approveDraftShouldFail?: boolean;
   } = {},
@@ -1273,6 +1314,18 @@ async function mockCommonApiRoutes(
 
   await page.route("**/api/wordpress/connect", async (route) => {
     calls.wordpressConnect += 1;
+    if (options.wordpressConnectShouldReturnRawValidation) {
+      await route.fulfill({
+        status: 400,
+        json: {
+          ok: false,
+          error:
+            '[ { "origin": "string", "code": "too_small", "minimum": 1, "inclusive": true, "path": [ "applicationPassword" ], "message": "Too small: expected string to have >=1 characters" } ]',
+        },
+      });
+      return;
+    }
+
     await route.fulfill({
       json: {
         ok: true,
