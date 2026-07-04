@@ -30,4 +30,39 @@ describe("evaluateArticleQuality", () => {
       true,
     );
   });
+
+  test("penalizes structured but commodity article HTML without editorial evidence", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AI活用とは、業務を効率化する取り組みを指します</h2>
+      <p>結論として、AI活用は大切です。多くの企業にとって効果的です。</p>
+      <table><tr><th>項目</th><td>内容</td></tr></table>
+      <ul><li>準備します。</li><li>確認します。</li></ul>
+      <h2>FAQ</h2>
+      <p>よくある質問に回答します。</p>
+      <p>参考: https://example.com/reference</p>
+    `);
+
+    expect(result.score).toBeLessThan(85);
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "editorial-evidence", passed: false }),
+    );
+  });
+
+  test("flags strong claims that need conditions or evidence", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+      <p>結論として、この方法なら誰でも必ず成果が出ます。すべて解決でき、完全に手作業をなくせます。</p>
+      <p>当社の支援現場では、3名体制で確認手順を決める相談が多くあります。参照元の情報と照合し、未確認情報は断定しません。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用を見る</td></tr></table>
+      <ul><li>失敗例を確認する</li><li>注意点を整理する</li></ul>
+      <h2>FAQ</h2>
+      <p>よくある質問として、公開前の確認方法があります。</p>
+      <p>出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "unsupported-claims", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("強い断定候補");
+  });
 });

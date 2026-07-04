@@ -23,16 +23,43 @@ const genericPhrases = [
   "多くの企業",
   "さまざまな",
   "必要不可欠",
+  "大切です",
+  "ポイントです",
+  "効果的です",
+  "理解しておきましょう",
+];
+
+const unsupportedStrongClaims = [
+  "必ず",
+  "絶対に",
+  "完全に",
+  "誰でも",
+  "唯一",
+  "すべて解決",
+  "確実に",
+];
+
+const editorialAnchorPatterns = [
+  /(事例|現場|相談|支援現場|問い合わせ|ヒアリング)/,
+  /(判断基準|チェック|手順|比較|選定|優先順位)/,
+  /(失敗|注意点|リスク|落とし穴|手戻り|例外)/,
+  /(費用|期間|担当|体制|工数|人数|頻度|期限)/,
+  /(参照|出典|参考|未確認|断定しない|照合)/,
 ];
 
 export function evaluateArticleQuality(html: string): ArticleQualityEvaluation {
   const text = normalizeText(stripHtml(html));
   const sentenceEndings = extractSentenceEndings(text);
   const genericPhraseHits = countPhraseHits(text, genericPhrases);
+  const unsupportedClaimHits = countPhraseHits(text, unsupportedStrongClaims);
   const hasNumbers = /[0-9０-９]/.test(text);
   const hasConcreteAnchors =
     /(事例|現場|相談|失敗|注意点|判断基準|チェック|手順|比較|費用|期間|担当|運用|導入)/.test(text);
   const hasDefinition = /(とは、|とは |定義|意味します|指します)/.test(text);
+  const openingText = text.slice(0, 420);
+  const hasAnswerFirst =
+    /(結論|先に結論|要するに|つまり|最初に押さえるべき|とは、|とは )/.test(openingText);
+  const editorialAnchorCount = editorialAnchorPatterns.filter((pattern) => pattern.test(text)).length;
   const hasTable = /<table[\s>]/i.test(html);
   const hasList = /<(ul|ol)[\s>]/i.test(html);
   const hasFaq = /(FAQ|よくある質問|<h2[^>]*>[^<]*質問|<h3[^>]*>[^<]*質問)/i.test(html);
@@ -42,6 +69,14 @@ export function evaluateArticleQuality(html: string): ArticleQualityEvaluation {
     : 0;
 
   const checks: ArticleQualityCheck[] = [
+    {
+      id: "answer-first",
+      label: "冒頭の結論明示",
+      passed: hasAnswerFirst,
+      detail: hasAnswerFirst
+        ? "冒頭で結論または定義が分かる構成です。"
+        : "冒頭420文字以内に結論、定義、最初に押さえるべき判断を明示すると強くなります。",
+    },
     {
       id: "generic-phrases",
       label: "AI風の汎用表現",
@@ -58,6 +93,15 @@ export function evaluateArticleQuality(html: string): ArticleQualityEvaluation {
       detail: hasNumbers && hasConcreteAnchors
         ? "数字や現場文脈を含む具体的な説明があります。"
         : "数字、現場例、判断基準、失敗例などを増やす余地があります。",
+    },
+    {
+      id: "editorial-evidence",
+      label: "編集的な具体性の幅",
+      passed: editorialAnchorCount >= 3,
+      detail:
+        editorialAnchorCount >= 3
+          ? "現場例、判断基準、失敗/注意点、体制・費用感、参照意識などが複数含まれます。"
+          : "現場例、判断基準、失敗/注意点、体制・費用感、参照意識のうち複数を本文に入れると、一般論から抜け出せます。",
     },
     {
       id: "definition",
@@ -92,6 +136,15 @@ export function evaluateArticleQuality(html: string): ArticleQualityEvaluation {
         : "同じ語尾が続いているため、文体に抑揚を出す余地があります。",
     },
     {
+      id: "unsupported-claims",
+      label: "根拠の薄い強い断定",
+      passed: unsupportedClaimHits <= 1,
+      detail:
+        unsupportedClaimHits <= 1
+          ? "強い断定表現は抑えられています。"
+          : `${unsupportedClaimHits}件の強い断定候補があります。根拠、条件、例外を添えると信頼性が上がります。`,
+    },
+    {
       id: "source-awareness",
       label: "参照元への意識",
       passed: hasSourceNote,
@@ -102,7 +155,13 @@ export function evaluateArticleQuality(html: string): ArticleQualityEvaluation {
   ];
 
   const failed = checks.filter((check) => !check.passed);
-  const score = Math.max(0, 100 - failed.length * 9 - Math.min(genericPhraseHits, 6) * 2);
+  const score = Math.max(
+    0,
+    100 -
+      failed.length * 8 -
+      Math.min(genericPhraseHits, 6) * 2 -
+      Math.min(unsupportedClaimHits, 4) * 2,
+  );
 
   return {
     score,
