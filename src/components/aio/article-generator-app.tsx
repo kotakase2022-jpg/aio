@@ -817,7 +817,7 @@ export function ArticleGeneratorApp() {
         }),
       );
 
-      setFileState((current) => [...current, ...extractedFiles]);
+      setFileState((current) => mergeAttachmentRetries(current, extractedFiles));
     } finally {
       setUploading(false);
     }
@@ -3416,6 +3416,28 @@ function readError(error: unknown) {
     error instanceof Error ? error.message : "処理に失敗しました。",
   );
   return message.length > 420 ? `${message.slice(0, 420)}...` : message;
+}
+
+function mergeAttachmentRetries(
+  current: AttachedFileInput[],
+  incoming: AttachedFileInput[],
+) {
+  const merged = [...current];
+
+  for (const file of incoming) {
+    const retryIndex = merged.findIndex((existing) => isSameAttachmentFile(existing, file));
+    if (retryIndex >= 0) {
+      merged[retryIndex] = file;
+    } else {
+      merged.push(file);
+    }
+  }
+
+  return merged;
+}
+
+function isSameAttachmentFile(first: AttachedFileInput, second: AttachedFileInput) {
+  return first.name === second.name && first.size === second.size && first.type === second.type;
 }
 
 function normalizeErrorMessage(message: string) {

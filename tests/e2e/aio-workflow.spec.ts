@@ -441,6 +441,64 @@ test("file extraction failure is visible and does not block generation with manu
   expect(errors()).toEqual([]);
 });
 
+test("reference file extraction failure can be retried without duplicate rows", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/extract-file-content$/],
+  });
+  let extractionCalls = 0;
+  const filePayload = {
+    name: "retry-reference.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF retryable text document"),
+  };
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/extract-file-content", async (route) => {
+    extractionCalls += 1;
+    if (extractionCalls === 1) {
+      await route.fulfill({
+        status: 422,
+        json: {
+          ok: false,
+          error: "PDFから十分な本文を抽出できませんでした。",
+          detail: "同じPDFを再添付できます。",
+        },
+      });
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        ok: true,
+        attachment: {
+          ...extractFileSuccess.attachment,
+          id: "retry-reference-success",
+          name: filePayload.name,
+          type: filePayload.mimeType,
+          size: filePayload.buffer.length,
+          text: "Retried reference file text for article generation.",
+          textLength: 51,
+        },
+      },
+    });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-file-input").setInputFiles(filePayload);
+  await expect(page.getByText("retry-reference.pdf")).toHaveCount(1);
+  await expect(page.getByText(/解析エラー/)).toBeVisible();
+  await expect(page.getByText(/同じPDFを再添付できます/)).toBeVisible();
+
+  await page.getByTestId("reference-file-input").setInputFiles(filePayload);
+  await expect(page.getByText("retry-reference.pdf")).toHaveCount(1);
+  await expect(page.getByText(/解析済み/)).toBeVisible();
+  await expect(page.getByText(/解析エラー/)).toBeHidden();
+  expect(extractionCalls).toBe(2);
+  expect(errors()).toEqual([]);
+});
+
 test("invalid editable competitor research JSON can be fixed before generation", async ({
   page,
 }) => {
