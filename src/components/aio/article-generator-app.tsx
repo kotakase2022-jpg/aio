@@ -1624,6 +1624,10 @@ export function ArticleGeneratorApp() {
                     <ArticlePreview
                       draft={draft}
                       imageRegenerating={imageRegenerating}
+                      onImproveQuality={(instruction) => {
+                        setArticleRegenerationInstruction(instruction);
+                        setArticleRegenerationDialogOpen(true);
+                      }}
                       onRegenerateImages={() => {
                         setImageRegenerationProgress(0);
                         setImageRegenerationDialogOpen(true);
@@ -2204,10 +2208,12 @@ function GenerationLogsPanel({
 function ArticlePreview({
   draft,
   imageRegenerating,
+  onImproveQuality,
   onRegenerateImages,
 }: {
   draft: ArticleDraft;
   imageRegenerating: boolean;
+  onImproveQuality: (instruction: string) => void;
   onRegenerateImages: () => void;
 }) {
   const canRegenerateImages = draft.images.some((image) => image.source === "generated");
@@ -2322,7 +2328,21 @@ function ArticlePreview({
             ))}
           </ul>
         </InfoPanel>
-        <InfoPanel title="編集品質チェック">
+        <InfoPanel
+          title="編集品質チェック"
+          action={
+            <Button
+              data-testid="quality-improve-regenerate-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => onImproveQuality(buildQualityRegenerationInstruction(qualityEvaluation))}
+            >
+              <RefreshCcw />
+              品質改善して再作成
+            </Button>
+          }
+        >
           <div className="flex items-baseline gap-1">
             <span className="text-3xl font-semibold">{qualityEvaluation.score}</span>
             <span className="text-sm text-slate-500">/ 100</span>
@@ -2466,6 +2486,7 @@ function ArticleRegenerationDialog({
         <div className="space-y-4 px-6 py-5">
           <Field label="再作成方針">
             <Textarea
+              data-testid="article-regeneration-instruction"
               value={instruction}
               onChange={(event) => onInstructionChange(event.target.value)}
               placeholder="例：より初心者向けに、比較表を厚くし、導入メリットと注意点を強調してください。CTAは自然に残してください。"
@@ -2473,10 +2494,15 @@ function ArticleRegenerationDialog({
             />
           </Field>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={onClose}>
+            <Button
+              data-testid="article-regeneration-cancel"
+              type="button"
+              variant="secondary"
+              onClick={onClose}
+            >
               キャンセル
             </Button>
-            <Button type="button" onClick={onStart}>
+            <Button data-testid="article-regeneration-start" type="button" onClick={onStart}>
               <RefreshCcw />
               再作成を開始
             </Button>
@@ -2857,6 +2883,24 @@ function renderArticleHtml(draft: ArticleDraft) {
 
     return html.replaceAll(`src="aio-image:${image.id}"`, `src="${escapeHtml(image.url)}"`);
   }, draft.editedBodyHtml);
+}
+
+function buildQualityRegenerationInstruction(
+  evaluation: ReturnType<typeof evaluateArticleQuality>,
+) {
+  const improvements = evaluation.checks
+    .filter((check) => !check.passed)
+    .map((check) => `- ${check.label}: ${check.detail}`);
+
+  return [
+    "編集品質チェックの結果を踏まえて、記事全体を再作成してください。",
+    "一般論やAIっぽい定型表現を減らし、一次情報・参照情報にもとづく具体例、判断基準、注意点、失敗パターンを増やしてください。",
+    "見出しは機械的なキーワード列ではなく、人間の編集者が企画したような読み進めたくなる表現にしてください。",
+    "根拠が弱い内容は断定せず、参照元や未確認情報の扱いが読者に分かるようにしてください。",
+    improvements.length > 0
+      ? `改善が必要な項目:\n${improvements.join("\n")}`
+      : "現在の品質は高めですが、さらに現場感、具体性、独自の視点を強めてください。",
+  ].join("\n\n");
 }
 
 async function copyTextToClipboard(value: string) {

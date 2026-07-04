@@ -55,6 +55,12 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   ).toBeVisible();
   await expect(page.getByText("編集品質チェック")).toBeVisible();
   await expect(page.getByText("AI風の汎用表現")).toBeVisible();
+  await page.getByTestId("quality-improve-regenerate-button").click();
+  await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeVisible();
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /編集品質チェックの結果/,
+  );
+  await page.getByTestId("article-regeneration-cancel").click();
   await expect(page.locator('img[alt="AIO workflow hero image"]').first()).toHaveAttribute(
     "src",
     /data:image\/png/,
