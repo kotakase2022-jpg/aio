@@ -45,6 +45,13 @@ export function expectRequiredEnv(names: string[]) {
   ).toEqual([]);
 }
 
+export function expectNonProductionConfirmed() {
+  expect(
+    cleanEnvValue(process.env.AIO_LIVE_CONFIRM_NON_PRODUCTION),
+    "Set AIO_LIVE_CONFIRM_NON_PRODUCTION=1 only after confirming live tests target sandbox/staging resources, never production.",
+  ).toBe("1");
+}
+
 export function cleanEnvValue(value: string | undefined) {
   return (value ?? "")
     .replace(/^\uFEFF/, "")

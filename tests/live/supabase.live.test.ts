@@ -3,6 +3,7 @@ import type { GenerationJob } from "@/types/aio";
 import {
   cleanEnvValue,
   expectLiveContractEnabled,
+  expectNonProductionConfirmed,
   expectRequiredEnv,
   loadLiveEnv,
 } from "./live-test-helpers";
@@ -13,6 +14,7 @@ describe("Supabase live sandbox contract", () => {
     async () => {
       loadLiveEnv();
       expectLiveContractEnabled();
+      expectNonProductionConfirmed();
       expect(cleanEnvValue(process.env.AIO_LIVE_SUPABASE_ALLOW_WRITE)).toBe("1");
       expectRequiredEnv(["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
       vi.resetModules();

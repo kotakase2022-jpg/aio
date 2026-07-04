@@ -57,6 +57,7 @@ These commands are opt-in and must never target production data:
 npm run test:live:openai
 npm run test:live:supabase
 npm run test:live:wordpress
+npm run test:live:readiness
 npm run test:live
 npm run quality:live
 ```
@@ -65,6 +66,15 @@ Required common flag:
 
 ```bash
 AIO_LIVE_CONTRACT_TESTS=1
+```
+
+Run `npm run test:live:readiness` first. It checks only environment readiness and never calls
+external APIs. Provider-specific readiness commands are also available:
+
+```bash
+npm run test:live:readiness:openai
+npm run test:live:readiness:supabase
+npm run test:live:readiness:wordpress
 ```
 
 OpenAI live checks require:
@@ -89,6 +99,7 @@ Supabase live checks require a non-production project:
 NEXT_PUBLIC_SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 AIO_LIVE_SUPABASE_ALLOW_WRITE=1
+AIO_LIVE_CONFIRM_NON_PRODUCTION=1
 ```
 
 `test:live:supabase` writes a disposable `article_inputs` generation job, reads it back, confirms it
@@ -102,6 +113,7 @@ WORDPRESS_SANDBOX_SITE_URL=
 WORDPRESS_SANDBOX_USERNAME=
 WORDPRESS_SANDBOX_APPLICATION_PASSWORD=
 AIO_LIVE_WORDPRESS_ALLOW_POST=1
+AIO_LIVE_CONFIRM_NON_PRODUCTION=1
 WORDPRESS_ENCRYPTION_KEY=
 ```
 

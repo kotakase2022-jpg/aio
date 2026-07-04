@@ -6,6 +6,7 @@ import {
   basicAuth,
   cleanEnvValue,
   expectLiveContractEnabled,
+  expectNonProductionConfirmed,
   expectRequiredEnv,
   loadLiveEnv,
 } from "./live-test-helpers";
@@ -16,6 +17,7 @@ describe("WordPress live sandbox contract", () => {
     async () => {
       loadLiveEnv();
       expectLiveContractEnabled();
+      expectNonProductionConfirmed();
       expect(cleanEnvValue(process.env.AIO_LIVE_WORDPRESS_ALLOW_POST)).toBe("1");
       expectRequiredEnv([
         "WORDPRESS_SANDBOX_SITE_URL",
