@@ -321,6 +321,69 @@ test("user can stop an in-progress generation job from the primary CTA", async (
   expect(errors()).toEqual([]);
 });
 
+test("failed generation job shows recovery guidance and clears active state", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const runningJob = {
+    ...createCompletedGenerationJob(),
+    id: "job-failed-e2e",
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    steps: [
+      { id: "generate_body", label: "AIO本文生成", status: "running" as const, detail: "処理中" },
+    ],
+  };
+  const failedJob = {
+    ...runningJob,
+    status: "failed" as const,
+    completedAt: "2026-07-02T00:05:00.000Z",
+    error:
+      "OpenAIの利用上限またはレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+    steps: runningJob.steps.map((step) => ({
+      ...step,
+      status: "error" as const,
+      detail:
+        "OpenAIの利用上限またはレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+    })),
+  };
+  let pollCalls = 0;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/generation-jobs/job-failed-e2e", async (route) => {
+    pollCalls += 1;
+    await route.fulfill({ json: { ok: true, job: failedJob } });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for failed job handling.");
+  await page.getByTestId("article-primary-button").click();
+
+  await expect(
+    page.getByText("OpenAIの利用上限またはレート制限に達しました。").first(),
+  ).toBeVisible();
+  await expect(page.getByText("AIO本文生成")).toBeVisible();
+  await expect(
+    page.getByText("OpenAIの利用上限またはレート制限に達しました。"),
+  ).toHaveCount(2);
+  await expect(page.getByTestId("article-primary-button")).toContainText("AIによる記事作成");
+  await expect(
+    page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
+  ).resolves.toBeNull();
+  expect(pollCalls).toBeGreaterThanOrEqual(1);
+  expect(errors()).toEqual([]);
+});
+
 test("uploaded visual tone image is sent to generation as upload mode", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   const completedJob = createCompletedGenerationJob();
