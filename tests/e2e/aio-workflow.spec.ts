@@ -122,7 +122,14 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     /一次情報の固有語彙/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(/一人親方/);
-  await page.getByTestId("article-regeneration-cancel").click();
+  await page.getByTestId("article-regeneration-start").click();
+  expect(calls.articleGenerationJobs).toBe(2);
+  expect(calls.articleRegenerationInstruction).toContain("一次情報の固有語彙");
+  expect(calls.articleRegenerationInstruction).toContain("一人親方");
+  await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeHidden();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
   await expect(page.locator('img[alt="AIO workflow hero image"]').first()).toHaveAttribute(
     "src",
     /data:image\/png/,
@@ -665,6 +672,7 @@ async function mockCommonApiRoutes(
     themeCandidateCompetitorSummary: "",
     articleGenerationJobs: 0,
     articlePrimaryInfo: "",
+    articleRegenerationInstruction: "",
     articleCompetitorResearchSummary: "",
     articleCompetitorFileNames: [] as string[],
     wordpressConnect: 0,
@@ -723,12 +731,14 @@ async function mockCommonApiRoutes(
     const body = route.request().postDataJSON() as {
       form?: {
         primaryInfo?: string;
+        regenerationInstruction?: string;
         competitorFiles?: Array<{ name?: string }>;
       };
       competitorResearch?: { summary?: string };
     };
     calls.articleGenerationJobs += 1;
     calls.articlePrimaryInfo = body.form?.primaryInfo ?? "";
+    calls.articleRegenerationInstruction = body.form?.regenerationInstruction ?? "";
     calls.articleCompetitorFileNames =
       body.form?.competitorFiles?.map((file) => file.name ?? "") ?? [];
     calls.articleCompetitorResearchSummary = body.competitorResearch?.summary ?? "";
