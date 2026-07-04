@@ -289,6 +289,64 @@ test("primary generation CTA explains which required inputs are missing", async 
   expect(errors()).toEqual([]);
 });
 
+test("image count zero creates a text-only draft from the PC form", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  const textOnlyJob = {
+    ...completedJob,
+    inputPayload: {
+      ...completedJob.inputPayload,
+      imageCount: 0 as const,
+    },
+    draft: completedJob.draft
+      ? {
+          ...completedJob.draft,
+          inputPayload: {
+            ...completedJob.draft.inputPayload,
+            imageCount: 0 as const,
+          },
+          aiResult: {
+            ...completedJob.draft.aiResult,
+            image_prompts: [],
+          },
+          images: [],
+          editedBodyHtml: completedJob.draft.aiResult.body_html,
+        }
+      : completedJob.draft,
+  };
+  let submittedImageCount: unknown;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+
+    const body = route.request().postDataJSON() as { form?: { imageCount?: unknown } };
+    submittedImageCount = body.form?.imageCount;
+    await route.fulfill({ json: { ok: true, job: textOnlyJob } });
+  });
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    await route.fulfill({ json: { ok: true, job: textOnlyJob } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for text-only generation.");
+  await page.getByRole("button", { name: "0枚" }).click();
+  await expect(page.getByText("生成目安：画像生成なし")).toBeVisible();
+  await page.getByTestId("article-primary-button").click();
+
+  expect(submittedImageCount).toBe(0);
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  await expect(page.getByRole("article").locator("img")).toHaveCount(0);
+  expect(errors()).toEqual([]);
+});
+
 test("competitor research failure resets progress and remains recoverable", async ({
   page,
 }) => {
