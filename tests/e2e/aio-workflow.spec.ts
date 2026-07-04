@@ -258,6 +258,17 @@ test("invalid editable competitor research JSON can be fixed before generation",
   expect(calls.articleGenerationJobs).toBe(0);
 
   await page.getByTestId("competitor-research-json").fill(
+    JSON.stringify({
+      summary: "Syntactically valid but missing required arrays",
+    }),
+  );
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("competitor-research-json-error")).toContainText(
+    "summary、queries、insights",
+  );
+  expect(calls.articleGenerationJobs).toBe(0);
+
+  await page.getByTestId("competitor-research-json").fill(
     JSON.stringify(
       {
         ...competitorResearchFixture,

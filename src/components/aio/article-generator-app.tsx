@@ -993,16 +993,54 @@ export function ArticleGeneratorApp() {
       return competitorResearch;
     }
 
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(competitorJson) as CompetitorResearchResult;
-      setCompetitorJsonError("");
-      return parsed;
+      parsed = JSON.parse(competitorJson);
     } catch {
       const message =
         "競合調査JSONの形式を確認してください。括弧・カンマ・引用符が崩れていないか確認してください。";
       setCompetitorJsonError(message);
       throw new Error(message);
     }
+
+    if (!isEditableCompetitorResearch(parsed)) {
+      const message =
+        "競合調査JSONの項目を確認してください。summary、queries、insightsと、各insightのurl・title・majorPoints・differentiationPoints・recommendationsが必要です。";
+      setCompetitorJsonError(message);
+      throw new Error(message);
+    }
+
+    setCompetitorJsonError("");
+    return parsed;
+  }
+
+  function isEditableCompetitorResearch(value: unknown): value is CompetitorResearchResult {
+    if (!isPlainRecord(value)) {
+      return false;
+    }
+
+    return (
+      typeof value.summary === "string" &&
+      isStringArray(value.queries) &&
+      Array.isArray(value.insights) &&
+      value.insights.every(
+        (insight) =>
+          isPlainRecord(insight) &&
+          typeof insight.url === "string" &&
+          typeof insight.title === "string" &&
+          isStringArray(insight.majorPoints) &&
+          isStringArray(insight.differentiationPoints) &&
+          isStringArray(insight.recommendations),
+      )
+    );
+  }
+
+  function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function isStringArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every((item) => typeof item === "string");
   }
 
   function updateStep(id: string, status: GenerationStep["status"], detail?: string) {
