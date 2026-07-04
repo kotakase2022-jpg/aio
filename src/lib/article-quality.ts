@@ -82,10 +82,31 @@ const primaryInfoStopWords = new Set([
   "いる",
   "れる",
   "られる",
+  "our",
+  "we",
+  "us",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "to",
+  "of",
+  "for",
+  "in",
+  "on",
+  "with",
+  "through",
+  "often",
+  "see",
+  "sees",
+  "manage",
+  "work",
+  "leaving",
 ]);
 
 const firstPartyAttributionPattern =
-  /(当社|弊社|自社|支援現場|現場|相談|ヒアリング|経験|観察|実務|お客様|クライアント)/;
+  /(当社|弊社|自社|支援現場|現場|相談|ヒアリング|経験|観察|実務|お客様|クライアント|our|we|field support|support team|client|customer|observed|observation|experience)/i;
 
 export function evaluateArticleQuality(
   html: string,
@@ -271,7 +292,7 @@ function extractPrimaryInfoTerms(primaryInfo?: string) {
       )
       .map((term) => term.trim())
       .filter((term) => term.length >= 2)
-      .filter((term) => !primaryInfoStopWords.has(term))
+      .filter((term) => !primaryInfoStopWords.has(term.toLowerCase()))
       .filter((term) => !/^[0-9０-９]+$/.test(term)),
   ).slice(0, 12);
 }

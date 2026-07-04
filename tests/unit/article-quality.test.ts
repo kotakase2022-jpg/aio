@@ -40,6 +40,28 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeGreaterThanOrEqual(90);
   });
 
+  test("recognizes reflected English first-party information", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+        <p>結論として、記事には一次情報を戻す必要があります。Our support team sees one-person contractors using LINE for back-office approvals, and forms are often missing at review time.</p>
+        <table><tr><th>判断基準</th><td>担当、期間、費用、forms の有無を比較します。</td></tr></table>
+        <ul><li>失敗例を先に確認します。</li><li>手順と注意点を公開前に照合します。</li></ul>
+        <h2>LINEに残る承認とforms missingの状態をどう説明するか</h2>
+        <p>FAQとして、未確認情報は断定せず、参照元と自社の観察を分けて書く必要があります。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      {
+        primaryInfo:
+          "Our support team often sees one-person contractors manage back-office work through LINE, leaving forms missing.",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-reflection", passed: true }),
+    );
+  });
+
   test("flags article bodies that ignore provided first-party information", () => {
     const result = evaluateArticleQuality(
       `
