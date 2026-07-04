@@ -2356,7 +2356,10 @@ function ArticlePreview({
 }) {
   const canRegenerateImages = draft.images.some((image) => image.source === "generated");
   const qualityEvaluation = useMemo(
-    () => evaluateArticleQuality(renderArticleHtml(draft)),
+    () =>
+      evaluateArticleQuality(renderArticleHtml(draft), {
+        primaryInfo: draft.inputPayload.primaryInfo,
+      }),
     [draft],
   );
   const [copyStatus, setCopyStatus] = useState("");

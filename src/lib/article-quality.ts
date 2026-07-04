@@ -12,6 +12,10 @@ export type ArticleQualityEvaluation = {
   improvements: string[];
 };
 
+export type ArticleQualityContext = {
+  primaryInfo?: string;
+};
+
 const genericPhrases = [
   "近年",
   "重要です",
@@ -60,7 +64,33 @@ const editorialAnchorPatterns = [
   /(参照|出典|参考|未確認|断定しない|照合)/,
 ];
 
-export function evaluateArticleQuality(html: string): ArticleQualityEvaluation {
+const primaryInfoStopWords = new Set([
+  "当社",
+  "弊社",
+  "自社",
+  "多い",
+  "多く",
+  "ため",
+  "こと",
+  "もの",
+  "よう",
+  "など",
+  "です",
+  "ます",
+  "する",
+  "ある",
+  "いる",
+  "れる",
+  "られる",
+]);
+
+const firstPartyAttributionPattern =
+  /(当社|弊社|自社|支援現場|現場|相談|ヒアリング|経験|観察|実務|お客様|クライアント)/;
+
+export function evaluateArticleQuality(
+  html: string,
+  context: ArticleQualityContext = {},
+): ArticleQualityEvaluation {
   const text = normalizeText(stripHtml(html));
   const sentenceEndings = extractSentenceEndings(text);
   const genericPhraseHits = countPhraseHits(text, genericPhrases);
@@ -83,6 +113,15 @@ export function evaluateArticleQuality(html: string): ArticleQualityEvaluation {
   const repeatedEndingRate = sentenceEndings.length
     ? Math.max(...Object.values(countItems(sentenceEndings))) / sentenceEndings.length
     : 0;
+  const primaryInfoTerms = extractPrimaryInfoTerms(context.primaryInfo);
+  const primaryInfoHitCount = primaryInfoTerms.filter((term) =>
+    termAppearsInText(term, text),
+  ).length;
+  const primaryInfoTargetHits = Math.min(3, Math.max(1, primaryInfoTerms.length));
+  const shouldCheckPrimaryInfo = primaryInfoTerms.length > 0;
+  const hasPrimaryInfoReflection =
+    !shouldCheckPrimaryInfo ||
+    (primaryInfoHitCount >= primaryInfoTargetHits && firstPartyAttributionPattern.test(text));
 
   const checks: ArticleQualityCheck[] = [
     {
@@ -119,6 +158,18 @@ export function evaluateArticleQuality(html: string): ArticleQualityEvaluation {
           ? "現場例、判断基準、失敗/注意点、体制・費用感、参照意識などが複数含まれます。"
           : "現場例、判断基準、失敗/注意点、体制・費用感、参照意識のうち複数を本文に入れると、一般論から抜け出せます。",
     },
+    ...(shouldCheckPrimaryInfo
+      ? [
+          {
+            id: "primary-info-reflection",
+            label: "一次情報の反映",
+            passed: hasPrimaryInfoReflection,
+            detail: hasPrimaryInfoReflection
+              ? "入力された一次情報の固有語彙が、本文内で自社経験として自然に反映されています。"
+              : `一次情報の固有語彙（${primaryInfoTerms.slice(0, 5).join("、")}）を、当社の経験・相談傾向・現場観察として本文に戻すと独自性が上がります。`,
+          },
+        ]
+      : []),
     {
       id: "definition",
       label: "引用しやすい定義",
@@ -208,6 +259,45 @@ function normalizeText(text: string) {
   return text.replace(/\s+/g, " ").trim();
 }
 
+function extractPrimaryInfoTerms(primaryInfo?: string) {
+  if (!primaryInfo?.trim()) {
+    return [];
+  }
+
+  return uniqueItems(
+    primaryInfo
+      .split(
+        /[、。,.・\s（）()「」『』【】\[\]\/]+|では|には|から|まで|より|として|について|は|が|を|に|で|と|の|も|へ/g,
+      )
+      .map((term) => term.trim())
+      .filter((term) => term.length >= 2)
+      .filter((term) => !primaryInfoStopWords.has(term))
+      .filter((term) => !/^[0-9０-９]+$/.test(term)),
+  ).slice(0, 12);
+}
+
+function termAppearsInText(term: string, text: string) {
+  if (text.includes(term)) {
+    return true;
+  }
+
+  if (/^[A-Za-z0-9_-]+$/.test(term)) {
+    return text.toLowerCase().includes(term.toLowerCase());
+  }
+
+  if (term.length < 5) {
+    return false;
+  }
+
+  return slidingWindows(term, 4).some((part) => text.includes(part));
+}
+
+function slidingWindows(value: string, size: number) {
+  return Array.from({ length: Math.max(0, value.length - size + 1) }, (_, index) =>
+    value.slice(index, index + size),
+  );
+}
+
 function countPhraseHits(text: string, phrases: string[]) {
   return phrases.reduce((total, phrase) => {
     const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -244,4 +334,8 @@ function countItems(items: string[]) {
     counts[item] = (counts[item] ?? 0) + 1;
     return counts;
   }, {});
+}
+
+function uniqueItems(items: string[]) {
+  return Array.from(new Set(items));
 }

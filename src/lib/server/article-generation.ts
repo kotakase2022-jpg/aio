@@ -52,7 +52,12 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
   });
 
   const sanitizedBodyHtml = sanitizeArticleHtml(result.body_html);
-  const qualityEvaluation = evaluateArticleQuality(sanitizedBodyHtml);
+  const qualityEvaluation = evaluateArticleQuality(sanitizedBodyHtml, {
+    primaryInfo:
+      typeof compactPayload.form.primaryInfo === "string"
+        ? compactPayload.form.primaryInfo
+        : undefined,
+  });
 
   return {
     ...result,
