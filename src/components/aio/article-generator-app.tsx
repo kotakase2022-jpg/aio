@@ -2358,6 +2358,7 @@ function ArticlePreview({
   const qualityEvaluation = useMemo(
     () =>
       evaluateArticleQuality(renderArticleHtml(draft), {
+        themeText: draft.inputPayload.theme,
         primaryInfo: draft.inputPayload.primaryInfo,
         closingText: draft.inputPayload.closingText,
         referenceTexts: collectDraftReferenceTexts(draft),

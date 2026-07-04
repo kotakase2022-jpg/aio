@@ -13,6 +13,7 @@ export type ArticleQualityEvaluation = {
 };
 
 export type ArticleQualityContext = {
+  themeText?: string;
   primaryInfo?: string;
   closingText?: string;
   referenceTexts?: string[];
@@ -168,6 +169,29 @@ const referenceInfoStopWords = new Set([
   "service",
 ]);
 
+const themeStopWords = new Set([
+  ...referenceInfoStopWords,
+  "テーマ",
+  "キーワード",
+  "想定読者",
+  "検索意図",
+  "狙い",
+  "読者",
+  "自然",
+  "言語",
+  "複数",
+  "自由",
+  "記述",
+  "target",
+  "reader",
+  "keyword",
+  "keywords",
+  "theme",
+  "intent",
+  "purpose",
+  "marketing",
+]);
+
 export function evaluateArticleQuality(
   html: string,
   context: ArticleQualityContext = {},
@@ -194,6 +218,11 @@ export function evaluateArticleQuality(
   const repeatedEndingRate = sentenceEndings.length
     ? Math.max(...Object.values(countItems(sentenceEndings))) / sentenceEndings.length
     : 0;
+  const themeTerms = extractSignalTerms(context.themeText, themeStopWords);
+  const themeHitCount = themeTerms.filter((term) => termAppearsInText(term, text)).length;
+  const themeTargetHits = Math.min(4, Math.max(2, themeTerms.length));
+  const shouldCheckTheme = themeTerms.length >= 2;
+  const hasThemeReflection = !shouldCheckTheme || themeHitCount >= themeTargetHits;
   const primaryInfoTerms = extractPrimaryInfoTerms(context.primaryInfo);
   const primaryInfoHitCount = primaryInfoTerms.filter((term) =>
     termAppearsInText(term, text),
@@ -255,6 +284,18 @@ export function evaluateArticleQuality(
           ? "現場例、判断基準、失敗/注意点、体制・費用感、参照意識などが複数含まれます。"
           : "現場例、判断基準、失敗/注意点、体制・費用感、参照意識のうち複数を本文に入れると、一般論から抜け出せます。",
     },
+    ...(shouldCheckTheme
+      ? [
+          {
+            id: "theme-keyword-reflection",
+            label: "テーマ/キーワードの反映",
+            passed: hasThemeReflection,
+            detail: hasThemeReflection
+              ? "入力されたテーマ・キーワードの主要語彙が本文に反映されています。"
+              : `テーマ・キーワードの固有語彙（${themeTerms.slice(0, 5).join("、")}）を、タイトル、冒頭、見出し、FAQに自然に戻すと、入力意図から外れにくくなります。`,
+          },
+        ]
+      : []),
     ...(shouldCheckPrimaryInfo
       ? [
           {

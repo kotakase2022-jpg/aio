@@ -86,6 +86,53 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("passes theme and keyword reflection when topic terms return in the body", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>一人親方の労災保険とは、現場で働く個人事業主が業務上の事故に備える特別加入制度を指します</h2>
+        <p>結論として、一人親方が最初に確認すべきなのは加入条件、給付基礎日額、補償開始日の3点です。参照元と照合し、未確認情報は断定しません。</p>
+        <table><tr><th>判断基準</th><td>加入条件、給付基礎日額、費用、手続き期間を比較します。</td></tr></table>
+        <ul><li>失敗例は、加入条件だけを見て補償開始日を確認しないことです。</li><li>注意点として、労働保険事務組合ごとの運用差があります。</li></ul>
+        <h2>加入前に給付基礎日額と費用を並べて見る理由</h2>
+        <p>FAQとして、想定読者が「自分は対象か」を判断できるように、条件と例外を分けて説明します。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      {
+        themeText:
+          "一人親方の労災保険。キーワード: 加入条件、給付基礎日額、費用。想定読者: 建設業の一人親方。",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "theme-keyword-reflection", passed: true }),
+    );
+    expect(result.score).toBeGreaterThanOrEqual(90);
+  });
+
+  test("flags article bodies that drift away from the provided theme and keywords", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+        <p>結論として、記事には定義と判断基準を入れる必要があります。当社の支援現場では、3名体制で公開前の確認手順を決める相談があります。</p>
+        <table><tr><th>判断基準</th><td>担当、期間、費用を比較します。</td></tr></table>
+        <ul><li>失敗例を確認します。</li><li>注意点を整理します。</li></ul>
+        <h2>公開前に確認すべき情報の分け方</h2>
+        <p>FAQとして、参照元と照合し、未確認情報は断定しません。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      {
+        themeText:
+          "一人親方の労災保険。キーワード: 加入条件、給付基礎日額、費用。想定読者: 建設業の一人親方。",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "theme-keyword-reflection", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("テーマ・キーワードの固有語彙");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("passes reference information reflection when source-specific terms return in the body", () => {
     const result = evaluateArticleQuality(
       `

@@ -187,6 +187,7 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("at least three different types of editorial evidence");
     expect(call?.instructions).toContain("Avoid generic H2/H3 labels");
     expect(call?.instructions).toContain("concrete reader decision");
+    expect(call?.instructions).toContain("Treat payload.form.theme as the editorial brief");
     expect(call?.instructions).toContain("Do not state uncertain facts as facts");
     expect(call?.instructions).toContain("Respect payload.form.wordCount");
     expect(call?.instructions).toContain("Respect payload.form.imageCount");
@@ -293,6 +294,46 @@ describe("generateAioArticle", () => {
     expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
     expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
       "結び文章/CTAの固有語彙",
+    );
+  });
+
+  test("caps self-evaluation when the generated body ignores provided theme and keywords", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      body_html: `
+        <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+        <p>結論として、記事には定義と判断基準を入れる必要があります。当社の支援現場では、3名体制で公開前の確認手順を決める相談があります。</p>
+        <table><tr><th>判断基準</th><td>担当、期間、費用を比較します。</td></tr></table>
+        <ul><li>失敗例を確認します。</li><li>注意点を整理します。</li></ul>
+        <h2>公開前に確認すべき情報の分け方</h2>
+        <p>FAQとして、参照元と照合し、未確認情報は断定しません。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      aio_score_self_evaluation: {
+        score: 99,
+        strengths: ["High claimed score"],
+        improvements: [],
+      },
+    });
+
+    const result = await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        theme:
+          "一人親方の労災保険。キーワード: 加入条件、給付基礎日額、費用。想定読者: 建設業の一人親方。",
+        primaryInfo: "",
+        closingText: "",
+      },
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
+    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
+      "テーマ・キーワードの固有語彙",
     );
   });
 

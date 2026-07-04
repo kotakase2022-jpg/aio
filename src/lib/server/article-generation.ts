@@ -28,6 +28,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "Create original article drafts from the provided reference and competitor material.",
       "Do not copy source phrasing. Do not state uncertain facts as facts.",
       "The article must be useful for AI answer engines: clear definitions, concise sentences, structured headings, lists, tables, FAQ, and source notes.",
+      "Treat payload.form.theme as the editorial brief. Reflect its topic, keywords, target reader, search intent, and article goal in the title, opening answer, headings, examples, FAQ, tags, and categories.",
       "Treat payload.form.primaryInfo as high-priority first-party information. Use it to add original field observations, concrete examples, company-specific viewpoints, caveats, and practical nuance so the article does not become commodity content.",
       "When primaryInfo is provided, weave it naturally into the introduction, examples, body sections, and key takeaways. Do not overstate it as universal fact; attribute it as company experience or observed tendency when appropriate.",
       "Make the first 400 Japanese characters answer-first: state the conclusion, definition, or most important editorial judgment before background explanation.",
@@ -61,6 +62,8 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       typeof compactPayload.form.closingText === "string"
         ? compactPayload.form.closingText
         : undefined,
+    themeText:
+      typeof compactPayload.form.theme === "string" ? compactPayload.form.theme : undefined,
     referenceTexts: collectReferenceTexts(compactPayload.form, compactPayload.fetchedReferences),
   });
 
