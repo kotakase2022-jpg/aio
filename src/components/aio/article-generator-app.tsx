@@ -1490,6 +1490,7 @@ export function ArticleGeneratorApp() {
                 label="執筆者画像"
                 onFile={uploadAuthorImage}
                 previewUrl={author.imageUrl}
+                testId="author-image-upload-input"
               />
             </CardContent>
           </Card>

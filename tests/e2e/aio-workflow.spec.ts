@@ -1245,6 +1245,54 @@ test("visual tone upload failure can be retried with the same file", async ({ pa
   expect(errors()).toEqual([]);
 });
 
+test("author image upload failure can be retried with the same file", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/upload-image$/],
+  });
+  let uploadCalls = 0;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/upload-image", async (route) => {
+    uploadCalls += 1;
+    if (uploadCalls === 1) {
+      await route.fulfill({
+        status: 500,
+        json: { ok: false, error: "執筆者画像のアップロードに失敗しました。" },
+      });
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        ok: true,
+        url: "data:image/png;base64,cmV0cnktYXV0aG9y",
+        path: "authors/retry-author.png",
+        filename: "author.png",
+        storageMode: "local",
+      },
+    });
+  });
+
+  await login(page);
+  const filePayload = {
+    name: "author.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("retry-author"),
+  };
+
+  await page.getByTestId("author-image-upload-input").setInputFiles(filePayload);
+  await expect(page.getByText("執筆者画像のアップロードに失敗しました。")).toBeVisible();
+  await expect(page.locator('img[alt="執筆者画像"]')).toHaveCount(0);
+
+  await page.getByTestId("author-image-upload-input").setInputFiles(filePayload);
+  await expect(page.locator('img[alt="執筆者画像"]')).toHaveAttribute("src", /data:image\/png/);
+  await expect(page.getByText("執筆者画像のアップロードに失敗しました。")).toBeHidden();
+  expect(uploadCalls).toBe(2);
+  expect(errors()).toEqual([]);
+});
+
 test("previous closing text and author inputs can be reused from local storage", async ({
   page,
 }) => {
