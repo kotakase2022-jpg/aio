@@ -45,6 +45,74 @@ npm run quality
 
 Any failed command must fail the whole quality gate.
 
+## Sandbox Live Contract Tests
+
+The normal `quality` gate intentionally avoids real external services. To reduce provider-drift
+risk, run the sandbox-only live checks before major demos, production releases, or changes to
+OpenAI / Supabase / WordPress integration code.
+
+These commands are opt-in and must never target production data:
+
+```bash
+npm run test:live:openai
+npm run test:live:supabase
+npm run test:live:wordpress
+npm run test:live
+npm run quality:live
+```
+
+Required common flag:
+
+```bash
+AIO_LIVE_CONTRACT_TESTS=1
+```
+
+OpenAI live checks require:
+
+```bash
+OPENAI_API_KEY=
+OPENAI_TEXT_MODEL=
+OPENAI_LIVE_TEXT_MODEL=
+AIO_LIVE_GENERATION_MIN_SCORE=75
+```
+
+`test:live:openai` verifies a real Responses API structured-output call and then runs three
+disposable article-generation samples with `imageCount: 0`. The generated drafts are evaluated by
+the same article quality checker used in the product, including theme, primary information,
+reference information, and competitor-signal reflection.
+Set `OPENAI_LIVE_TEXT_MODEL` when the live sandbox should use a different model from the app's
+normal `OPENAI_TEXT_MODEL` setting.
+
+Supabase live checks require a non-production project:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+AIO_LIVE_SUPABASE_ALLOW_WRITE=1
+```
+
+`test:live:supabase` writes a disposable `article_inputs` generation job, reads it back, confirms it
+appears in logs, and deletes the row in cleanup. Use only a staging project with the app schema
+installed.
+
+WordPress live checks require a sandbox WordPress site and Application Password:
+
+```bash
+WORDPRESS_SANDBOX_SITE_URL=
+WORDPRESS_SANDBOX_USERNAME=
+WORDPRESS_SANDBOX_APPLICATION_PASSWORD=
+AIO_LIVE_WORDPRESS_ALLOW_POST=1
+WORDPRESS_ENCRYPTION_KEY=
+```
+
+`test:live:wordpress` creates a disposable draft post with no media, tags, or categories, verifies
+it through the REST API, and deletes it in cleanup. Use only a sandbox WordPress user that can
+create and delete posts.
+
+If any live test fails, do not mark the external integration risk as resolved. Fix the
+implementation or sandbox configuration, rerun the failing live command, and keep failure output out
+of public logs if it contains provider-specific details.
+
 ## Local Git Hooks
 
 Husky is configured for lightweight local checks:
