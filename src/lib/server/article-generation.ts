@@ -29,6 +29,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "Do not copy source phrasing. Do not state uncertain facts as facts.",
       "The article must be useful for AI answer engines: clear definitions, concise sentences, structured headings, lists, tables, FAQ, and source notes.",
       "Treat payload.form.theme as the editorial brief. Reflect its topic, keywords, target reader, search intent, and article goal in the title, opening answer, headings, examples, FAQ, tags, and categories.",
+      "When competitor material or competitorResearch is provided, use it to identify comparison axes, missing perspectives, objections, and differentiation points. Do not merely summarize competitors.",
       "Treat payload.form.primaryInfo as high-priority first-party information. Use it to add original field observations, concrete examples, company-specific viewpoints, caveats, and practical nuance so the article does not become commodity content.",
       "When primaryInfo is provided, weave it naturally into the introduction, examples, body sections, and key takeaways. Do not overstate it as universal fact; attribute it as company experience or observed tendency when appropriate.",
       "Make the first 400 Japanese characters answer-first: state the conclusion, definition, or most important editorial judgment before background explanation.",
@@ -65,6 +66,11 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     themeText:
       typeof compactPayload.form.theme === "string" ? compactPayload.form.theme : undefined,
     referenceTexts: collectReferenceTexts(compactPayload.form, compactPayload.fetchedReferences),
+    competitorTexts: collectCompetitorTexts(
+      compactPayload.form,
+      compactPayload.fetchedCompetitors,
+      compactPayload.competitorResearch,
+    ),
   });
 
   return {
@@ -290,6 +296,49 @@ function collectReferenceTexts(
     ...readTextFieldList(form.references),
     ...readTextFieldList(form.referenceFiles),
   ]);
+}
+
+function collectCompetitorTexts(
+  form: Record<string, unknown>,
+  fetchedCompetitors: Array<Record<string, unknown>>,
+  competitorResearch: unknown,
+) {
+  return uniqueItems([
+    ...fetchedCompetitors.map(readTextField),
+    ...readTextFieldList(form.competitors),
+    ...readTextFieldList(form.competitorFiles),
+    ...readCompetitorResearchTexts(competitorResearch),
+  ]);
+}
+
+function readCompetitorResearchTexts(value: unknown): string[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const insights = Array.isArray(value.insights) ? value.insights : [];
+
+  return [
+    typeof value.summary === "string" ? value.summary : "",
+    ...insights.flatMap(readCompetitorInsightTexts),
+  ];
+}
+
+function readCompetitorInsightTexts(value: unknown): string[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  return [
+    typeof value.title === "string" ? value.title : "",
+    ...readStringList(value.majorPoints),
+    ...readStringList(value.differentiationPoints),
+    ...readStringList(value.recommendations),
+  ];
+}
+
+function readStringList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function readTextFieldList(value: unknown) {

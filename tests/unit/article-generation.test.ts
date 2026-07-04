@@ -188,6 +188,8 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("Avoid generic H2/H3 labels");
     expect(call?.instructions).toContain("concrete reader decision");
     expect(call?.instructions).toContain("Treat payload.form.theme as the editorial brief");
+    expect(call?.instructions).toContain("comparison axes");
+    expect(call?.instructions).toContain("Do not merely summarize competitors");
     expect(call?.instructions).toContain("Do not state uncertain facts as facts");
     expect(call?.instructions).toContain("Respect payload.form.wordCount");
     expect(call?.instructions).toContain("Respect payload.form.imageCount");
@@ -377,6 +379,55 @@ describe("generateAioArticle", () => {
     expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
     expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
       "参照情報の固有語彙",
+    );
+  });
+
+  test("caps self-evaluation when the generated body ignores competitor research", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      body_html: `
+        <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+        <p>結論として、記事には定義と判断基準を入れる必要があります。当社の支援現場では、3名体制で公開前の確認手順を決める相談があります。</p>
+        <table><tr><th>判断基準</th><td>担当、期間、費用を比較します。</td></tr></table>
+        <ul><li>失敗例を確認します。</li><li>注意点を整理します。</li></ul>
+        <h2>公開前に確認すべき情報の分け方</h2>
+        <p>FAQとして、参照元と照合し、未確認情報は断定しません。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      aio_score_self_evaluation: {
+        score: 99,
+        strengths: ["High claimed score"],
+        improvements: [],
+      },
+    });
+
+    const result = await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        primaryInfo: "",
+        closingText: "",
+      },
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: {
+        summary: "競合記事は料金表、導入期間、補助金申請を前面に出している。",
+        insights: [
+          {
+            url: "https://example.com/competitor",
+            title: "競合LP",
+            majorPoints: ["料金表", "導入期間", "補助金申請"],
+            differentiationPoints: ["運用定着", "承認フロー"],
+            recommendations: ["比較軸として運用定着と承認フローの失敗例を入れる"],
+          },
+        ],
+      },
+    });
+
+    expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
+    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
+      "競合情報の固有語彙",
     );
   });
 });

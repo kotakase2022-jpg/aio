@@ -2362,6 +2362,7 @@ function ArticlePreview({
         primaryInfo: draft.inputPayload.primaryInfo,
         closingText: draft.inputPayload.closingText,
         referenceTexts: collectDraftReferenceTexts(draft),
+        competitorTexts: collectDraftCompetitorTexts(draft),
       }),
     [draft],
   );
@@ -3039,6 +3040,29 @@ function collectDraftReferenceTexts(draft: ArticleDraft) {
   ).filter((text) => text.trim());
 }
 
+function collectDraftCompetitorTexts(draft: ArticleDraft) {
+  return Array.from(
+    new Set([
+      ...draft.fetchedCompetitors.map((item) => item.text ?? ""),
+      ...draft.inputPayload.competitors.map((item) => item.text ?? ""),
+      ...(draft.inputPayload.competitorFiles ?? []).map((item) => item.text ?? ""),
+      ...(draft.competitorResearch ? collectCompetitorResearchTexts(draft.competitorResearch) : []),
+    ]),
+  ).filter((text) => text.trim());
+}
+
+function collectCompetitorResearchTexts(research: NonNullable<ArticleDraft["competitorResearch"]>) {
+  return [
+    research.summary,
+    ...research.insights.flatMap((insight) => [
+      insight.title,
+      ...insight.majorPoints,
+      ...insight.differentiationPoints,
+      ...insight.recommendations,
+    ]),
+  ];
+}
+
 function buildQualityRegenerationInstruction(
   evaluation: ReturnType<typeof evaluateArticleQuality>,
 ) {
@@ -3048,7 +3072,7 @@ function buildQualityRegenerationInstruction(
 
   return [
     "編集品質チェックの結果を踏まえて、記事全体を再作成してください。",
-    "一般論やAIっぽい定型表現を減らし、一次情報・参照情報にもとづく具体例、判断基準、注意点、失敗パターンを増やしてください。",
+    "一般論やAIっぽい定型表現を減らし、一次情報・参照情報・競合情報にもとづく具体例、判断基準、注意点、失敗パターン、差別化ポイントを増やしてください。",
     "見出しは機械的なキーワード列ではなく、人間の編集者が企画したような読み進めたくなる表現にしてください。",
     "根拠が弱い内容は断定せず、参照元や未確認情報の扱いが読者に分かるようにしてください。",
     improvements.length > 0

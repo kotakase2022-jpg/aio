@@ -17,6 +17,7 @@ export type ArticleQualityContext = {
   primaryInfo?: string;
   closingText?: string;
   referenceTexts?: string[];
+  competitorTexts?: string[];
 };
 
 const genericPhrases = [
@@ -192,6 +193,34 @@ const themeStopWords = new Set([
   "marketing",
 ]);
 
+const competitorStopWords = new Set([
+  ...referenceInfoStopWords,
+  "競合",
+  "他社",
+  "調査",
+  "論点",
+  "主要",
+  "差別化",
+  "ポイント",
+  "示唆",
+  "記事",
+  "lp",
+  "url",
+  "title",
+  "major",
+  "points",
+  "competitor",
+  "competitors",
+  "differentiation",
+  "recommendation",
+  "recommendations",
+  "insight",
+  "insights",
+]);
+
+const competitivePositioningPattern =
+  /(競合|他社|比較|差別化|上位記事|競合記事|競合LP|LP|不足|一方|対して|対比|独自|比較軸|勝ち筋|訴求|competitor|competition|differentiation|compared|whereas|positioning)/i;
+
 export function evaluateArticleQuality(
   html: string,
   context: ArticleQualityContext = {},
@@ -248,6 +277,15 @@ export function evaluateArticleQuality(
   const shouldCheckReferences = referenceTerms.length >= 2;
   const hasReferenceReflection =
     !shouldCheckReferences || referenceHitCount >= referenceTargetHits;
+  const competitorTerms = extractCompetitorTerms(context.competitorTexts);
+  const competitorHitCount = competitorTerms.filter((term) =>
+    termAppearsInText(term, text),
+  ).length;
+  const competitorTargetHits = Math.min(4, Math.max(2, competitorTerms.length));
+  const shouldCheckCompetitors = competitorTerms.length >= 2;
+  const hasCompetitorReflection =
+    !shouldCheckCompetitors ||
+    (competitorHitCount >= competitorTargetHits && competitivePositioningPattern.test(text));
 
   const checks: ArticleQualityCheck[] = [
     {
@@ -329,6 +367,18 @@ export function evaluateArticleQuality(
             detail: hasReferenceReflection
               ? "参照情報の固有語彙が本文の定義・判断基準・具体例に反映されています。"
               : `参照情報の固有語彙（${referenceTerms.slice(0, 5).join("、")}）を、定義・判断基準・具体例・注意点として本文に戻すと、一般論から抜け出せます。`,
+          },
+        ]
+      : []),
+    ...(shouldCheckCompetitors
+      ? [
+          {
+            id: "competitor-insight-reflection",
+            label: "競合論点/差別化の反映",
+            passed: hasCompetitorReflection,
+            detail: hasCompetitorReflection
+              ? "競合情報の論点が、比較軸や差別化ポイントとして本文に反映されています。"
+              : `競合情報の固有語彙（${competitorTerms.slice(0, 5).join("、")}）を、比較軸・不足論点・差別化ポイントとして本文に戻すと、企画記事としての独自性が上がります。`,
           },
         ]
       : []),
@@ -433,6 +483,18 @@ function extractReferenceTerms(referenceTexts?: string[]) {
     .slice(0, 9000);
 
   return extractSignalTerms(combined, referenceInfoStopWords).filter(
+    (term) => term.length >= 3 || /[A-Za-z0-9]/.test(term),
+  );
+}
+
+function extractCompetitorTerms(competitorTexts?: string[]) {
+  const combined = competitorTexts
+    ?.map((text) => text.trim())
+    .filter((text) => text.length >= 20)
+    .join(" ")
+    .slice(0, 9000);
+
+  return extractSignalTerms(combined, competitorStopWords).filter(
     (term) => term.length >= 3 || /[A-Za-z0-9]/.test(term),
   );
 }

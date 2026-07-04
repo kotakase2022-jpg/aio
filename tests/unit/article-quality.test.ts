@@ -182,6 +182,55 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("passes competitor insight reflection when comparison axes return in the body", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、AI検索で引用されやすい構造と差別化軸を同時に設計する記事を指します</h2>
+        <p>結論として、競合記事が料金表と導入期間を前面に出す場合、自社記事では運用定着と承認フローの失敗例まで踏み込むと比較されやすくなります。</p>
+        <table><tr><th>比較軸</th><td>料金表、導入期間、補助金申請、運用定着、承認フローを比較します。</td></tr></table>
+        <ul><li>失敗例として、費用だけで判断し、運用定着の担当や期間を決めないケースがあります。</li><li>注意点は、補助金申請の一般論と自社の支援範囲を分けることです。</li></ul>
+        <h2>競合が料金表で訴求するなら、承認フローの詰まりを差別化する</h2>
+        <p>FAQでは、参照元と競合LPを照合し、未確認情報は断定しません。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      {
+        competitorTexts: [
+          "競合記事Aは料金表と導入期間を強調。競合LP Bは補助金申請を訴求。差別化ポイントは運用定着と承認フローの支援。",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "competitor-insight-reflection", passed: true }),
+    );
+    expect(result.score).toBeGreaterThanOrEqual(90);
+  });
+
+  test("flags article bodies that ignore provided competitor insights", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+        <p>結論として、記事には定義と判断基準を入れる必要があります。当社の支援現場では、3名体制で公開前の確認手順を決める相談があります。</p>
+        <table><tr><th>判断基準</th><td>担当、期間、費用を比較します。</td></tr></table>
+        <ul><li>失敗例を確認します。</li><li>注意点を整理します。</li></ul>
+        <h2>公開前に確認すべき情報の分け方</h2>
+        <p>FAQとして、参照元と照合し、未確認情報は断定しません。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      {
+        competitorTexts: [
+          "競合記事Aは料金表と導入期間を強調。競合LP Bは補助金申請を訴求。差別化ポイントは運用定着と承認フローの支援。",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "competitor-insight-reflection", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("競合情報の固有語彙");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("passes closing CTA reflection when the closing text intent appears near the end", () => {
     const result = evaluateArticleQuality(
       `
