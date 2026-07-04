@@ -2797,6 +2797,7 @@ function ArticleEditor({
       <div className="grid grid-cols-2 gap-4">
         <Field label="タイトル">
           <Input
+            data-testid="draft-title-input"
             value={draft.editedTitle}
             onChange={(event) => updateDraft("editedTitle", event.target.value)}
           />

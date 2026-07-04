@@ -667,6 +667,45 @@ test("WordPress post failure keeps the approved draft recoverable", async ({ pag
   expect(errors()).toEqual([]);
 });
 
+test("draft save failure keeps edits visible and recoverable", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/save-draft$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    saveDraftShouldFail: true,
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for draft save failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("draft-edit-tab").click();
+  await page.getByTestId("draft-title-input").fill("Edited title kept after save failure");
+  await page.getByTestId("save-draft-button").click();
+
+  expect(calls.saveDraft).toBe(1);
+  await expect(page.getByText("ドラフト保存に失敗しました。")).toBeVisible();
+  await expect(page.getByTestId("draft-title-input")).toHaveValue(
+    "Edited title kept after save failure",
+  );
+  await expect(page.getByTestId("save-draft-button")).toBeEnabled();
+  await expect(page.getByTestId("draft-action-message")).toBeHidden();
+  expect(errors()).toEqual([]);
+});
+
 test("stale generation job state is cleared with a Japanese recovery message", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/generation-jobs\/stale-job$/],
@@ -957,6 +996,7 @@ async function mockCommonApiRoutes(
     generateImageShouldFail?: boolean;
     generationJobFailureCall?: number;
     wordpressPostShouldFail?: boolean;
+    saveDraftShouldFail?: boolean;
   } = {},
 ) {
   let latestCompletedJob = completedJob;
@@ -1102,6 +1142,14 @@ async function mockCommonApiRoutes(
 
   await page.route("**/api/save-draft", async (route) => {
     calls.saveDraft += 1;
+    if (options.saveDraftShouldFail) {
+      await route.fulfill({
+        status: 500,
+        json: { ok: false, error: "ドラフト保存に失敗しました。" },
+      });
+      return;
+    }
+
     const body = route.request().postDataJSON() as { draft?: unknown };
     await route.fulfill({ json: { ok: true, draft: body.draft, storageMode: "local" } });
   });
