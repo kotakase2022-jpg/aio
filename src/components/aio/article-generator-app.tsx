@@ -921,6 +921,7 @@ export function ArticleGeneratorApp() {
       setSingleImageProgress(100);
     } catch (error) {
       setActiveError(readError(error));
+      setSingleImageProgress(0);
     } finally {
       setSingleImageRegenerating(false);
     }
@@ -965,6 +966,7 @@ export function ArticleGeneratorApp() {
       setImageRegenerationProgress(100);
     } catch (error) {
       setActiveError(readError(error));
+      setImageRegenerationProgress(0);
     } finally {
       setImageRegenerating(false);
     }

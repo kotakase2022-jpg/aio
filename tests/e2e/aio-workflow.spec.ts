@@ -249,6 +249,50 @@ test("API failure is shown in the UI without console errors or crashes", async (
   expect(errors()).toEqual([]);
 });
 
+test("image regeneration failure shows a recoverable error and resets progress", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generate-image$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    generateImageShouldFail: true,
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for image regeneration failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("image-regenerate-all-button").click();
+  await page
+    .getByTestId("image-regeneration-instruction")
+    .fill("Make the image more concrete and less abstract.");
+  await page.getByTestId("image-regeneration-start").click();
+
+  expect(calls.generateImage).toBe(1);
+  await expect(page.getByText("画像再作成に失敗しました。")).toBeVisible();
+  await expect(page.getByTestId("image-regeneration-progress")).toHaveAttribute(
+    "aria-valuenow",
+    "0",
+  );
+  await expect(page.getByTestId("image-regeneration-start")).toBeEnabled();
+  await expect(page.getByRole("dialog", { name: "画像のみ再作成" })).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("file extraction failure is visible and does not block generation with manual fallback", async ({
   page,
 }) => {
@@ -786,7 +830,7 @@ async function login(page: Page) {
 async function mockCommonApiRoutes(
   page: Page,
   completedJob: ReturnType<typeof createCompletedGenerationJob>,
-  options: { themeCandidatesShouldFail?: boolean } = {},
+  options: { themeCandidatesShouldFail?: boolean; generateImageShouldFail?: boolean } = {},
 ) {
   let latestCompletedJob = completedJob;
   const calls = {
@@ -883,6 +927,14 @@ async function mockCommonApiRoutes(
 
   await page.route("**/api/generate-image", async (route) => {
     calls.generateImage += 1;
+    if (options.generateImageShouldFail) {
+      await route.fulfill({
+        status: 500,
+        json: { ok: false, error: "画像再作成に失敗しました。" },
+      });
+      return;
+    }
+
     const body = route.request().postDataJSON() as {
       prompt?: string;
       slot?: "featured" | "inline-1" | "inline-2";
