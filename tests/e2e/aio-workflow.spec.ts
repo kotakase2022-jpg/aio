@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import extractFileSuccess from "../fixtures/api/extract-file-success.json";
 import themeCandidates from "../fixtures/api/theme-candidates.json";
@@ -160,6 +161,14 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await page.getByTestId("download-html-button").click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("aio-content-operations-guide.html");
+  const downloadedPath = await download.path();
+  expect(downloadedPath).toBeTruthy();
+  const downloadedHtml = await readFile(downloadedPath!, "utf8");
+  expect(downloadedHtml).toContain("<!doctype html>");
+  expect(downloadedHtml).toContain("<title>AIO Content Operations Guide</title>");
+  expect(downloadedHtml).toContain("<article>");
+  expect(downloadedHtml).toContain("AIO content answers the main question first.");
+  expect(downloadedHtml).toContain("Workflow checklist");
   await expect(page.getByTestId("copy-export-status")).toContainText(
     "HTMLファイルを書き出しました。",
   );
