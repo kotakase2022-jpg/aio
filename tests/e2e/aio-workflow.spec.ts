@@ -617,6 +617,56 @@ test("approved drafts can be published to WordPress with Japanese publish status
   expect(errors()).toEqual([]);
 });
 
+test("WordPress post failure keeps the approved draft recoverable", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/wordpress\/post$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    wordpressPostShouldFail: true,
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for WordPress post failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("approve-draft-button").click();
+  await expect(page.getByTestId("draft-action-message")).toContainText(
+    "承認済みに変更しました。",
+  );
+
+  await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+  await page.getByTestId("wordpress-username").fill("editor");
+  await page.getByTestId("wordpress-application-password").fill("app password");
+  await page.getByTestId("wordpress-connect-button").click();
+  await expect(page.getByTestId("wordpress-connection-message")).toContainText(
+    "WordPress接続情報を保存しました。",
+  );
+
+  await page.getByTestId("wordpress-post-button").click();
+
+  expect(calls.wordpressPost).toBe(1);
+  await expect(page.getByText("WordPress投稿に失敗しました。")).toBeVisible();
+  await expect(page.getByTestId("wordpress-post-button")).toBeEnabled();
+  await expect(page.getByTestId("wordpress-post-message")).toBeHidden();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("stale generation job state is cleared with a Japanese recovery message", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/generation-jobs\/stale-job$/],
@@ -906,6 +956,7 @@ async function mockCommonApiRoutes(
     competitorResearchShouldFail?: boolean;
     generateImageShouldFail?: boolean;
     generationJobFailureCall?: number;
+    wordpressPostShouldFail?: boolean;
   } = {},
 ) {
   let latestCompletedJob = completedJob;
@@ -1092,6 +1143,14 @@ async function mockCommonApiRoutes(
       status?: "draft" | "publish";
     };
     calls.wordpressPostStatus = body.status ?? "draft";
+    if (options.wordpressPostShouldFail) {
+      await route.fulfill({
+        status: 502,
+        json: { ok: false, error: "WordPress投稿に失敗しました。" },
+      });
+      return;
+    }
+
     await route.fulfill({
       json: {
         ok: true,
