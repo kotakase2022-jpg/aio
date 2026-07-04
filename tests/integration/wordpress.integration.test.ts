@@ -96,4 +96,25 @@ describe("WordPress connection and posting", () => {
       detail: "Invalid credentials",
     });
   });
+
+  test("publishDraftToWordpress rejects unapproved drafts before external requests", async () => {
+    const { publishDraftToWordpress } = await import("@/lib/server/wordpress");
+    const draft = createSampleDraft({ status: "draft" });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      publishDraftToWordpress({
+        draft,
+        connectionId: "wp-connection-1",
+        status: "draft",
+        origin: "http://localhost",
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "承認済みドラフトのみWordPress投稿できます。",
+      detail: "先に「承認済みに変更」を押してから投稿してください。",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

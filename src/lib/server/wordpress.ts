@@ -89,7 +89,11 @@ export async function publishDraftToWordpress({
   origin: string;
 }) {
   if (draft.status !== "approved") {
-    throw new ApiError("Only approved drafts can be posted to WordPress.", 409);
+    throw new ApiError(
+      "承認済みドラフトのみWordPress投稿できます。",
+      409,
+      "先に「承認済みに変更」を押してから投稿してください。",
+    );
   }
 
   const connection =
