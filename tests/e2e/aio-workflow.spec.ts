@@ -1196,6 +1196,55 @@ test("uploaded visual tone image is sent to generation as upload mode", async ({
   expect(errors()).toEqual([]);
 });
 
+test("visual tone upload failure can be retried with the same file", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/upload-image$/],
+  });
+  let uploadCalls = 0;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/upload-image", async (route) => {
+    uploadCalls += 1;
+    if (uploadCalls === 1) {
+      await route.fulfill({
+        status: 500,
+        json: { ok: false, error: "画像アップロードに失敗しました。" },
+      });
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        ok: true,
+        url: "data:image/png;base64,cmV0cnktdG9uZQ==",
+        path: "article-inserts/retry-tone.png",
+        filename: "tone.png",
+        storageMode: "local",
+      },
+    });
+  });
+
+  await login(page);
+  await page.getByTestId("visual-tone-mode-upload").click();
+  const filePayload = {
+    name: "tone.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("retry-tone"),
+  };
+
+  await page.getByTestId("visual-tone-upload-input").setInputFiles(filePayload);
+  await expect(page.getByText("画像アップロードに失敗しました。")).toBeVisible();
+  await expect(page.locator('img[alt="挿入画像"]')).toHaveCount(0);
+
+  await page.getByTestId("visual-tone-upload-input").setInputFiles(filePayload);
+  await expect(page.locator('img[alt="挿入画像"]')).toHaveAttribute("src", /data:image\/png/);
+  await expect(page.getByText("画像アップロードに失敗しました。")).toBeHidden();
+  expect(uploadCalls).toBe(2);
+  expect(errors()).toEqual([]);
+});
+
 test("previous closing text and author inputs can be reused from local storage", async ({
   page,
 }) => {

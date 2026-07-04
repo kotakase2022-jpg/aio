@@ -757,6 +757,7 @@ export function ArticleGeneratorApp() {
 
   async function uploadAuthorImage(file: File | null) {
     if (!file) return;
+    setActiveError("");
     try {
       const uploaded = await uploadImage(file, "authors");
       setAuthor((current) => ({
@@ -771,6 +772,7 @@ export function ArticleGeneratorApp() {
 
   async function uploadToneImage(file: File | null) {
     if (!file) return;
+    setActiveError("");
     try {
       const uploaded = await uploadImage(file, "article-inserts");
       setVisualTone({
@@ -2206,7 +2208,10 @@ function UploadRow({
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(event) => onFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => {
+                onFile(event.target.files?.[0] ?? null);
+                event.currentTarget.value = "";
+              }}
             />
           </label>
         </div>
