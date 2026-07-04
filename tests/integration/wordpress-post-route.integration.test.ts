@@ -1,0 +1,54 @@
+import { describe, expect, test, vi } from "vitest";
+import { createSampleDraft } from "../fixtures/article";
+
+vi.mock("@/lib/server/wordpress", () => ({
+  publishDraftToWordpress: vi.fn(),
+}));
+
+describe("WordPress post route", () => {
+  test("delegates approved draft posting with request origin and selected status", async () => {
+    const { publishDraftToWordpress } = await import("@/lib/server/wordpress");
+    const draft = createSampleDraft({ status: "approved" });
+    vi.mocked(publishDraftToWordpress).mockResolvedValueOnce({
+      postUrl: "https://wordpress.example.com/post",
+      draft: {
+        ...draft,
+        status: "posted",
+        wordpressPostUrl: "https://wordpress.example.com/post",
+      },
+    });
+    const { POST } = await import("@/app/api/wordpress/post/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/wordpress/post", {
+        method: "POST",
+        headers: { origin: "https://app.example.com" },
+        body: JSON.stringify({
+          draft,
+          connectionId: "wp-connection-1",
+          connection: {
+            id: "wp-connection-1",
+            siteUrl: "https://wordpress.example.com",
+            username: "editor",
+            connectionToken: "encrypted-token",
+            createdAt: "2026-07-02T00:00:00.000Z",
+            updatedAt: "2026-07-02T00:00:00.000Z",
+          },
+          status: "publish",
+        }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.postUrl).toBe("https://wordpress.example.com/post");
+    expect(publishDraftToWordpress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        draft: expect.objectContaining({ id: draft.id }),
+        connectionId: "wp-connection-1",
+        status: "publish",
+        origin: "https://app.example.com",
+      }),
+    );
+  });
+});
