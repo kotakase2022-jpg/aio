@@ -61,9 +61,11 @@ because GitHub Actions remains the authoritative full gate for heavier checks.
 Do not make tests pass by weakening the tests. The following are forbidden:
 
 - Removing important tests to hide a bug
-- `test.only`, `describe.only`, `it.only`
-- `test.skip`, `describe.skip`, `it.skip`
-- `test.todo`, `describe.todo`, `it.todo`
+- `test.only`, `describe.only`, `it.only`, `test.describe.only`
+- `test.skip`, `describe.skip`, `it.skip`, `test.describe.skip`
+- `test.todo`, `describe.todo`, `it.todo`, `test.describe.todo`
+- `test.fixme`, `describe.fixme`, `it.fixme`, `test.describe.fixme`
+- `test.describe.configure({ mode: "skip" })`
 - Commenting out large blocks of tests
 - Replacing an E2E business flow with a render-only smoke test
 - Mocking a failed feature as successful instead of fixing the implementation
@@ -121,6 +123,13 @@ user-facing error message.
 
 Coverage is enforced for statements, branches, functions, and lines. Do not lower thresholds to hide
 uncovered implementation paths; add tests or explain a narrowly scoped threshold change in review.
+
+Current minimum thresholds are:
+
+- Statements: 75%
+- Branches: 55%
+- Functions: 80%
+- Lines: 75%
 
 ## Environment
 

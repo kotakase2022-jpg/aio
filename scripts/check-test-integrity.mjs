@@ -8,14 +8,22 @@ const e2ePattern = /[/\\]tests[/\\]e2e[/\\].+\.(test|spec)\.(ts|tsx|js|jsx)$/;
 
 const forbiddenPatterns = [
   /\btest\.only\s*\(/,
+  /\btest\.describe\.only\s*\(/,
   /\bdescribe\.only\s*\(/,
   /\bit\.only\s*\(/,
   /\btest\.skip\s*\(/,
+  /\btest\.describe\.skip\s*\(/,
   /\bdescribe\.skip\s*\(/,
   /\bit\.skip\s*\(/,
   /\btest\.todo\s*\(/,
+  /\btest\.describe\.todo\s*\(/,
   /\bit\.todo\s*\(/,
   /\bdescribe\.todo\s*\(/,
+  /\btest\.fixme\s*\(/,
+  /\btest\.describe\.fixme\s*\(/,
+  /\bit\.fixme\s*\(/,
+  /\bdescribe\.fixme\s*\(/,
+  /\btest\.describe\.configure\s*\(\s*\{[\s\S]*?\bmode\s*:\s*["']skip["']/,
 ];
 
 const errors = [];
