@@ -588,6 +588,74 @@ test("competitor file extraction retry replaces the failed row before generation
   expect(errors()).toEqual([]);
 });
 
+test("reference URL fetch failure is visible while manual fallback still generates a draft", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  const failedUrl = "https://reference.example.com/blocked";
+  const fetchedReferences = [
+    {
+      url: failedUrl,
+      ok: false,
+      reason: "Could not extract enough page text.",
+      sourceType: "url" as const,
+    },
+    {
+      url: "manual-text",
+      title: "手動入力テキスト",
+      text: "Manual fallback reference text for blocked URL.",
+      ok: true,
+      sourceType: "manual" as const,
+    },
+  ];
+  const completedWithFetchWarning = {
+    ...completedJob,
+    fetchedReferences,
+    draft: completedJob.draft
+      ? {
+          ...completedJob.draft,
+          fetchedReferences,
+        }
+      : completedJob.draft,
+  };
+  let submittedReferenceText = "";
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+
+    const body = route.request().postDataJSON() as {
+      form?: { references?: Array<{ text?: string; url?: string }> };
+    };
+    submittedReferenceText = body.form?.references?.[0]?.text ?? "";
+    await route.fulfill({ json: { ok: true, job: completedWithFetchWarning } });
+  });
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    await route.fulfill({ json: { ok: true, job: completedWithFetchWarning } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-url-0").fill(failedUrl);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Manual fallback reference text for blocked URL.");
+  await page.getByTestId("article-primary-button").click();
+
+  await expect(page.getByText(failedUrl)).toBeVisible();
+  await expect(page.getByText("十分な本文を抽出できませんでした。")).toBeVisible();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  expect(submittedReferenceText).toBe("Manual fallback reference text for blocked URL.");
+  expect(errors()).toEqual([]);
+});
+
 test("invalid editable competitor research JSON can be fixed before generation", async ({
   page,
 }) => {
