@@ -249,6 +249,74 @@ test("API failure is shown in the UI without console errors or crashes", async (
   expect(errors()).toEqual([]);
 });
 
+test("file extraction failure is visible and does not block generation with manual fallback", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/extract-file-content$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  let generationReferenceFiles: Array<{ ok?: boolean; error?: string; name?: string }> = [];
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/extract-file-content", async (route) => {
+    await route.fulfill({
+      status: 422,
+      json: {
+        ok: false,
+        error: "PDFから十分な本文を抽出できませんでした。",
+        detail: "スキャンPDFの可能性があります。手動テキストで補ってください。",
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+
+    const body = route.request().postDataJSON() as {
+      form?: { referenceFiles?: Array<{ ok?: boolean; error?: string; name?: string }> };
+    };
+    generationReferenceFiles = body.form?.referenceFiles ?? [];
+    await route.fulfill({
+      json: { ok: true, job: buildCompletedJobForForm(completedJob, body.form ?? {}) },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    await route.fulfill({ json: { ok: true, job: completedJob } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-file-input").setInputFiles({
+    name: "scanned-reference.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF scanned image only"),
+  });
+  await expect(page.getByText("scanned-reference.pdf")).toBeVisible();
+  await expect(page.getByText(/解析エラー/)).toBeVisible();
+  await expect(page.getByText(/手動テキストで補ってください/)).toBeVisible();
+
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Manual fallback text after scanned PDF extraction failed.");
+  await page.getByTestId("article-primary-button").click();
+
+  expect(generationReferenceFiles).toEqual([
+    expect.objectContaining({
+      name: "scanned-reference.pdf",
+      ok: false,
+      error: expect.stringContaining("手動テキストで補ってください"),
+    }),
+  ]);
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("invalid editable competitor research JSON can be fixed before generation", async ({
   page,
 }) => {
