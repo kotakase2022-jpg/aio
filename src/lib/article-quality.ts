@@ -47,6 +47,19 @@ const unsupportedStrongClaims = [
   "確実に",
 ];
 
+const repetitiveConnectors = [
+  "また",
+  "さらに",
+  "加えて",
+  "一方で",
+  "そのため",
+  "したがって",
+  "まず",
+  "次に",
+  "最後に",
+  "このように",
+];
+
 const mechanicalHeadingLabels = [
   "重要なポイント",
   "メリット",
@@ -236,6 +249,7 @@ export function evaluateArticleQuality(
 ): ArticleQualityEvaluation {
   const text = normalizeText(stripHtml(html));
   const sentenceEndings = extractSentenceEndings(text);
+  const leadingConnectors = extractLeadingConnectors(text);
   const genericPhraseHits = countPhraseHits(text, genericPhrases);
   const unsupportedClaimHits = countPhraseHits(text, unsupportedStrongClaims);
   const hasNumbers = /[0-9０-９]/.test(text);
@@ -261,6 +275,14 @@ export function evaluateArticleQuality(
   const repeatedEndingRate = sentenceEndings.length
     ? Math.max(...Object.values(countItems(sentenceEndings))) / sentenceEndings.length
     : 0;
+  const repeatedConnectorCount = leadingConnectors.length
+    ? Math.max(...Object.values(countItems(leadingConnectors)))
+    : 0;
+  const repeatedConnectorRate = leadingConnectors.length
+    ? repeatedConnectorCount / leadingConnectors.length
+    : 0;
+  const hasNaturalConnectorVariety =
+    leadingConnectors.length < 4 || (repeatedConnectorCount <= 2 && repeatedConnectorRate <= 0.5);
   const themeTerms = extractSignalTerms(context.themeText, themeStopWords);
   const themeHitCount = themeTerms.filter((term) => termAppearsInText(term, text)).length;
   const themeTargetHits = Math.min(4, Math.max(2, themeTerms.length));
@@ -450,6 +472,14 @@ export function evaluateArticleQuality(
         : "同じ語尾が続いているため、文体に抑揚を出す余地があります。",
     },
     {
+      id: "connector-variety",
+      label: "接続表現の単調さ",
+      passed: hasNaturalConnectorVariety,
+      detail: hasNaturalConnectorVariety
+        ? "接続表現の連続や偏りは目立ちません。"
+        : `「${mostFrequentItem(leadingConnectors)}」など同じ接続表現が続いています。文ごとの役割を見直し、接続語なしの短文、具体例、条件、例外を混ぜると人間の編集記事らしくなります。`,
+    },
+    {
       id: "unsupported-claims",
       label: "根拠の薄い強い断定",
       passed: unsupportedClaimHits <= 1,
@@ -575,6 +605,23 @@ function extractSentenceEndings(text: string) {
     .split(/[。！？!?]/)
     .map((sentence) => sentence.trim().slice(-3))
     .filter((ending) => ending.length >= 2);
+}
+
+function extractLeadingConnectors(text: string) {
+  return text
+    .split(/[。！？!?]/)
+    .map((sentence) => sentence.trim().replace(/^[「『（(【\s]+/, ""))
+    .map((sentence) =>
+      repetitiveConnectors.find((connector) =>
+        new RegExp(`^${connector}(?:、|,|\\s|　)`).test(sentence),
+      ),
+    )
+    .filter((connector): connector is string => Boolean(connector));
+}
+
+function mostFrequentItem(items: string[]) {
+  const counts = countItems(items);
+  return Object.entries(counts).sort((first, second) => second[1] - first[1])[0]?.[0] ?? "";
 }
 
 function extractHeadings(html: string) {

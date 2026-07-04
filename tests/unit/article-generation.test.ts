@@ -196,6 +196,7 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("Respect payload.form.wordCount");
     expect(call?.instructions).toContain("Respect payload.form.imageCount");
     expect(call?.instructions).toContain("Return zero image_prompts when imageCount is 0");
+    expect(call?.instructions).toContain("Do not start many consecutive sentences");
     expect(input.payload.form.imageCount).toBe(3);
     expect(input.payload.form.wordCount).toBe(5000);
   });
