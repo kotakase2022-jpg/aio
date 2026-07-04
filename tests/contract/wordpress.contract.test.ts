@@ -179,4 +179,79 @@ describe("WordPress REST API contract", () => {
       await server.close();
     }
   });
+
+  test("stops before creating a post when featured media upload fails", async () => {
+    const server = await createMockHttpServer((request, response) => {
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, []);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, { id: 11, name: (request.json as { name: string }).name }, 201);
+        return;
+      }
+
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/tags") {
+        sendJson(response, []);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/tags") {
+        sendJson(response, { id: 21, name: (request.json as { name: string }).name }, 201);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/media") {
+        sendJson(response, { message: "Featured media storage is unavailable." }, 503);
+        return;
+      }
+
+      sendJson(response, { message: `Unexpected route ${request.method} ${request.pathname}` }, 500);
+    });
+
+    try {
+      const { saveWordpressConnection, publishDraftToWordpress } = await import(
+        "@/lib/server/wordpress"
+      );
+      const connection = await saveWordpressConnection({
+        siteUrl: server.origin,
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      });
+      const draft = createSampleDraft({
+        status: "approved",
+        images: [
+          {
+            id: "featured-media-failure",
+            slot: "featured",
+            url: `data:image/png;base64,${Buffer.from("png").toString("base64")}`,
+            path: "generated/featured.png",
+            prompt: "contract image",
+            altText: "Contract featured image",
+            source: "generated",
+          },
+        ],
+      });
+
+      await expect(
+        publishDraftToWordpress({
+          draft,
+          connectionId: connection.id,
+          status: "draft",
+          origin: "http://localhost",
+        }),
+      ).rejects.toMatchObject({
+        status: 503,
+        message: "WordPress media upload failed.",
+        detail: "Featured media storage is unavailable.",
+      });
+
+      const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
+      expect(requestNames).toContain("POST /wp-json/wp/v2/media");
+      expect(requestNames).not.toContain("POST /wp-json/wp/v2/posts");
+    } finally {
+      await server.close();
+    }
+  });
 });
