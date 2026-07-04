@@ -54,3 +54,14 @@ See [docs/testing.md](docs/testing.md) for the strict local quality gate, Playwr
 fixtures, CI artifact handling, and the rule that tests must not be removed, skipped, or weakened to
 hide implementation bugs. Configure GitHub branch protection so `quality-gate` is required before
 merging to the protected main branch.
+
+## Development Workflow
+
+Future changes should be made through pull requests, not direct pushes to `main`. Every Codex,
+Cursor, or human-authored change must keep `npm run quality` and the GitHub Actions `quality-gate`
+green before it is considered complete.
+
+Production Vercel deployments are assumed to come from `main` only, after the PR has passed
+`quality-gate` and branch protection requirements. See [docs/testing.md](docs/testing.md) for the
+required branch protection settings and testing rules for new screens, forms, APIs, uploads,
+Supabase changes, and bug fixes.

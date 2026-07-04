@@ -3,6 +3,21 @@
 This repository uses a strict, reproducible quality gate. A change is not complete unless the
 local `quality` command and the GitHub Actions `quality-gate` workflow pass.
 
+## Mandatory Workflow
+
+All future feature work, bug fixes, and refactors by Codex, Cursor, or humans must follow this
+workflow:
+
+1. Create a feature/fix branch from `main`.
+2. Open a pull request instead of pushing directly to `main`.
+3. Fill in `.github/pull_request_template.md`.
+4. Run `npm run quality` locally when practical.
+5. Wait for the GitHub Actions `quality-gate` workflow to pass.
+6. Merge only after the PR review and required checks pass.
+
+No change is considered done if it bypasses the quality gate, even when the code appears to work
+manually.
+
 ## Local Commands
 
 ```bash
@@ -29,6 +44,17 @@ npm run quality
 8. Production build
 
 Any failed command must fail the whole quality gate.
+
+## Local Git Hooks
+
+Husky is configured for lightweight local checks:
+
+- `pre-commit`: `npm run hook:pre-commit`
+- `pre-push`: `npm run hook:pre-push`
+
+The hooks run lint, typecheck, unit/integration/contract tests, and the test integrity guard before
+changes leave the workstation. They intentionally do not run Playwright E2E or production build,
+because GitHub Actions remains the authoritative full gate for heavier checks.
 
 ## Test Integrity Rules
 
@@ -130,6 +156,17 @@ GitHub Actions workflow:
 ```
 
 It runs on pull requests and pushes to `main`, `master`, and `release/**`.
+The workflow must continue to run:
+
+- TypeScript typecheck
+- ESLint
+- Test integrity guard for `skip` / `only` / `todo` / suspicious disabling
+- Unit and integration tests
+- External contract tests
+- Coverage
+- Playwright E2E
+- Production build
+
 Artifacts are uploaded for:
 
 - Playwright HTML report
@@ -145,8 +182,30 @@ npx playwright show-report playwright-report
 
 ## Branch Protection
 
-Repository administrators must configure branch protection so the `quality-gate` workflow is a
-required status check before merging into the protected main branch.
+Repository administrators must configure branch protection for `main`. If Codex cannot set it
+directly through GitHub permissions, apply these settings manually in GitHub:
+
+1. Open the repository on GitHub.
+2. Go to `Settings` -> `Branches` -> `Add branch protection rule`.
+3. Set `Branch name pattern` to `main`.
+4. Enable `Require a pull request before merging`.
+5. Enable `Require status checks to pass before merging`.
+6. Select the `quality-gate` status check from `.github/workflows/quality-gate.yml`.
+7. Enable `Require branches to be up to date before merging`.
+8. Restrict who can push to matching branches, or otherwise disallow direct pushes to `main`.
+9. Disable bypass permissions for administrators if the repository policy allows it.
+
+The intended policy is: no direct pushes to `main`, no merge without PR, and no merge unless
+`quality-gate` passes.
+
+## Vercel Production Deployments
+
+Production Vercel deployments must be based on `main` only. A production deployment assumes the
+change first passed the GitHub Actions `quality-gate` on its pull request and then entered `main`
+through the protected branch workflow.
+
+Preview deployments from feature branches are acceptable, but they do not replace the required
+`quality-gate` result before merge.
 
 ## Adding Features
 
@@ -155,6 +214,13 @@ Every new feature must add or update tests at the correct level:
 - Pure logic: unit tests
 - Route handlers/storage/API formatting: integration tests
 - User-visible workflow: Playwright E2E tests
+- New screens: add corresponding Playwright E2E coverage
+- New forms: add normal-path and error-path tests
+- New APIs: add normal-path, error-path, and permission/error tests
+- CSV / PDF / image / upload changes: add or update fixtures
+- Supabase tables, RLS, or persistence changes: add data consistency tests
+- Bug fixes: add a failing reproduction test first when practical, confirm it fails, then fix the implementation
 
 If a test fails because the implementation is wrong, fix the implementation. Change the test only
 when the test specification is demonstrably incorrect, and document the reason in the pull request.
+Deleting, skipping, commenting out, or weakening existing tests to make a change pass is prohibited.
