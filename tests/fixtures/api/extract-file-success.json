@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "attachment": {
+    "id": "file-1",
+    "name": "reference.txt",
+    "type": "text/plain",
+    "size": 64,
+    "ok": true,
+    "text": "Uploaded reference file text for AIO article generation.",
+    "textLength": 56,
+    "extractedAt": "2026-07-02T00:00:00.000Z"
+  }
+}

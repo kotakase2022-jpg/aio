@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "result": {
+    "summary": "Reference material suggests a practical AIO operations guide.",
+    "candidates": [
+      {
+        "title": "AIO Content Operations Guide",
+        "keywords": ["AIO", "AI search", "BtoB"],
+        "targetReader": "B2B content managers",
+        "searchIntent": "Find a practical workflow for AIO article production.",
+        "angle": "Operational checklist for drafting, reviewing, and publishing."
+      },
+      {
+        "title": "WordPress Draft Automation for AIO",
+        "keywords": ["WordPress", "draft", "AIO"],
+        "targetReader": "Marketing operations teams",
+        "searchIntent": "Understand how AI drafts can be reviewed before publishing.",
+        "angle": "Approval-first publishing workflow."
+      },
+      {
+        "title": "B2B AI Search Content Basics",
+        "keywords": ["AI search", "content", "B2B"],
+        "targetReader": "B2B marketers",
+        "searchIntent": "Learn the basics of AI-search-ready article structure.",
+        "angle": "Clear definitions, FAQ, and source-backed writing."
+      }
+    ]
+  }
+}

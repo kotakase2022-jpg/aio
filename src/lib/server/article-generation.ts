@@ -1,0 +1,246 @@
+import sanitizeHtml from "sanitize-html";
+import { articleGenerationSchema } from "@/lib/server/ai-schemas";
+import { createStructuredResponse } from "@/lib/server/openai";
+import { truncateText } from "@/lib/utils";
+import type { ArticleGenerationResult } from "@/types/aio";
+
+export type ArticleGenerationPayload = {
+  form: Record<string, unknown>;
+  fetchedReferences: Array<Record<string, unknown>>;
+  fetchedCompetitors: Array<Record<string, unknown>>;
+  competitorResearch?: Record<string, unknown> | null;
+};
+
+export async function generateAioArticle(payload: ArticleGenerationPayload) {
+  const compactPayload = {
+    form: compactForm(payload.form),
+    fetchedReferences: payload.fetchedReferences.slice(0, 8).map(compactFetchResult),
+    fetchedCompetitors: payload.fetchedCompetitors.slice(0, 8).map(compactFetchResult),
+    competitorResearch: payload.competitorResearch,
+  };
+
+  const result = await createStructuredResponse<ArticleGenerationResult>({
+    schemaName: "aio_article_generation",
+    schema: articleGenerationSchema,
+    instructions: [
+      "You are an expert Japanese AIO/SEO editor for BtoB content.",
+      "Create original article drafts from the provided reference and competitor material.",
+      "Do not copy source phrasing. Do not state uncertain facts as facts.",
+      "The article must be useful for AI answer engines: clear definitions, concise sentences, structured headings, lists, tables, FAQ, and source notes.",
+      "Treat payload.form.primaryInfo as high-priority first-party information. Use it to add original field observations, concrete examples, company-specific viewpoints, caveats, and practical nuance so the article does not become commodity content.",
+      "When primaryInfo is provided, weave it naturally into the introduction, examples, body sections, and key takeaways. Do not overstate it as universal fact; attribute it as company experience or observed tendency when appropriate.",
+      "Respect payload.form.wordCount as the target Japanese character count. Natural variance is acceptable, but stay close to the requested scale.",
+      "Respect payload.form.imageCount when creating image_prompts. Return zero image_prompts when imageCount is 0, otherwise return exactly that many prompts up to 3.",
+      "Return only JSON matching the schema. body_html must be safe article HTML, not Markdown.",
+    ].join("\n"),
+    input: JSON.stringify({
+      task:
+        "AIO最適化済みの記事ドラフトを日本語で生成してください。payload.form.regenerationInstruction がある場合は、既存入力を前提にその再作成方針を優先して、構成・本文・タイトル・FAQ・画像プロンプトを再作成してください。冒頭に結論、明確なH2/H3、定義文、箇条書き、必要なら表、FAQを含めてください。body_htmlはHTML込みで9000文字以内に収め、JSONを必ず最後まで閉じてください。結び文章が入力されている場合は、記事末尾に自然に反映してください。執筆者情報がある場合は本文末尾に「この記事の執筆者」ブロックを入れてください。payload.form.wordCount を目標文字数として本文量を調整してください。payload.form.imageCount が0の場合は image_prompts を空配列にし、1以上の場合は featured から順に指定枚数分だけ返してください。",
+      payload: compactPayload,
+    }),
+    timeoutMs: 105_000,
+    maxOutputTokens: 16_000,
+  });
+
+  return {
+    ...result,
+    body_html: sanitizeArticleHtml(result.body_html),
+    image_prompts: normalizeImagePrompts(result, compactPayload.form),
+  } satisfies ArticleGenerationResult;
+}
+
+function compactFetchResult(value: Record<string, unknown>) {
+  return {
+    ...value,
+    text: typeof value.text === "string" ? truncateText(value.text, 3000) : value.text,
+    reason: typeof value.reason === "string" ? truncateText(value.reason, 300) : value.reason,
+  };
+}
+
+function compactForm(form: Record<string, unknown>) {
+  const visualTone = isRecord(form.visualTone) ? form.visualTone : {};
+  const author = isRecord(form.author) ? form.author : {};
+  const referenceFiles = Array.isArray(form.referenceFiles) ? form.referenceFiles : [];
+  const competitorFiles = Array.isArray(form.competitorFiles) ? form.competitorFiles : [];
+
+  return {
+    ...form,
+    theme: typeof form.theme === "string" ? truncateText(form.theme, 1800) : form.theme,
+    primaryInfo:
+      typeof form.primaryInfo === "string"
+        ? truncateText(form.primaryInfo, 2400)
+        : form.primaryInfo,
+    closingText:
+      typeof form.closingText === "string" ? truncateText(form.closingText, 1000) : form.closingText,
+    regenerationInstruction:
+      typeof form.regenerationInstruction === "string"
+        ? truncateText(form.regenerationInstruction, 1200)
+        : form.regenerationInstruction,
+    visualTone: {
+      ...visualTone,
+      uploadedImageUrl: visualTone.uploadedImageUrl ? "[uploaded image]" : undefined,
+    },
+    author: {
+      ...author,
+      bio: typeof author.bio === "string" ? truncateText(author.bio, 800) : author.bio,
+      imageUrl: author.imageUrl ? "[uploaded author image]" : undefined,
+    },
+    referenceFiles: referenceFiles.slice(0, 8).map(compactFileInput),
+    competitorFiles: competitorFiles.slice(0, 8).map(compactFileInput),
+    imageCount: normalizeImageCount(form.imageCount),
+    wordCount: normalizeWordCount(form.wordCount),
+  };
+}
+
+function compactFileInput(value: unknown) {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return {
+    name: value.name,
+    type: value.type,
+    ok: value.ok,
+    text: typeof value.text === "string" ? truncateText(value.text, 2200) : undefined,
+    error: typeof value.error === "string" ? truncateText(value.error, 220) : undefined,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function sanitizeArticleHtml(html: string) {
+  return sanitizeHtml(html, {
+    allowedTags: [
+      "h1",
+      "h2",
+      "h3",
+      "p",
+      "a",
+      "ul",
+      "ol",
+      "li",
+      "strong",
+      "em",
+      "blockquote",
+      "table",
+      "thead",
+      "tbody",
+      "tr",
+      "th",
+      "td",
+      "figure",
+      "figcaption",
+      "img",
+      "br",
+      "hr",
+      "section",
+      "div",
+    ],
+    allowedAttributes: {
+      a: ["href", "title", "target", "rel"],
+      img: ["src", "alt", "title"],
+      figure: ["data-image-slot"],
+      div: ["class"],
+      section: ["class"],
+    },
+    allowedSchemes: ["http", "https", "data"],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer", target: "_blank" }),
+    },
+  });
+}
+
+function normalizeImagePrompts(result: ArticleGenerationResult, form: Record<string, unknown>) {
+  const imageCount = normalizeImageCount(form.imageCount);
+  if (imageCount === 0) {
+    return [];
+  }
+
+  const prompts = result.image_prompts.slice(0, imageCount);
+  const slots = ["featured", "inline-1", "inline-2"] as const;
+  const visualTone = getVisualToneText(form);
+
+  return slots.slice(0, imageCount).map((slot, index) => {
+    const existing = prompts.find((prompt) => prompt.slot === slot) ?? prompts[index];
+    const purpose =
+      existing?.purpose ||
+      (slot === "featured" ? "Article featured image" : "Article body explanatory image");
+    const basePrompt =
+      existing?.prompt ||
+      `BtoB article illustration about ${result.selected_title}, clean editorial style`;
+
+    return {
+      slot,
+      purpose,
+      prompt: buildPremiumImagePrompt({
+        basePrompt,
+        purpose,
+        selectedTitle: result.selected_title,
+        slot,
+        visualTone,
+      }),
+      alt_text:
+        existing?.alt_text ||
+        `${result.selected_title} - ${slot === "featured" ? "featured image" : "explanatory image"}`,
+    };
+  });
+}
+
+function getVisualToneText(form: Record<string, unknown>) {
+  const visualTone = isRecord(form.visualTone) ? form.visualTone : {};
+  const mode = typeof visualTone.mode === "string" ? visualTone.mode : "";
+
+  if (mode === "custom" && typeof visualTone.custom === "string") {
+    return visualTone.custom;
+  }
+
+  if (mode === "preset" && typeof visualTone.preset === "string") {
+    return visualTone.preset;
+  }
+
+  return "clean Japanese B2B whitepaper editorial style";
+}
+
+function buildPremiumImagePrompt({
+  basePrompt,
+  purpose,
+  selectedTitle,
+  slot,
+  visualTone,
+}: {
+  basePrompt: string;
+  purpose: string;
+  selectedTitle: string;
+  slot: "featured" | "inline-1" | "inline-2";
+  visualTone: string;
+}) {
+  const slotBrief =
+    slot === "featured"
+      ? "Featured image: make a wide, polished hero visual with a clear central metaphor for the article topic."
+      : "Inline image: make a simple explanatory diagram-like visual that clarifies one concept from the article.";
+
+  return [
+    basePrompt.trim(),
+    "",
+    `Article title: ${selectedTitle}`,
+    `Image purpose: ${purpose}`,
+    `Requested visual tone: ${visualTone}`,
+    slotBrief,
+    "Style direction: premium Japanese B2B SaaS / consulting / financial whitepaper, clean editorial art direction, refined composition, crisp geometry, subtle depth, high-end corporate polish.",
+    "Composition: 3:2 landscape, generous whitespace, one clear focal idea, balanced margins, light background, restrained accent colors, scalable at thumbnail size.",
+    "Content: use abstract dashboards, process cards, geometric diagrams, data-flow shapes, or symbolic business/AI elements as appropriate.",
+    "Avoid: readable text, random letters, logos, watermarks, fake brand marks, cluttered dashboards, distorted hands, unnecessary people, clip-art, cheap stock-photo look, dark blurry neon backgrounds.",
+  ].join("\n");
+}
+
+function normalizeImageCount(value: unknown) {
+  const parsed = Number(value);
+  return [0, 1, 2, 3].includes(parsed) ? parsed : 2;
+}
+
+function normalizeWordCount(value: unknown) {
+  const parsed = Number(value);
+  return [1000, 2000, 3000, 4000, 5000, 6000].includes(parsed) ? parsed : 3000;
+}
