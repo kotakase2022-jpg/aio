@@ -605,6 +605,56 @@ test("generation log loading failure stays local to the logs panel", async ({ pa
   expect(errors()).toEqual([]);
 });
 
+test("opening a stale generation log shows a recoverable error without removing the log list", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generation-jobs\/job-log-missing$/],
+  });
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({
+      json: {
+        ok: true,
+        logs: [
+          {
+            id: "job-log-missing",
+            status: "completed",
+            createdAt: "2026-07-02T00:00:00.000Z",
+            updatedAt: "2026-07-02T00:02:00.000Z",
+            completedAt: "2026-07-02T00:02:00.000Z",
+            inputSummary: "Missing log article / 参照1件 / 競合0件",
+            outputTitle: "Missing Log Article",
+            outputSlug: "missing-log-article",
+            draftStatus: "posted",
+            wordpressPostStatus: null,
+          },
+        ],
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-log-missing", async (route) => {
+    await route.fulfill({
+      status: 404,
+      json: { ok: false, error: "生成ジョブが見つかりません。" },
+    });
+  });
+
+  await login(page);
+  await page.getByTestId("generation-logs-toggle").click();
+  await expect(page.getByTestId("generation-logs-content")).toContainText(
+    "Missing Log Article",
+  );
+  await page.getByTestId("generation-log-open-job-log-missing").click();
+
+  await expect(page.getByText("生成ジョブが見つかりません。")).toBeVisible();
+  await expect(page.getByTestId("generation-logs-content")).toContainText(
+    "Missing Log Article",
+  );
+  await expect(page.getByTestId("reference-text-0")).toBeEditable();
+  expect(errors()).toEqual([]);
+});
+
 test("approved drafts can be published to WordPress with Japanese publish status", async ({
   page,
 }) => {
