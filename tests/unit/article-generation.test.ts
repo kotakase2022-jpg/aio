@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { sampleArticleResult, sampleFormPayload } from "../fixtures/article";
 
 vi.mock("@/lib/server/openai", () => ({
@@ -6,6 +6,10 @@ vi.mock("@/lib/server/openai", () => ({
 }));
 
 describe("generateAioArticle", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   test("sanitizes unsafe HTML and returns zero image prompts when imageCount is 0", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");
@@ -77,6 +81,116 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("absence of AI-like generic phrasing");
     expect(input.payload.form.primaryInfo).toContain("one-person contractors");
     expect(input.payload.form.primaryInfo).toContain("LINE");
+  });
+
+  test("compacts uploaded files, fetched text, and invalid count inputs before model calls", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce(sampleArticleResult);
+
+    await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        theme: "theme ".repeat(600),
+        primaryInfo: "primary ".repeat(700),
+        closingText: "closing ".repeat(300),
+        regenerationInstruction: "regenerate ".repeat(300),
+        visualTone: {
+          mode: "upload",
+          uploadedImageUrl: "https://example.com/tone.png",
+        },
+        author: {
+          ...sampleFormPayload.author,
+          bio: "bio ".repeat(400),
+          imageUrl: "https://example.com/author.png",
+        },
+        referenceFiles: Array.from({ length: 10 }, (_, index) => ({
+          name: `reference-${index}.pdf`,
+          type: "application/pdf",
+          ok: true,
+          text: `reference file ${index} `.repeat(400),
+        })),
+        competitorFiles: Array.from({ length: 10 }, (_, index) => ({
+          name: `competitor-${index}.docx`,
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          ok: false,
+          error: `competitor file error ${index} `.repeat(40),
+        })),
+        imageCount: 99,
+        wordCount: 9999,
+      },
+      fetchedReferences: Array.from({ length: 10 }, (_, index) => ({
+        url: `https://example.com/reference-${index}`,
+        text: `fetched reference ${index} `.repeat(500),
+        reason: `long reason ${index} `.repeat(50),
+      })),
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
+    const input = JSON.parse(String(call?.input)) as {
+      payload: {
+        form: {
+          theme: string;
+          primaryInfo: string;
+          closingText: string;
+          regenerationInstruction: string;
+          visualTone: { uploadedImageUrl?: string };
+          author: { bio: string; imageUrl?: string };
+          referenceFiles: Array<{ text?: string }>;
+          competitorFiles: Array<{ error?: string }>;
+          imageCount: number;
+          wordCount: number;
+        };
+        fetchedReferences: Array<{ text?: string; reason?: string }>;
+      };
+    };
+
+    expect(input.payload.form.theme.length).toBeLessThanOrEqual(1813);
+    expect(input.payload.form.theme).toContain("[truncated]");
+    expect(input.payload.form.primaryInfo.length).toBeLessThanOrEqual(2413);
+    expect(input.payload.form.closingText.length).toBeLessThanOrEqual(1013);
+    expect(input.payload.form.regenerationInstruction.length).toBeLessThanOrEqual(1213);
+    expect(input.payload.form.visualTone.uploadedImageUrl).toBe("[uploaded image]");
+    expect(input.payload.form.author.bio.length).toBeLessThanOrEqual(813);
+    expect(input.payload.form.author.imageUrl).toBe("[uploaded author image]");
+    expect(input.payload.form.referenceFiles).toHaveLength(8);
+    expect(input.payload.form.referenceFiles[0].text?.length).toBeLessThanOrEqual(2213);
+    expect(input.payload.form.competitorFiles).toHaveLength(8);
+    expect(input.payload.form.competitorFiles[0].error?.length).toBeLessThanOrEqual(233);
+    expect(input.payload.fetchedReferences).toHaveLength(8);
+    expect(input.payload.fetchedReferences[0].text?.length).toBeLessThanOrEqual(3013);
+    expect(input.payload.fetchedReferences[0].reason?.length).toBeLessThanOrEqual(313);
+    expect(input.payload.form.imageCount).toBe(2);
+    expect(input.payload.form.wordCount).toBe(3000);
+  });
+
+  test("keeps word count, image count, and anti-commodity requirements explicit", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce(sampleArticleResult);
+
+    await generateAioArticle({
+      form: { ...sampleFormPayload, imageCount: 3, wordCount: 5000 },
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
+    const input = JSON.parse(String(call?.input)) as {
+      payload: { form: { imageCount: number; wordCount: number } };
+    };
+
+    expect(call?.instructions).toContain("first 400 Japanese characters answer-first");
+    expect(call?.instructions).toContain("at least three different types of editorial evidence");
+    expect(call?.instructions).toContain("Do not state uncertain facts as facts");
+    expect(call?.instructions).toContain("Respect payload.form.wordCount");
+    expect(call?.instructions).toContain("Respect payload.form.imageCount");
+    expect(call?.instructions).toContain("Return zero image_prompts when imageCount is 0");
+    expect(input.payload.form.imageCount).toBe(3);
+    expect(input.payload.form.wordCount).toBe(5000);
   });
 
   test("caps self-evaluation when the generated body looks generic", async () => {
