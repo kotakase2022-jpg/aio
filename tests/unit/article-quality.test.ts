@@ -48,6 +48,24 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
+  test("penalizes mechanical headings even when the body has structure", () => {
+    const result = evaluateArticleQuality(`
+      <h2>重要なポイント</h2>
+      <p>結論として、AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します。当社の支援現場では、12件の相談で承認手順の不足が問題になりました。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用を比較します。</td></tr></table>
+      <ul><li>失敗例を確認する</li><li>注意点を整理する</li></ul>
+      <h2>まとめ</h2>
+      <p>FAQとして、導入前には既存記事、営業資料、問い合わせ履歴を参照します。未確認情報は断定しません。</p>
+      <p>出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "editorial-headings", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("機械的な見出し");
+    expect(result.score).toBeLessThan(92);
+  });
+
   test("flags strong claims that need conditions or evidence", () => {
     const result = evaluateArticleQuality(`
       <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>

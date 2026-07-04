@@ -39,6 +39,19 @@ const unsupportedStrongClaims = [
   "確実に",
 ];
 
+const mechanicalHeadingLabels = [
+  "重要なポイント",
+  "メリット",
+  "デメリット",
+  "まとめ",
+  "概要",
+  "基本",
+  "ポイント",
+  "活用方法",
+  "導入方法",
+  "注意点",
+];
+
 const editorialAnchorPatterns = [
   /(事例|現場|相談|支援現場|問い合わせ|ヒアリング)/,
   /(判断基準|チェック|手順|比較|選定|優先順位)/,
@@ -64,6 +77,9 @@ export function evaluateArticleQuality(html: string): ArticleQualityEvaluation {
   const hasList = /<(ul|ol)[\s>]/i.test(html);
   const hasFaq = /(FAQ|よくある質問|<h2[^>]*>[^<]*質問|<h3[^>]*>[^<]*質問)/i.test(html);
   const hasSourceNote = /(出典|参照|参考|source|sources)/i.test(text);
+  const headings = extractHeadings(html);
+  const mechanicalHeadingHits = headings.filter(isMechanicalHeading).length;
+  const hasEditorialHeadings = headings.length >= 2 && mechanicalHeadingHits === 0;
   const repeatedEndingRate = sentenceEndings.length
     ? Math.max(...Object.values(countItems(sentenceEndings))) / sentenceEndings.length
     : 0;
@@ -118,6 +134,16 @@ export function evaluateArticleQuality(html: string): ArticleQualityEvaluation {
       detail: hasList && hasFaq
         ? "箇条書きとFAQが含まれています。"
         : "箇条書きとFAQの両方を入れると業務利用しやすくなります。",
+    },
+    {
+      id: "editorial-headings",
+      label: "編集意図のある見出し",
+      passed: hasEditorialHeadings,
+      detail: hasEditorialHeadings
+        ? "見出しが機械的なラベルではなく、読者の判断に役立つ表現です。"
+        : mechanicalHeadingHits > 0
+          ? "「重要なポイント」「メリット」「まとめ」などの機械的な見出しを、具体的な判断・失敗・比較が伝わる見出しに変えると自然になります。"
+          : "H2/H3を2つ以上置き、各見出しで読者が何を判断できるか分かる表現にすると強くなります。",
     },
     {
       id: "comparison-table",
@@ -194,6 +220,23 @@ function extractSentenceEndings(text: string) {
     .split(/[。！？!?]/)
     .map((sentence) => sentence.trim().slice(-3))
     .filter((ending) => ending.length >= 2);
+}
+
+function extractHeadings(html: string) {
+  const headings: string[] = [];
+  const pattern = /<h[23][^>]*>([\s\S]*?)<\/h[23]>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(html))) {
+    headings.push(normalizeText(stripHtml(match[1])));
+  }
+
+  return headings.filter(Boolean);
+}
+
+function isMechanicalHeading(heading: string) {
+  const normalized = heading.replace(/\s+/g, "");
+  return mechanicalHeadingLabels.some((label) => normalized === label);
 }
 
 function countItems(items: string[]) {
