@@ -656,6 +656,77 @@ test("reference URL fetch failure is visible while manual fallback still generat
   expect(errors()).toEqual([]);
 });
 
+test("competitor URL fetch failure is visible while manual competitor notes still generate a draft", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  const failedUrl = "https://competitor.example.com/blocked";
+  const fetchedCompetitors = [
+    {
+      url: failedUrl,
+      ok: false,
+      reason: "Could not extract enough page text.",
+      sourceType: "url" as const,
+    },
+    {
+      url: "manual-text",
+      title: "手動入力テキスト",
+      text: "Manual competitor note about pricing-first messaging and weak approval workflow.",
+      ok: true,
+      sourceType: "manual" as const,
+    },
+  ];
+  const completedWithCompetitorWarning = {
+    ...completedJob,
+    fetchedCompetitors,
+    draft: completedJob.draft
+      ? {
+          ...completedJob.draft,
+          fetchedCompetitors,
+        }
+      : completedJob.draft,
+  };
+  let submittedCompetitorText = "";
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+
+    const body = route.request().postDataJSON() as {
+      form?: { competitors?: Array<{ text?: string; url?: string }> };
+    };
+    submittedCompetitorText = body.form?.competitors?.[0]?.text ?? "";
+    await route.fulfill({ json: { ok: true, job: completedWithCompetitorWarning } });
+  });
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    await route.fulfill({ json: { ok: true, job: completedWithCompetitorWarning } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for competitor URL fallback.");
+  await page.getByTestId("competitor-url-0").fill(failedUrl);
+  await page
+    .getByTestId("competitor-text-0")
+    .fill("Manual competitor note about pricing-first messaging and weak approval workflow.");
+  await page.getByTestId("article-primary-button").click();
+
+  await expect(page.getByText(failedUrl)).toBeVisible();
+  await expect(page.getByText("十分な本文を抽出できませんでした。")).toBeVisible();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  expect(submittedCompetitorText).toBe(
+    "Manual competitor note about pricing-first messaging and weak approval workflow.",
+  );
+  expect(errors()).toEqual([]);
+});
+
 test("invalid editable competitor research JSON can be fixed before generation", async ({
   page,
 }) => {
