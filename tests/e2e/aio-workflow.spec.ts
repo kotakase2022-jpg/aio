@@ -3,6 +3,20 @@ import extractFileSuccess from "../fixtures/api/extract-file-success.json";
 import themeCandidates from "../fixtures/api/theme-candidates.json";
 import { createCompletedGenerationJob } from "../fixtures/article";
 
+const competitorResearchFixture = {
+  summary: "Generic automation LPs emphasize fast publishing and broad efficiency.",
+  queries: ["AIO article generation competitor workflow"],
+  insights: [
+    {
+      url: "https://competitor.example.com/aio",
+      title: "Generic Automation LP",
+      majorPoints: ["Speed-first publishing", "Template-based article generation"],
+      differentiationPoints: ["Less emphasis on editorial approval and primary information"],
+      recommendations: ["Lead with human editorial review and field-specific examples"],
+    },
+  ],
+};
+
 test("PC browser can complete the core AIO draft workflow with mocked external services", async ({
   page,
 }) => {
@@ -39,7 +53,31 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   });
   await expect(page.getByText("reference.txt")).toBeVisible();
 
+  await page
+    .getByTestId("competitor-text-0")
+    .fill("Competitor emphasizes generic automation and one-click publishing.");
+  await page.getByTestId("competitor-research-button").click();
+  expect(calls.competitorResearch).toBe(1);
+  await expect(page.getByTestId("competitor-research-progress")).toHaveAttribute(
+    "aria-valuenow",
+    "100",
+  );
+  await expect(page.getByTestId("competitor-research-json")).toHaveValue(
+    /Generic automation LP/,
+  );
+  await page.getByTestId("competitor-research-json").fill(
+    JSON.stringify(
+      {
+        ...competitorResearchFixture,
+        summary: "Edited competitor summary for E2E",
+      },
+      null,
+      2,
+    ),
+  );
+
   await page.getByTestId("theme-candidates-button").click();
+  expect(calls.themeCandidateCompetitorSummary).toBe("Edited competitor summary for E2E");
   await expect(page.getByText("AIO Content Operations Guide")).toBeVisible();
   await page.getByTestId("theme-candidate-apply-0").click();
   await expect(page.getByText("反映しました")).toBeVisible();
@@ -50,6 +88,7 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
 
   await page.getByTestId("article-primary-button").click();
   expect(calls.articlePrimaryInfo).toContain("small teams");
+  expect(calls.articleCompetitorResearchSummary).toBe("Edited competitor summary for E2E");
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
   ).toBeVisible();
@@ -212,7 +251,10 @@ async function mockCommonApiRoutes(
     approveDraft: 0,
     generateImage: 0,
     generateImagePrompts: [] as string[],
+    competitorResearch: 0,
+    themeCandidateCompetitorSummary: "",
     articlePrimaryInfo: "",
+    articleCompetitorResearchSummary: "",
     wordpressConnect: 0,
     wordpressPost: 0,
   };
@@ -225,6 +267,11 @@ async function mockCommonApiRoutes(
     await route.fulfill({ json: extractFileSuccess });
   });
 
+  await page.route("**/api/competitor-research", async (route) => {
+    calls.competitorResearch += 1;
+    await route.fulfill({ json: { ok: true, result: competitorResearchFixture } });
+  });
+
   await page.route("**/api/theme-candidates", async (route) => {
     if (options.themeCandidatesShouldFail) {
       await route.fulfill({
@@ -234,6 +281,10 @@ async function mockCommonApiRoutes(
       return;
     }
 
+    const body = route.request().postDataJSON() as {
+      competitorResearch?: { summary?: string };
+    };
+    calls.themeCandidateCompetitorSummary = body.competitorResearch?.summary ?? "";
     await route.fulfill({ json: themeCandidates });
   });
 
@@ -244,8 +295,10 @@ async function mockCommonApiRoutes(
     }
     const body = route.request().postDataJSON() as {
       form?: { primaryInfo?: string };
+      competitorResearch?: { summary?: string };
     };
     calls.articlePrimaryInfo = body.form?.primaryInfo ?? "";
+    calls.articleCompetitorResearchSummary = body.competitorResearch?.summary ?? "";
     await route.fulfill({ json: { ok: true, job: completedJob } });
   });
 

@@ -1238,6 +1238,7 @@ export function ArticleGeneratorApp() {
               </Button>
               {researchLoading || researchProgress === 100 ? (
                 <div
+                  data-testid="competitor-research-progress"
                   className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2"
                   role="progressbar"
                   aria-valuemin={0}
@@ -1262,6 +1263,7 @@ export function ArticleGeneratorApp() {
               ) : null}
               {competitorJson ? (
                 <Textarea
+                  data-testid="competitor-research-json"
                   value={competitorJson}
                   onChange={(event) => setCompetitorJson(event.target.value)}
                   className="min-h-64 font-mono text-xs"
