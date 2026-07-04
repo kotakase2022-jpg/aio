@@ -455,6 +455,53 @@ test("generation logs show previous output and can reopen a saved draft", async 
   expect(errors()).toEqual([]);
 });
 
+test("approved drafts can be published to WordPress with Japanese publish status", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for WordPress publish flow.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("approve-draft-button").click();
+  await expect(page.getByTestId("draft-action-message")).toContainText(
+    "承認済みに変更しました。",
+  );
+
+  await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+  await page.getByTestId("wordpress-username").fill("editor");
+  await page.getByTestId("wordpress-application-password").fill("app password");
+  await page.getByTestId("wordpress-connect-button").click();
+  await expect(page.getByTestId("wordpress-connection-message")).toContainText(
+    "WordPress接続情報を保存しました。",
+  );
+
+  await page.getByTestId("wordpress-status-select").selectOption("publish");
+  await page.getByTestId("wordpress-post-button").click();
+
+  expect(calls.wordpressPost).toBe(1);
+  expect(calls.wordpressPostStatus).toBe("publish");
+  await expect(page.getByTestId("wordpress-post-message")).toContainText(
+    "WordPressへ公開投稿しました。",
+  );
+  expect(errors()).toEqual([]);
+});
+
 test("stale generation job state is cleared with a Japanese recovery message", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/generation-jobs\/stale-job$/],
@@ -758,6 +805,7 @@ async function mockCommonApiRoutes(
     articleCompetitorFileNames: [] as string[],
     wordpressConnect: 0,
     wordpressPost: 0,
+    wordpressPostStatus: "" as "" | "draft" | "publish",
   };
 
   await page.route("**/api/generation-logs", async (route) => {
@@ -899,6 +947,7 @@ async function mockCommonApiRoutes(
       draft?: Record<string, unknown>;
       status?: "draft" | "publish";
     };
+    calls.wordpressPostStatus = body.status ?? "draft";
     await route.fulfill({
       json: {
         ok: true,
