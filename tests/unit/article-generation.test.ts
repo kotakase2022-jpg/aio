@@ -295,4 +295,47 @@ describe("generateAioArticle", () => {
       "結び文章/CTAの固有語彙",
     );
   });
+
+  test("caps self-evaluation when the generated body ignores fetched reference information", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      body_html: `
+        <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+        <p>結論として、記事には定義と判断基準を入れる必要があります。当社の支援現場では、3名体制で公開前の確認手順を決める相談があります。</p>
+        <table><tr><th>判断基準</th><td>担当、期間、費用を比較します。</td></tr></table>
+        <ul><li>失敗例を確認します。</li><li>注意点を整理します。</li></ul>
+        <h2>公開前に確認すべき情報の分け方</h2>
+        <p>FAQとして、参照元と照合し、未確認情報は断定しません。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      aio_score_self_evaluation: {
+        score: 99,
+        strengths: ["High claimed score"],
+        improvements: [],
+      },
+    });
+
+    const result = await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        primaryInfo: "",
+        closingText: "",
+      },
+      fetchedReferences: [
+        {
+          url: "https://example.com/reference",
+          text: "厚生労働省の一人親方労災保険では、特別加入、給付基礎日額、労働保険事務組合、補償開始日を確認する必要がある。",
+        },
+      ],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
+    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
+      "参照情報の固有語彙",
+    );
+  });
 });

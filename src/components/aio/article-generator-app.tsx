@@ -2360,6 +2360,7 @@ function ArticlePreview({
       evaluateArticleQuality(renderArticleHtml(draft), {
         primaryInfo: draft.inputPayload.primaryInfo,
         closingText: draft.inputPayload.closingText,
+        referenceTexts: collectDraftReferenceTexts(draft),
       }),
     [draft],
   );
@@ -3025,6 +3026,16 @@ function renderArticleHtml(draft: ArticleDraft) {
 
     return html.replaceAll(`src="aio-image:${image.id}"`, `src="${escapeHtml(image.url)}"`);
   }, draft.editedBodyHtml);
+}
+
+function collectDraftReferenceTexts(draft: ArticleDraft) {
+  return Array.from(
+    new Set([
+      ...draft.fetchedReferences.map((item) => item.text ?? ""),
+      ...draft.inputPayload.references.map((item) => item.text ?? ""),
+      ...(draft.inputPayload.referenceFiles ?? []).map((item) => item.text ?? ""),
+    ]),
+  ).filter((text) => text.trim());
 }
 
 function buildQualityRegenerationInstruction(

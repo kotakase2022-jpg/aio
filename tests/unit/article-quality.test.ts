@@ -86,6 +86,55 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("passes reference information reflection when source-specific terms return in the body", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、参照元の判断材料まで引用しやすく整理する記事を指します</h2>
+        <p>結論として、参照情報から固有の確認項目を戻す必要があります。現場の相談では、3つの資料を照合して未確認情報を断定しないことが大切です。</p>
+        <table><tr><th>判断基準</th><td>厚生労働省の説明、特別加入、給付基礎日額、補償開始日を比較します。</td></tr></table>
+        <ul><li>失敗例として、加入条件だけを見て期間や費用を確認しないケースがあります。</li><li>注意点は労働保険事務組合の手続きと参照元を分けて書くことです。</li></ul>
+        <h2>一人親方労災保険で読者が最初に見るべき確認軸</h2>
+        <p>FAQとして、参照元にない数字は断定せず、条件と例外を添えます。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      {
+        referenceTexts: [
+          "厚生労働省の一人親方労災保険では、特別加入、給付基礎日額、労働保険事務組合、補償開始日を確認する必要がある。",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "reference-info-reflection", passed: true }),
+    );
+    expect(result.score).toBeGreaterThanOrEqual(90);
+  });
+
+  test("flags article bodies that ignore provided reference information", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+        <p>結論として、記事には定義と判断基準を入れる必要があります。現場の相談では、3つの資料を照合して未確認情報を断定しないことが大切です。</p>
+        <table><tr><th>判断基準</th><td>担当、期間、費用を比較します。</td></tr></table>
+        <ul><li>失敗例を確認します。</li><li>注意点を整理します。</li></ul>
+        <h2>公開前に確認すべき情報の分け方</h2>
+        <p>FAQとして、参照元と照合し、未確認情報は断定しません。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      {
+        referenceTexts: [
+          "厚生労働省の一人親方労災保険では、特別加入、給付基礎日額、労働保険事務組合、補償開始日を確認する必要がある。",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "reference-info-reflection", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("参照情報の固有語彙");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("passes closing CTA reflection when the closing text intent appears near the end", () => {
     const result = evaluateArticleQuality(
       `

@@ -15,6 +15,7 @@ export type ArticleQualityEvaluation = {
 export type ArticleQualityContext = {
   primaryInfo?: string;
   closingText?: string;
+  referenceTexts?: string[];
 };
 
 const genericPhrases = [
@@ -123,6 +124,50 @@ const ctaStopWords = new Set([
   "請求",
 ]);
 
+const referenceInfoStopWords = new Set([
+  ...primaryInfoStopWords,
+  "aio",
+  "seo",
+  "ai",
+  "記事",
+  "情報",
+  "参照",
+  "参考",
+  "本文",
+  "資料",
+  "ページ",
+  "サイト",
+  "公式",
+  "詳細",
+  "一覧",
+  "企業",
+  "会社",
+  "場合",
+  "必要",
+  "確認",
+  "利用",
+  "提供",
+  "可能",
+  "方法",
+  "内容",
+  "対応",
+  "機能",
+  "導入",
+  "作成",
+  "生成",
+  "解説",
+  "サービス",
+  "support",
+  "content",
+  "article",
+  "information",
+  "reference",
+  "references",
+  "page",
+  "site",
+  "service",
+]);
+
 export function evaluateArticleQuality(
   html: string,
   context: ArticleQualityContext = {},
@@ -166,6 +211,14 @@ export function evaluateArticleQuality(
   const ctaTargetHits = Math.min(3, Math.max(1, ctaTerms.length));
   const shouldCheckCta = ctaTerms.length > 0;
   const hasCtaReflection = !shouldCheckCta || ctaHitCount >= ctaTargetHits;
+  const referenceTerms = extractReferenceTerms(context.referenceTexts);
+  const referenceHitCount = referenceTerms.filter((term) =>
+    termAppearsInText(term, text),
+  ).length;
+  const referenceTargetHits = Math.min(4, Math.max(2, referenceTerms.length));
+  const shouldCheckReferences = referenceTerms.length >= 2;
+  const hasReferenceReflection =
+    !shouldCheckReferences || referenceHitCount >= referenceTargetHits;
 
   const checks: ArticleQualityCheck[] = [
     {
@@ -223,6 +276,18 @@ export function evaluateArticleQuality(
             detail: hasCtaReflection
               ? "入力された結び文章やCTAの意図が本文末尾に反映されています。"
               : `結び文章/CTAの固有語彙（${ctaTerms.slice(0, 5).join("、")}）を、記事末尾の自然な誘導文として戻すと業務利用しやすくなります。`,
+          },
+        ]
+      : []),
+    ...(shouldCheckReferences
+      ? [
+          {
+            id: "reference-info-reflection",
+            label: "参照情報の具体反映",
+            passed: hasReferenceReflection,
+            detail: hasReferenceReflection
+              ? "参照情報の固有語彙が本文の定義・判断基準・具体例に反映されています。"
+              : `参照情報の固有語彙（${referenceTerms.slice(0, 5).join("、")}）を、定義・判断基準・具体例・注意点として本文に戻すと、一般論から抜け出せます。`,
           },
         ]
       : []),
@@ -317,6 +382,18 @@ function normalizeText(text: string) {
 
 function extractPrimaryInfoTerms(primaryInfo?: string) {
   return extractSignalTerms(primaryInfo, primaryInfoStopWords);
+}
+
+function extractReferenceTerms(referenceTexts?: string[]) {
+  const combined = referenceTexts
+    ?.map((text) => text.trim())
+    .filter((text) => text.length >= 20)
+    .join(" ")
+    .slice(0, 9000);
+
+  return extractSignalTerms(combined, referenceInfoStopWords).filter(
+    (term) => term.length >= 3 || /[A-Za-z0-9]/.test(term),
+  );
 }
 
 function extractSignalTerms(value: string | undefined, stopWords: Set<string>) {

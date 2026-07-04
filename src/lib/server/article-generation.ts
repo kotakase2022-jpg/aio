@@ -61,6 +61,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       typeof compactPayload.form.closingText === "string"
         ? compactPayload.form.closingText
         : undefined,
+    referenceTexts: collectReferenceTexts(compactPayload.form, compactPayload.fetchedReferences),
   });
 
   return {
@@ -275,6 +276,29 @@ function normalizeImageCount(value: unknown) {
 function normalizeWordCount(value: unknown) {
   const parsed = Number(value);
   return [1000, 2000, 3000, 4000, 5000, 6000].includes(parsed) ? parsed : 3000;
+}
+
+function collectReferenceTexts(
+  form: Record<string, unknown>,
+  fetchedReferences: Array<Record<string, unknown>>,
+) {
+  return uniqueItems([
+    ...fetchedReferences.map(readTextField),
+    ...readTextFieldList(form.references),
+    ...readTextFieldList(form.referenceFiles),
+  ]);
+}
+
+function readTextFieldList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map(readTextField);
+}
+
+function readTextField(value: unknown) {
+  return isRecord(value) && typeof value.text === "string" ? value.text : "";
 }
 
 function uniqueItems(items: string[]) {
