@@ -2,6 +2,7 @@ import sanitizeHtml from "sanitize-html";
 import { articleGenerationSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
 import { evaluateArticleQuality } from "@/lib/article-quality";
+import { evaluateFaqQuality } from "@/lib/faq-quality";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import { truncateText } from "@/lib/utils";
 import type { ArticleGenerationResult } from "@/types/aio";
@@ -42,6 +43,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "Across the full article, include at least three different types of editorial evidence: field observations, decision criteria, failure/risk notes, team/cost/timing details, and source/caveat notes.",
       "Make headings editorial and useful, not mechanical keyword strings. Vary sentence rhythm and endings so the body does not read like a template.",
       "Make title candidates specific and editorial. Avoid generic titles such as 重要なポイント, メリット, デメリット, まとめ, 概要, 基本, 活用方法, 注意点, 完全ガイド, or 徹底解説 unless paired with a concrete reader decision, first-party insight, or comparison axis from the inputs.",
+      "Make faq_items specific enough for publication. Avoid generic questions such as よくある質問, メリットは何ですか, 注意点は何ですか, or What are the benefits? Each answer should include a condition, decision criterion, field example, caveat, source note, cost/timing/team detail, or competitor comparison when available.",
       "Do not start many consecutive sentences with the same connector such as また, さらに, そのため, 一方で, or このように. Mix short direct sentences, examples, conditions, and caveats instead.",
       "Avoid generic H2/H3 labels such as 重要なポイント, メリット, デメリット, まとめ, 概要, 基本, 活用方法, or 注意点. Make each heading convey a concrete reader decision, failure pattern, comparison axis, or field-specific insight.",
       "Do not use vague heading patterns such as 導入について, 注意点について, 活用方法, or メリットについて. Replace them with headings that reveal the editorial angle, such as which decision, failure, comparison, or field observation the section explains.",
@@ -85,6 +87,18 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     primaryInfo:
       typeof compactPayload.form.primaryInfo === "string" ? compactPayload.form.primaryInfo : "",
   });
+  const faqEvaluation = evaluateFaqQuality({
+    faqItems: result.faq_items,
+    themeText: typeof compactPayload.form.theme === "string" ? compactPayload.form.theme : "",
+    primaryInfo:
+      typeof compactPayload.form.primaryInfo === "string" ? compactPayload.form.primaryInfo : "",
+    referenceTexts: collectReferenceTexts(compactPayload.form, compactPayload.fetchedReferences),
+    competitorTexts: collectCompetitorTexts(
+      compactPayload.form,
+      compactPayload.fetchedCompetitors,
+      compactPayload.competitorResearch,
+    ),
+  });
 
   return {
     ...result,
@@ -95,15 +109,18 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
         result.aio_score_self_evaluation.score,
         qualityEvaluation.score,
         titleEvaluation.score,
+        faqEvaluation.score,
       ),
       strengths: uniqueItems([
         ...result.aio_score_self_evaluation.strengths,
         ...qualityEvaluation.strengths.map((item) => `編集品質チェック: ${item}`),
         ...titleEvaluation.strengths.map((item) => `タイトル品質チェック: ${item}`),
+        ...faqEvaluation.strengths.map((item) => `FAQ品質チェック: ${item}`),
       ]).slice(0, 8),
       improvements: uniqueItems([
         ...titleEvaluation.improvements,
         ...qualityEvaluation.improvements,
+        ...faqEvaluation.improvements,
         ...result.aio_score_self_evaluation.improvements,
       ]).slice(0, 8),
     },

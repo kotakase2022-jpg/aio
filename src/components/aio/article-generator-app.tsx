@@ -40,6 +40,7 @@ import {
 } from "@/lib/article-quality";
 import { formatJaDateTime } from "@/lib/date";
 import { buildDraftArticleHtml } from "@/lib/draft-html";
+import { evaluateFaqQuality } from "@/lib/faq-quality";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import { cn, joinCsv, splitCsv } from "@/lib/utils";
 import type {
@@ -2493,9 +2494,25 @@ function ArticlePreview({
       }),
     [draft],
   );
+  const faqQualityEvaluation = useMemo(
+    () =>
+      evaluateFaqQuality({
+        faqItems: draft.faqItems,
+        themeText: draft.inputPayload.theme,
+        primaryInfo: draft.inputPayload.primaryInfo,
+        referenceTexts: collectDraftReferenceTexts(draft),
+        competitorTexts: collectDraftCompetitorTexts(draft),
+      }),
+    [draft],
+  );
   const qualityEvaluation = useMemo(
-    () => combineQualityEvaluations(titleQualityEvaluation, bodyQualityEvaluation),
-    [bodyQualityEvaluation, titleQualityEvaluation],
+    () =>
+      combineQualityEvaluations(
+        titleQualityEvaluation,
+        bodyQualityEvaluation,
+        faqQualityEvaluation,
+      ),
+    [bodyQualityEvaluation, faqQualityEvaluation, titleQualityEvaluation],
   );
   const [copyStatus, setCopyStatus] = useState("");
   const copyStatusTimerRef = useRef<number | null>(null);
@@ -3227,14 +3244,20 @@ function buildQualityRegenerationInstruction(evaluation: ArticleQualityEvaluatio
 function combineQualityEvaluations(
   titleEvaluation: ArticleQualityEvaluation,
   bodyEvaluation: ArticleQualityEvaluation,
+  faqEvaluation: ArticleQualityEvaluation,
 ): ArticleQualityEvaluation {
   return {
-    score: Math.min(titleEvaluation.score, bodyEvaluation.score),
-    checks: [...titleEvaluation.checks, ...bodyEvaluation.checks],
-    strengths: uniqueStrings([...titleEvaluation.strengths, ...bodyEvaluation.strengths]),
+    score: Math.min(titleEvaluation.score, bodyEvaluation.score, faqEvaluation.score),
+    checks: [...titleEvaluation.checks, ...bodyEvaluation.checks, ...faqEvaluation.checks],
+    strengths: uniqueStrings([
+      ...titleEvaluation.strengths,
+      ...bodyEvaluation.strengths,
+      ...faqEvaluation.strengths,
+    ]),
     improvements: uniqueStrings([
       ...titleEvaluation.improvements,
       ...bodyEvaluation.improvements,
+      ...faqEvaluation.improvements,
     ]),
   };
 }

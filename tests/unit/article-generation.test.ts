@@ -187,6 +187,8 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("at least three different types of editorial evidence");
     expect(call?.instructions).toContain("Avoid generic H2/H3 labels");
     expect(call?.instructions).toContain("Make title candidates specific and editorial");
+    expect(call?.instructions).toContain("Make faq_items specific enough for publication");
+    expect(call?.instructions).toContain("Each answer should include a condition");
     expect(call?.instructions).toContain("Do not use vague heading patterns");
     expect(call?.instructions).toContain("Avoid thin H2/H3 sections");
     expect(call?.instructions).toContain("at least two concrete signals");
@@ -254,6 +256,54 @@ describe("generateAioArticle", () => {
     expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
       "タイトルが汎用的です",
     );
+  });
+
+  test("caps self-evaluation when FAQ items are generic and thin", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      body_html: `
+        <h2>一人親方の労災保険とは、加入条件と給付基礎日額を確認して判断する制度です</h2>
+        <p>結論として、読者は加入条件、給付基礎日額、補償開始日の3点を先に確認します。当社の支援現場では、LINEで承認が残り帳票が不足する相談が多く、公開前に参照元と未確認情報を分ける必要があります。</p>
+        <table><tr><th>判断基準</th><td>加入条件、費用、担当者、補償開始日を比較します。</td></tr></table>
+        <ul><li>失敗例は、費用だけ見て帳票確認を後回しにすることです。</li><li>注意点は、未確認の対象範囲を断定しないことです。</li></ul>
+        <h2>LINE承認と帳票不足を公開前に確認する理由</h2>
+        <p>参照元で確認できる条件と、支援現場で観察した相談傾向を分けます。競合が料金表中心の場合は、担当者、期間、帳票確認の差分を本文で補います。</p>
+        <h2>FAQ</h2>
+        <p>公開前に確認する条件を整理します。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      faq_items: [
+        { question: "メリットは何ですか？", answer: "重要です。" },
+        { question: "注意点は何ですか？", answer: "状況に応じて確認することが重要です。" },
+        { question: "What are the benefits?", answer: "It depends." },
+      ],
+      aio_score_self_evaluation: {
+        score: 99,
+        strengths: ["High claimed score"],
+        improvements: [],
+      },
+    });
+
+    const result = await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        theme: "一人親方 労災保険 加入条件 給付基礎日額 費用",
+        primaryInfo: "支援現場ではLINEで承認が残り帳票が不足する相談が多い。",
+      },
+      fetchedReferences: [
+        {
+          url: "https://example.com/reference",
+          text: "一人親方の労災保険では加入条件、給付基礎日額、補償開始日を確認する。",
+        },
+      ],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.aio_score_self_evaluation.score).toBeLessThan(90);
+    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain("FAQに汎用的な質問");
   });
 
   test("caps self-evaluation when title candidates ignore the input theme signals", async () => {

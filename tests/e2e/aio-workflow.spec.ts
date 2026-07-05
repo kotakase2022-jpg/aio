@@ -357,13 +357,20 @@ test("editing the title to a generic label updates the quality checklist", async
 
   await page.getByTestId("draft-edit-tab").click();
   await page.getByTestId("draft-title-input").fill("重要なポイント");
+  await page.getByTestId("draft-faq-question-0").fill("メリットは何ですか？");
+  await page.getByTestId("draft-faq-answer-0").fill("重要です。");
   await page.getByTestId("draft-preview-tab").click();
 
   await expect(page.getByText("タイトルの具体性")).toBeVisible();
   await expect(page.getByText(/タイトルが汎用的です/)).toBeVisible();
+  await expect(page.getByText("FAQ回答の実務具体性")).toBeVisible();
+  await expect(page.getByText(/FAQ回答が一般論寄りです/)).toBeVisible();
   await page.getByTestId("quality-improve-regenerate-button").click();
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /タイトルが汎用的です/,
+  );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /FAQ回答が一般論寄りです/,
   );
   expect(errors()).toEqual([]);
 });
