@@ -1531,6 +1531,67 @@ test("stale generation job state is cleared with a Japanese recovery message", a
   expect(errors()).toEqual([]);
 });
 
+test("active generation job is restored after a page reload and opens the completed draft", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const runningJob = {
+    ...createCompletedGenerationJob(),
+    id: "job-reload-resume-e2e",
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    steps: [
+      { id: "generate_body", label: "AIO body generation", status: "running" as const },
+      { id: "save", label: "Draft save", status: "pending" as const },
+    ],
+  };
+  const completedJob = {
+    ...createCompletedGenerationJob(),
+    id: "job-reload-resume-e2e",
+  };
+  let shouldReturnCompleted = false;
+  let pollCalls = 0;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/generation-jobs/job-reload-resume-e2e", async (route) => {
+    pollCalls += 1;
+    await route.fulfill({
+      json: { ok: true, job: shouldReturnCompleted ? completedJob : runningJob },
+    });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for reload recovery.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
+  ).resolves.toBe("job-reload-resume-e2e");
+
+  shouldReturnCompleted = true;
+  await page.reload();
+
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  await expect(
+    page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
+  ).resolves.toBeNull();
+  expect(pollCalls).toBeGreaterThanOrEqual(1);
+  expect(errors()).toEqual([]);
+});
+
 test("user can stop an in-progress generation job from the primary CTA", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   const runningJob = {
