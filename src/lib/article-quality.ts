@@ -70,6 +70,19 @@ const repetitiveConnectors = [
   "このように",
 ];
 
+const formulaicSentenceFrames = [
+  "結論として",
+  "具体的には",
+  "たとえば",
+  "例えば",
+  "重要なのは",
+  "押さえるべき",
+  "ポイントは",
+  "注意点は",
+  "このため",
+  "その結果",
+];
+
 const mechanicalHeadingLabels = [
   "重要なポイント",
   "メリット",
@@ -278,6 +291,7 @@ export function evaluateArticleQuality(
   const text = normalizeText(stripHtml(html));
   const sentenceEndings = extractSentenceEndings(text);
   const leadingConnectors = extractLeadingConnectors(text);
+  const formulaicFrames = extractFormulaicSentenceFrames(text);
   const genericPhraseHits = countPhraseHits(text, genericPhrases);
   const verboseAiPhraseHits = countPhraseHits(text, verboseAiPhrases);
   const unsupportedClaimHits = countPhraseHits(text, unsupportedStrongClaims);
@@ -312,6 +326,15 @@ export function evaluateArticleQuality(
     : 0;
   const hasNaturalConnectorVariety =
     leadingConnectors.length < 4 || (repeatedConnectorCount <= 2 && repeatedConnectorRate <= 0.5);
+  const formulaicFrameCount = formulaicFrames.length;
+  const repeatedFormulaicFrameCount = formulaicFrames.length
+    ? Math.max(...Object.values(countItems(formulaicFrames)))
+    : 0;
+  const formulaicFrameRate = sentenceEndings.length
+    ? formulaicFrameCount / sentenceEndings.length
+    : 0;
+  const hasNaturalSentenceFrames =
+    formulaicFrameCount <= 2 || (repeatedFormulaicFrameCount <= 2 && formulaicFrameRate <= 0.22);
   const themeTerms = extractSignalTerms(context.themeText, themeStopWords);
   const themeHitCount = themeTerms.filter((term) => termAppearsInText(term, text)).length;
   const themeTargetHits = Math.min(4, Math.max(2, themeTerms.length));
@@ -518,6 +541,14 @@ export function evaluateArticleQuality(
         : `「${mostFrequentItem(leadingConnectors)}」など同じ接続表現が続いています。文ごとの役割を見直し、接続語なしの短文、具体例、条件、例外を混ぜると人間の編集記事らしくなります。`,
     },
     {
+      id: "sentence-frame-variety",
+      label: "定型的な文の入り方",
+      passed: hasNaturalSentenceFrames,
+      detail: hasNaturalSentenceFrames
+        ? "「結論として」「具体的には」型の定型的な入り方は目立ちません。"
+        : `「${mostFrequentItem(formulaicFrames)}」などの定型的な文頭が多く、編集記事よりテンプレート文に見えます。段落ごとに、短い断定、現場例、条件、例外、比較から自然に入り直してください。`,
+    },
+    {
       id: "unsupported-claims",
       label: "根拠の薄い強い断定",
       passed: unsupportedClaimHits <= 1,
@@ -656,6 +687,14 @@ function extractLeadingConnectors(text: string) {
       ),
     )
     .filter((connector): connector is string => Boolean(connector));
+}
+
+function extractFormulaicSentenceFrames(text: string) {
+  return text
+    .split(/[。！？!?]/)
+    .map((sentence) => sentence.trim().replace(/^[「『（(【\s]+/, ""))
+    .map((sentence) => formulaicSentenceFrames.find((frame) => sentence.startsWith(frame)))
+    .filter((frame): frame is string => Boolean(frame));
 }
 
 function mostFrequentItem(items: string[]) {

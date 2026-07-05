@@ -349,6 +349,24 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("flags repeated formulaic sentence frames that make copy feel templated", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前の判断基準を先に示す必要があります。当社の支援現場では、12件の相談で承認担当と出典確認の手順が曖昧でした。</p>
+      <p>具体的には、参照元と自社の経験を分けて書きます。具体的には、未確認の数字は断定しません。具体的には、公開前に担当者と期限を確認します。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、参照元にない数字を条件なしで書かないことです。</li></ul>
+      <h2>公開前に確認すべき3つの編集判断</h2>
+      <p>具体的には、WordPress投稿前に承認状態を確認します。FAQとして、どこまでを自社経験として書けるかを確認します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "sentence-frame-variety", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("定型的な文頭");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("penalizes structured but commodity article HTML without editorial evidence", () => {
     const result = evaluateArticleQuality(`
       <h2>AI活用とは、業務を効率化する取り組みを指します</h2>
