@@ -113,6 +113,41 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("allows short exact input phrases when the surrounding article is editorially rewritten", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、参照元と現場観察を分けて判断材料にする記事を指します</h2>
+        <p>結論として、本文には短い固有語句を残してよい一方、長い入力文は判断基準へ言い換える必要があります。当社の支援現場では、LINE承認と帳票不在を公開前の確認軸に置きます。</p>
+        <table><tr><th>判断基準</th><td>特別加入、給付基礎日額と補償開始日、料金表と導入期間、承認担当を比較します。</td></tr></table>
+        <ul><li>失敗例として、参照元の制度説明と自社経験を同じ根拠として断定するケースがあります。</li><li>注意点は、競合の訴求を写さず、自社記事の不足論点として再構成することです。</li></ul>
+        <h2>短い固有語句を残し、長い文は判断基準へ変える</h2>
+        <p>FAQとして、参照情報は出典注記へ、競合情報は比較軸へ、一次情報は現場観察として分けます。出典: https://example.com/reference</p>
+      `,
+      {
+        primaryInfo:
+          "当社の支援現場では、LINE承認と帳票不在が公開前レビューの詰まりになりやすい。",
+        referenceTexts: [
+          "一人親方労災保険では、特別加入、給付基礎日額と補償開始日、労働保険事務組合を確認する必要がある。",
+        ],
+        competitorTexts: [
+          "競合記事Aは料金表と導入期間を強調し、補助金申請を訴求する一方、運用定着と承認フローの支援は薄い。",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-digestion", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "reference-info-digestion", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "competitor-insight-digestion", passed: true }),
+    );
+    expect(result.improvements.join(" ")).not.toContain("長い文がそのまま");
+    expect(result.improvements.join(" ")).not.toContain("入力文が長くそのまま");
+  });
+
   test("passes theme and keyword reflection when topic terms return in the body", () => {
     const result = evaluateArticleQuality(
       `
