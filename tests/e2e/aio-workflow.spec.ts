@@ -127,7 +127,7 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByText("編集品質チェック")).toBeVisible();
   await expect(page.getByText("AI風の汎用表現")).toBeVisible();
   await expect(page.getByText("一次情報の反映")).toBeVisible();
-  await expect(page.getByText(/一次情報の固有語彙/)).toBeVisible();
+  await expect(page.getByText(/^一次情報の固有語彙/)).toBeVisible();
   await expect(page.getByText("結び文章/CTAの反映")).toBeVisible();
   await expect(page.getByText(/結び文章\/CTAの固有語彙/)).toBeVisible();
   await page.getByTestId("quality-improve-regenerate-button").click();
@@ -303,6 +303,42 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     "https://wordpress.example.com/aio-content-operations-guide",
   );
 
+  expect(errors()).toEqual([]);
+});
+
+test("editing the title to a generic label updates the quality checklist", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text for title quality checklist.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("draft-edit-tab").click();
+  await page.getByTestId("draft-title-input").fill("重要なポイント");
+  await page.getByTestId("draft-preview-tab").click();
+
+  await expect(page.getByText("タイトルの具体性")).toBeVisible();
+  await expect(page.getByText(/タイトルが汎用的です/)).toBeVisible();
+  await page.getByTestId("quality-improve-regenerate-button").click();
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /タイトルが汎用的です/,
+  );
   expect(errors()).toEqual([]);
 });
 

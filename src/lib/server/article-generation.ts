@@ -2,6 +2,7 @@ import sanitizeHtml from "sanitize-html";
 import { articleGenerationSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
 import { evaluateArticleQuality } from "@/lib/article-quality";
+import { evaluateTitleQuality } from "@/lib/title-quality";
 import { truncateText } from "@/lib/utils";
 import type { ArticleGenerationResult } from "@/types/aio";
 
@@ -77,7 +78,13 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       compactPayload.competitorResearch,
     ),
   });
-  const titleEvaluation = evaluateTitleQuality(result, compactPayload.form);
+  const titleEvaluation = evaluateTitleQuality({
+    selectedTitle: result.selected_title,
+    titleCandidates: result.title_candidates,
+    themeText: typeof compactPayload.form.theme === "string" ? compactPayload.form.theme : "",
+    primaryInfo:
+      typeof compactPayload.form.primaryInfo === "string" ? compactPayload.form.primaryInfo : "",
+  });
 
   return {
     ...result,
@@ -240,164 +247,6 @@ function normalizeImagePrompts(result: ArticleGenerationResult, form: Record<str
         `${result.selected_title} - ${slot === "featured" ? "featured image" : "explanatory image"}`,
     };
   });
-}
-
-function evaluateTitleQuality(
-  result: ArticleGenerationResult,
-  form: Record<string, unknown>,
-) {
-  const selectedTitle = result.selected_title.trim();
-  const candidates = uniqueItems(result.title_candidates.map((title) => title.trim()));
-  const titleText = uniqueItems([selectedTitle, ...candidates]).join(" ");
-  const themeTerms = extractTitleSignalTerms(typeof form.theme === "string" ? form.theme : "");
-  const primaryTerms = extractTitleSignalTerms(
-    typeof form.primaryInfo === "string" ? form.primaryInfo : "",
-  );
-  const requiredTerms = uniqueItems([...themeTerms.slice(0, 5), ...primaryTerms.slice(0, 3)]);
-  const hasInputSignal =
-    requiredTerms.length === 0 || requiredTerms.some((term) => titleContainsTerm(titleText, term));
-  const hasEnoughCandidates = candidates.length >= 3;
-  const titleLength = Array.from(selectedTitle).length;
-  const hasPracticalLength = titleLength >= 12 && titleLength <= 70;
-  const hasEditorialSpecificity = Boolean(selectedTitle) && !isGenericTitle(selectedTitle);
-
-  const improvements: string[] = [];
-  const strengths: string[] = [];
-  let score = 100;
-
-  if (hasEditorialSpecificity) {
-    strengths.push("選択タイトルが機械的な汎用ラベルではありません。");
-  } else {
-    score -= 18;
-    improvements.push(
-      "タイトルが汎用的です。テーマ、一次情報、比較軸、読者の判断ポイントが一目で分かる具体的なタイトルにしてください。",
-    );
-  }
-
-  if (hasPracticalLength) {
-    strengths.push("選択タイトルの長さが業務利用しやすい範囲です。");
-  } else {
-    score -= 10;
-    improvements.push("タイトルは短すぎず長すぎない、12〜70文字程度の実用的な長さにしてください。");
-  }
-
-  if (hasEnoughCandidates) {
-    strengths.push("タイトル候補が3案以上あります。");
-  } else {
-    score -= 10;
-    improvements.push("比較検討できるよう、タイトル候補を3案以上用意してください。");
-  }
-
-  if (hasInputSignal) {
-    strengths.push("タイトル候補に入力テーマまたは一次情報の固有語彙が反映されています。");
-  } else {
-    score -= 14;
-    improvements.push(
-      `タイトル候補に入力テーマ/一次情報の固有語彙（${requiredTerms.slice(0, 5).join("、")}）を自然に含めてください。`,
-    );
-  }
-
-  return {
-    score: Math.max(0, score),
-    strengths,
-    improvements,
-  };
-}
-
-function isGenericTitle(title: string) {
-  const normalized = title.replace(/\s+/g, "").toLowerCase();
-  const genericTitles = [
-    "重要なポイント",
-    "メリット",
-    "デメリット",
-    "まとめ",
-    "概要",
-    "基本",
-    "活用方法",
-    "注意点",
-    "完全ガイド",
-    "徹底解説",
-    "導入方法",
-    "選び方",
-    "importantpoints",
-    "benefits",
-    "summary",
-    "overview",
-    "basics",
-    "completeguide",
-    "ultimateguide",
-  ];
-
-  if (genericTitles.includes(normalized)) {
-    return true;
-  }
-
-  return genericTitles.some((generic) => normalized === `${generic}について`);
-}
-
-function extractTitleSignalTerms(value: string) {
-  if (!value.trim()) {
-    return [];
-  }
-
-  const stopWords = new Set([
-    "テーマ",
-    "キーワード",
-    "想定読者",
-    "検索意図",
-    "記事",
-    "作成",
-    "生成",
-    "活用",
-    "導入",
-    "方法",
-    "重要",
-    "ポイント",
-    "について",
-    "ため",
-    "こと",
-    "もの",
-    "the",
-    "and",
-    "for",
-    "with",
-    "from",
-    "article",
-    "content",
-    "generation",
-    "guide",
-    "team",
-    "teams",
-  ]);
-
-  return uniqueItems(
-    value
-      .split(/[、。・\s,.;:()[\]「」『』/]+|について|とは|から|まで|より|として|には|では|を|に|で|と|の|へ/g)
-      .map((term) => term.trim())
-      .filter((term) => term.length >= 2)
-      .filter((term) => !stopWords.has(term.toLowerCase()))
-      .filter((term) => !/^[0-9]+$/.test(term)),
-  ).slice(0, 10);
-}
-
-function titleContainsTerm(titleText: string, term: string) {
-  if (titleText.includes(term)) {
-    return true;
-  }
-
-  const normalizedTitle = titleText.toLowerCase();
-  const normalizedTerm = term.toLowerCase();
-  if (/^[a-z0-9_-]+$/i.test(term)) {
-    return normalizedTitle.includes(normalizedTerm);
-  }
-
-  if (term.length < 5) {
-    return false;
-  }
-
-  return Array.from({ length: Math.max(0, term.length - 3) }, (_, index) =>
-    term.slice(index, index + 4),
-  ).some((part) => titleText.includes(part));
 }
 
 function getVisualToneText(form: Record<string, unknown>) {

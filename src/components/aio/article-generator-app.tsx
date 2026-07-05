@@ -34,8 +34,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { evaluateArticleQuality } from "@/lib/article-quality";
+import {
+  evaluateArticleQuality,
+  type ArticleQualityEvaluation,
+} from "@/lib/article-quality";
 import { formatJaDateTime } from "@/lib/date";
+import { evaluateTitleQuality } from "@/lib/title-quality";
 import { cn, joinCsv, splitCsv } from "@/lib/utils";
 import type {
   AttachedFileInput,
@@ -2467,7 +2471,7 @@ function ArticlePreview({
   onRegenerateImages: () => void;
 }) {
   const canRegenerateImages = draft.images.some((image) => image.source === "generated");
-  const qualityEvaluation = useMemo(
+  const bodyQualityEvaluation = useMemo(
     () =>
       evaluateArticleQuality(renderArticleHtml(draft), {
         themeText: draft.inputPayload.theme,
@@ -2477,6 +2481,20 @@ function ArticlePreview({
         competitorTexts: collectDraftCompetitorTexts(draft),
       }),
     [draft],
+  );
+  const titleQualityEvaluation = useMemo(
+    () =>
+      evaluateTitleQuality({
+        selectedTitle: draft.editedTitle,
+        titleCandidates: draft.aiResult.title_candidates,
+        themeText: draft.inputPayload.theme,
+        primaryInfo: draft.inputPayload.primaryInfo,
+      }),
+    [draft],
+  );
+  const qualityEvaluation = useMemo(
+    () => combineQualityEvaluations(titleQualityEvaluation, bodyQualityEvaluation),
+    [bodyQualityEvaluation, titleQualityEvaluation],
   );
   const [copyStatus, setCopyStatus] = useState("");
   const copyStatusTimerRef = useRef<number | null>(null);
@@ -3193,9 +3211,7 @@ function collectCompetitorResearchTexts(research: NonNullable<ArticleDraft["comp
   ];
 }
 
-function buildQualityRegenerationInstruction(
-  evaluation: ReturnType<typeof evaluateArticleQuality>,
-) {
+function buildQualityRegenerationInstruction(evaluation: ArticleQualityEvaluation) {
   const improvements = evaluation.checks
     .filter((check) => !check.passed)
     .map((check) => `- ${check.label}: ${check.detail}`);
@@ -3209,6 +3225,25 @@ function buildQualityRegenerationInstruction(
       ? `改善が必要な項目:\n${improvements.join("\n")}`
       : "現在の品質は高めですが、さらに現場感、具体性、独自の視点を強めてください。",
   ].join("\n\n");
+}
+
+function combineQualityEvaluations(
+  titleEvaluation: ArticleQualityEvaluation,
+  bodyEvaluation: ArticleQualityEvaluation,
+): ArticleQualityEvaluation {
+  return {
+    score: Math.min(titleEvaluation.score, bodyEvaluation.score),
+    checks: [...titleEvaluation.checks, ...bodyEvaluation.checks],
+    strengths: uniqueStrings([...titleEvaluation.strengths, ...bodyEvaluation.strengths]),
+    improvements: uniqueStrings([
+      ...titleEvaluation.improvements,
+      ...bodyEvaluation.improvements,
+    ]),
+  };
+}
+
+function uniqueStrings(items: string[]) {
+  return Array.from(new Set(items.filter((item) => item.trim())));
 }
 
 async function copyTextToClipboard(value: string) {
