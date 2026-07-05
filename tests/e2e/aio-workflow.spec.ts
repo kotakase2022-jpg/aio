@@ -1307,6 +1307,14 @@ test("invalid edited drafts are blocked before save or approval requests", async
     "保存・承認・WordPress投稿の前に編集内容を確認してください。",
   );
   await expect(page.getByTestId("wordpress-post-button")).toBeDisabled();
+
+  await page.getByTestId("draft-title-input").fill("Recovered valid draft title");
+  await expect(page.getByTestId("draft-action-error")).toBeHidden();
+  await page.getByTestId("save-draft-button").click();
+  expect(calls.saveDraft).toBe(1);
+  await expect(page.getByTestId("draft-action-message")).toContainText(
+    "編集内容を保存しました。",
+  );
   expect(errors()).toEqual([]);
 });
 

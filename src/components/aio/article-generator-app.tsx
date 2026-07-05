@@ -1044,6 +1044,9 @@ export function ArticleGeneratorApp() {
 
   function updateDraft<K extends keyof ArticleDraft>(key: K, value: ArticleDraft[K]) {
     if (!draft) return;
+    setDraftActionError("");
+    setDraftActionMessage("");
+    setWpPostMessage("");
     setDraft({ ...draft, [key]: value, updatedAt: new Date().toISOString() });
   }
 
