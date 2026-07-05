@@ -2527,6 +2527,18 @@ function ArticlePreview({
       ),
     [bodyQualityEvaluation, faqQualityEvaluation, titleQualityEvaluation],
   );
+  const failedQualityChecks = useMemo(
+    () => qualityEvaluation.checks.filter((check) => !check.passed),
+    [qualityEvaluation],
+  );
+  const passedQualityChecks = useMemo(
+    () => qualityEvaluation.checks.filter((check) => check.passed),
+    [qualityEvaluation],
+  );
+  const orderedQualityChecks = useMemo(
+    () => [...failedQualityChecks, ...passedQualityChecks],
+    [failedQualityChecks, passedQualityChecks],
+  );
   const [copyStatus, setCopyStatus] = useState("");
   const copyStatusTimerRef = useRef<number | null>(null);
 
@@ -2665,10 +2677,24 @@ function ArticlePreview({
             <span className="text-3xl font-semibold">{qualityEvaluation.score}</span>
             <span className="text-sm text-slate-500">/ 100</span>
           </div>
+          <div
+            data-testid="quality-priority-summary"
+            className={cn(
+              "mt-3 rounded-md border px-3 py-2 text-xs font-medium",
+              failedQualityChecks.length
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800",
+            )}
+          >
+            {failedQualityChecks.length
+              ? `改善優先: ${failedQualityChecks.length}件。未達項目を先に表示しています。`
+              : "全チェックを満たしています。公開前の最終確認に進めます。"}
+          </div>
           <div className="mt-3 space-y-2 text-xs leading-5">
-            {qualityEvaluation.checks.map((check) => (
+            {orderedQualityChecks.map((check) => (
               <div
                 key={check.id}
+                data-testid={check.passed ? "quality-check-passed" : "quality-check-failed"}
                 className={cn(
                   "rounded-md border px-3 py-2",
                   check.passed

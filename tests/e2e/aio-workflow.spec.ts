@@ -399,6 +399,10 @@ test("editing the title to a generic label updates the quality checklist", async
   await expect(page.getByText(/タイトルが汎用的です/)).toBeVisible();
   await expect(page.getByText("FAQ回答の実務具体性")).toBeVisible();
   await expect(page.getByText(/FAQ回答が一般論寄りです/)).toBeVisible();
+  await expect(page.getByTestId("quality-priority-summary")).toContainText("改善優先:");
+  await expect(page.getByTestId("quality-check-failed").first()).toContainText(
+    "タイトルの具体性",
+  );
   await page.getByTestId("quality-improve-regenerate-button").click();
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /タイトルが汎用的です/,
