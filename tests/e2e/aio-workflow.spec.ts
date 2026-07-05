@@ -470,6 +470,87 @@ test("editing the title to a generic label updates the quality checklist", async
   expect(errors()).toEqual([]);
 });
 
+test("source digestion quality checks explain how to edit pasted inputs", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const primaryInfo =
+    "当社の支援現場では、承認担当が決まらないままWordPress投稿前に出典確認で戻る相談が多い。";
+  const referenceText =
+    "AIO記事制作では、参照情報、一次情報、競合調査、構成案、本文HTML、FAQ、メタディスクリプション、WordPress下書き投稿までを分けて管理する必要がある。";
+  const competitorText =
+    "競合記事Aは料金表と導入期間を強調し、競合LP Bは補助金申請を訴求する一方、運用定着と承認フローの支援は薄い。";
+  const completedJob = createCompletedGenerationJob();
+  const draft = completedJob.draft!;
+  completedJob.draft = {
+    ...draft,
+    inputPayload: {
+      ...draft.inputPayload,
+      primaryInfo,
+      references: [{ id: "ref-verbatim", text: referenceText }],
+      competitors: [{ id: "comp-verbatim", text: competitorText }],
+    },
+    fetchedReferences: [
+      {
+        url: "https://example.com/reference-verbatim",
+        title: "Reference verbatim fixture",
+        text: referenceText,
+        ok: true,
+        sourceType: "manual",
+      },
+    ],
+    fetchedCompetitors: [
+      {
+        url: "https://example.com/competitor-verbatim",
+        title: "Competitor verbatim fixture",
+        text: competitorText,
+        ok: true,
+        sourceType: "manual",
+      },
+    ],
+    editedBodyHtml: `
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。${primaryInfo}</p>
+      <p>${referenceText}</p>
+      <p>${competitorText}</p>
+      <table><tr><th>判断基準</th><td>参照情報、一次情報、競合調査、WordPress投稿前の承認状態を比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、参照元にない情報を条件なしで書かないことです。</li></ul>
+      <h2>承認担当と出典確認を分ける編集判断</h2>
+      <p>FAQとして、本文HTMLに貼る前に、判断基準、注意点、比較軸へ言い換えたかを確認します。出典: https://example.com/reference-verbatim</p>
+    `,
+  };
+  completedJob.fetchedReferences = completedJob.draft.fetchedReferences;
+  completedJob.fetchedCompetitors = completedJob.draft.fetchedCompetitors;
+
+  await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill(referenceText);
+  await page.getByTestId("competitor-text-0").fill(competitorText);
+  await page.getByTestId("primary-info-textarea").fill(primaryInfo);
+  await page.getByTestId("article-primary-button").click();
+
+  await expect(page.getByText("一次情報の編集消化")).toBeVisible();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "一次情報の編集消化" }),
+  ).toContainText("修正先: 本文HTML。一次情報の固有語彙を残しつつ");
+  await expect(page.getByText("参照情報の編集消化")).toBeVisible();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "参照情報の編集消化" }),
+  ).toContainText("修正先: 本文HTML。参照元の事実は保ち");
+  await expect(page.getByText("競合情報の編集消化")).toBeVisible();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "競合情報の編集消化" }),
+  ).toContainText("修正先: 本文HTML。競合文を写さず");
+
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "参照情報の編集消化" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+  expect(errors()).toEqual([]);
+});
+
 test("API failure is shown in the UI without console errors or crashes", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/theme-candidates$/],
