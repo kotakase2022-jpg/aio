@@ -34,6 +34,16 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
       },
     ],
   };
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          window.localStorage.setItem("aio-e2e-last-copy", value);
+        },
+      },
+    });
+  });
 
   const calls = await mockCommonApiRoutes(page, completedJob);
   await login(page);
@@ -156,6 +166,21 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByTestId("copy-export-status")).toContainText(
     "タイトルをコピーしました。",
   );
+
+  await page.getByTestId("copy-handoff-button").click();
+  await expect(page.getByTestId("copy-export-status")).toContainText(
+    "入稿セットをコピーしました。",
+  );
+  const handoffText = await page.evaluate(
+    () => window.localStorage.getItem("aio-e2e-last-copy") ?? "",
+  );
+  expect(handoffText).toContain("タイトル: AIO Content Operations Guide");
+  expect(handoffText).toContain("スラッグ: aio-content-operations-guide");
+  expect(handoffText).toContain("メタディスクリプション:");
+  expect(handoffText).toContain("タグ: AIO, AI search, B2B");
+  expect(handoffText).toContain("カテゴリ: Content Marketing");
+  expect(handoffText).toContain("本文HTML:");
+  expect(handoffText).toContain("AIO content answers the main question first.");
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByTestId("download-html-button").click();

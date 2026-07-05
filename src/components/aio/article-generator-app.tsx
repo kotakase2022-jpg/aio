@@ -2504,10 +2504,22 @@ function ArticlePreview({
               本文HTML
             </Button>
             <Button
+              data-testid="copy-handoff-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="col-span-2"
+              onClick={() => handleCopy("入稿セット", buildEditorialHandoffText(draft))}
+            >
+              <ClipboardCopy />
+              入稿セット
+            </Button>
+            <Button
               data-testid="download-html-button"
               type="button"
               variant="secondary"
               size="sm"
+              className="col-span-2"
               onClick={handleDownload}
             >
               <Download />
@@ -3205,6 +3217,19 @@ function buildExportArticleHtml(draft: ArticleDraft) {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function buildEditorialHandoffText(draft: ArticleDraft) {
+  return [
+    `タイトル: ${draft.editedTitle}`,
+    `スラッグ: ${draft.editedSlug}`,
+    `メタディスクリプション: ${draft.editedMetaDescription}`,
+    `タグ: ${joinCsv(draft.tags) || "未設定"}`,
+    `カテゴリ: ${joinCsv(draft.categories) || "未設定"}`,
+    "",
+    "本文HTML:",
+    renderArticleHtml(draft),
+  ].join("\n");
 }
 
 function safeDownloadName(value: string) {
