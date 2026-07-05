@@ -1047,7 +1047,12 @@ export function ArticleGeneratorApp() {
     setDraftActionError("");
     setDraftActionMessage("");
     setWpPostMessage("");
-    setDraft({ ...draft, [key]: value, updatedAt: new Date().toISOString() });
+    setDraft({
+      ...draft,
+      [key]: value,
+      status: draft.status === "approved" ? "draft" : draft.status,
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   function updateFaq(index: number, key: keyof FaqItem, value: string) {
@@ -1842,7 +1847,10 @@ export function ArticleGeneratorApp() {
                       <CheckCircle2 />
                       承認済みに変更
                     </Button>
-                    <Badge variant={draft.status === "approved" ? "success" : "default"}>
+                    <Badge
+                      data-testid="draft-status-badge"
+                      variant={draft.status === "approved" ? "success" : "default"}
+                    >
                       {statusLabel(draft.status)}
                     </Badge>
                   </div>

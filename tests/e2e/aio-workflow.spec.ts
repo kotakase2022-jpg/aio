@@ -1191,7 +1191,9 @@ test("WordPress post failure keeps the approved draft recoverable", async ({ pag
   expect(errors()).toEqual([]);
 });
 
-test("invalid approved drafts are blocked before WordPress post requests", async ({ page }) => {
+test("invalid edited drafts require reapproval before WordPress post requests", async ({
+  page,
+}) => {
   const errors = collectUnexpectedBrowserErrors(page);
   const completedJob = createCompletedGenerationJob();
   completedJob.draft = {
@@ -1224,14 +1226,66 @@ test("invalid approved drafts are blocked before WordPress post requests", async
 
   await page.getByTestId("draft-edit-tab").click();
   await page.getByTestId("draft-body-html-textarea").fill("<h2></h2>");
-  await page.getByTestId("wordpress-post-button").click();
 
+  await expect(page.getByTestId("draft-status-badge")).toHaveText("下書き");
+  await expect(page.getByTestId("wordpress-post-button")).toBeDisabled();
   expect(calls.wordpressPost).toBe(0);
+  await page.getByTestId("approve-draft-button").click();
   await expect(page.getByTestId("draft-action-error")).toContainText(
     "本文HTMLを入力してください。",
   );
   await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
   await expect(page.getByTestId("wordpress-post-message")).toBeHidden();
+  expect(errors()).toEqual([]);
+});
+
+test("editing an approved draft returns it to draft before WordPress posting", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text for approval invalidation after editing.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("approve-draft-button").click();
+  await expect(page.getByTestId("draft-action-message")).toContainText(
+    "承認済みに変更しました。",
+  );
+  await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+  await page.getByTestId("wordpress-username").fill("editor");
+  await page.getByTestId("wordpress-application-password").fill("app password");
+  await page.getByTestId("wordpress-connect-button").click();
+  await expect(page.getByTestId("wordpress-post-button")).toBeEnabled();
+
+  await page.getByTestId("draft-edit-tab").click();
+  await page.getByTestId("draft-title-input").fill("Edited after approval");
+
+  await expect(page.getByTestId("wordpress-post-button")).toBeDisabled();
+  await expect(page.getByTestId("draft-status-badge")).toHaveText("下書き");
+  expect(calls.wordpressPost).toBe(0);
+
+  await page.getByTestId("approve-draft-button").click();
+  await expect(page.getByTestId("wordpress-post-button")).toBeEnabled();
+  await page.getByTestId("wordpress-post-button").click();
+  expect(calls.wordpressPost).toBe(1);
+  await expect(page.getByTestId("wordpress-post-message")).toContainText(
+    "WordPressへ下書き投稿しました。",
+  );
   expect(errors()).toEqual([]);
 });
 
