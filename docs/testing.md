@@ -68,6 +68,16 @@ Required common flag:
 AIO_LIVE_CONTRACT_TESTS=1
 ```
 
+Keep sandbox credentials separate from normal app credentials:
+
+```bash
+cp .env.live.example .env.live.local
+```
+
+`.env.live.local` is git-ignored and is loaded before `.env.local` by the readiness script and live
+tests. Use it for disposable sandbox/staging OpenAI, Supabase, and WordPress settings so a developer
+does not accidentally point live contract tests at production resources.
+
 `npm run test:live` and `npm run quality:live` always run readiness first before any live provider
 call. You can also run `npm run test:live:readiness` by itself when you only want to confirm
 environment readiness; it never calls external APIs. Provider-specific readiness commands are also

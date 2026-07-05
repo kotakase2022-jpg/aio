@@ -126,7 +126,7 @@ function warnProductionLikeUrl(name) {
 }
 
 function loadDotenvFiles() {
-  for (const fileName of [".env.local", ".env"]) {
+  for (const fileName of [".env.live.local", ".env.live", ".env.local", ".env"]) {
     const filePath = path.join(process.cwd(), fileName);
     if (!existsSync(filePath)) {
       continue;

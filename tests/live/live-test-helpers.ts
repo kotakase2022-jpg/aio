@@ -3,7 +3,7 @@ import path from "node:path";
 import { expect } from "vitest";
 
 export function loadLiveEnv() {
-  for (const fileName of [".env.local", ".env"]) {
+  for (const fileName of [".env.live.local", ".env.live", ".env.local", ".env"]) {
     const filePath = path.join(process.cwd(), fileName);
     if (!existsSync(filePath)) {
       continue;
