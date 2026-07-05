@@ -1069,6 +1069,17 @@ export function ArticleGeneratorApp() {
     updateDraft("faqItems", next);
   }
 
+  function addFaq() {
+    if (!draft) return;
+    updateDraft("faqItems", [...draft.faqItems, { question: "", answer: "" }]);
+  }
+
+  function removeFaq(index: number) {
+    if (!draft) return;
+    const next = draft.faqItems.filter((_, itemIndex) => itemIndex !== index);
+    updateDraft("faqItems", next);
+  }
+
   function parseCompetitorResearch() {
     if (!competitorJson.trim()) {
       setCompetitorJsonError("");
@@ -1824,6 +1835,8 @@ export function ArticleGeneratorApp() {
                       draft={draft}
                       updateDraft={updateDraft}
                       updateFaq={updateFaq}
+                      addFaq={addFaq}
+                      removeFaq={removeFaq}
                       regenerateImage={openSingleImageRegeneration}
                     />
                   )}
@@ -2931,11 +2944,15 @@ function ArticleEditor({
   draft,
   updateDraft,
   updateFaq,
+  addFaq,
+  removeFaq,
   regenerateImage,
 }: {
   draft: ArticleDraft;
   updateDraft: <K extends keyof ArticleDraft>(key: K, value: ArticleDraft[K]) => void;
   updateFaq: (index: number, key: keyof FaqItem, value: string) => void;
+  addFaq: () => void;
+  removeFaq: (index: number) => void;
   regenerateImage: (image: ArticleImage) => void;
 }) {
   return (
@@ -3002,19 +3019,43 @@ function ArticleEditor({
         </Field>
       </div>
       <div className="space-y-3">
-        <div className="text-sm font-medium text-slate-700">FAQ</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-medium text-slate-700">FAQ</div>
+          <Button
+            data-testid="draft-faq-add-button"
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={addFaq}
+          >
+            <Plus />
+            FAQを追加
+          </Button>
+        </div>
         {draft.faqItems.map((faq, index) => (
-          <div key={`${faq.question}-${index}`} className="grid grid-cols-2 gap-3">
+          <div key={`${faq.question}-${index}`} className="grid grid-cols-[1fr_1fr_auto] gap-3">
             <Input
               data-testid={`draft-faq-question-${index}`}
+              aria-label={`FAQ ${index + 1} question`}
               value={faq.question}
               onChange={(event) => updateFaq(index, "question", event.target.value)}
             />
             <Input
               data-testid={`draft-faq-answer-${index}`}
+              aria-label={`FAQ ${index + 1} answer`}
               value={faq.answer}
               onChange={(event) => updateFaq(index, "answer", event.target.value)}
             />
+            <Button
+              data-testid={`draft-faq-remove-${index}`}
+              type="button"
+              variant="secondary"
+              size="icon"
+              onClick={() => removeFaq(index)}
+              aria-label={`FAQ ${index + 1}を削除`}
+            >
+              <Trash2 />
+            </Button>
           </div>
         ))}
       </div>

@@ -242,6 +242,14 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await page
     .getByTestId("draft-faq-answer-0")
     .fill("It added a concrete FAQ answer that must appear in the final handoff.");
+  await page.getByTestId("draft-faq-add-button").click();
+  await page
+    .getByTestId("draft-faq-question-3")
+    .fill("Which added FAQ survives the editorial handoff?");
+  await page
+    .getByTestId("draft-faq-answer-3")
+    .fill("The added FAQ is saved, previewed, and sent with the WordPress draft payload.");
+  await page.getByTestId("draft-faq-remove-1").click();
   await page.getByTestId("draft-preview-tab").click();
   await expect(
     page.getByRole("article").getByRole("heading", { name: "Human Edited AIO Guide" }),
@@ -249,6 +257,10 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(
     page.getByText("It added a concrete FAQ answer that must appear in the final handoff."),
   ).toBeVisible();
+  await expect(
+    page.getByText("The added FAQ is saved, previewed, and sent with the WordPress draft payload."),
+  ).toBeVisible();
+  await expect(page.getByText("Do humans still edit?")).toHaveCount(0);
   await page.getByTestId("copy-handoff-button").click();
   const editedHandoffText = await page.evaluate(
     () => window.localStorage.getItem("aio-e2e-last-copy") ?? "",
@@ -261,6 +273,10 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   expect(editedHandoffText).toContain(
     "It added a concrete FAQ answer that must appear in the final handoff.",
   );
+  expect(editedHandoffText).toContain(
+    "The added FAQ is saved, previewed, and sent with the WordPress draft payload.",
+  );
+  expect(editedHandoffText).not.toContain("Do humans still edit?");
 
   await page.getByTestId("save-draft-button").click();
   expect(calls.saveDraft).toBe(1);
@@ -277,8 +293,17 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
         question: "What did editorial review change?",
         answer: "It added a concrete FAQ answer that must appear in the final handoff.",
       }),
+      expect.objectContaining({
+        question: "Which added FAQ survives the editorial handoff?",
+        answer: "The added FAQ is saved, previewed, and sent with the WordPress draft payload.",
+      }),
     ]),
   );
+  expect(
+    (calls.lastSavedDraft?.faqItems as Array<{ question?: string }> | undefined)?.some(
+      (item) => item.question === "Do humans still edit?",
+    ),
+  ).toBe(false);
   expect(String(calls.lastSavedDraft?.editedBodyHtml)).toContain("Human-edited body");
   await expect(page.getByTestId("draft-action-message")).toContainText(
     "編集内容を保存しました。",
@@ -318,8 +343,17 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
         question: "What did editorial review change?",
         answer: "It added a concrete FAQ answer that must appear in the final handoff.",
       }),
+      expect.objectContaining({
+        question: "Which added FAQ survives the editorial handoff?",
+        answer: "The added FAQ is saved, previewed, and sent with the WordPress draft payload.",
+      }),
     ]),
   );
+  expect(
+    (calls.lastWordpressDraft?.faqItems as Array<{ question?: string }> | undefined)?.some(
+      (item) => item.question === "Do humans still edit?",
+    ),
+  ).toBe(false);
   expect(String(calls.lastWordpressDraft?.editedBodyHtml)).toContain("Human-edited body");
   await expect(page.getByTestId("wordpress-post-message")).toContainText(
     "WordPressへ下書き投稿しました。",
