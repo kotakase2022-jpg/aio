@@ -367,6 +367,8 @@ export function evaluateArticleQuality(
   const shouldCheckReferences = referenceTerms.length >= 2;
   const hasReferenceReflection =
     !shouldCheckReferences || referenceHitCount >= referenceTargetHits;
+  const hasReferenceVerbatimCopy =
+    shouldCheckReferences && includesAnyLongVerbatimClause(context.referenceTexts, text);
   const competitorTerms = extractCompetitorTerms(context.competitorTexts);
   const competitorHitCount = competitorTerms.filter((term) =>
     termAppearsInText(term, text),
@@ -376,6 +378,8 @@ export function evaluateArticleQuality(
   const hasCompetitorReflection =
     !shouldCheckCompetitors ||
     (competitorHitCount >= competitorTargetHits && competitivePositioningPattern.test(text));
+  const hasCompetitorVerbatimCopy =
+    shouldCheckCompetitors && includesAnyLongVerbatimClause(context.competitorTexts, text);
 
   const checks: ArticleQualityCheck[] = [
     {
@@ -486,6 +490,14 @@ export function evaluateArticleQuality(
               ? "参照情報の固有語彙が本文の定義・判断基準・具体例に反映されています。"
               : `参照情報の固有語彙（${referenceTerms.slice(0, 5).join("、")}）を、定義・判断基準・具体例・注意点として本文に戻すと、一般論から抜け出せます。`,
           },
+          {
+            id: "reference-info-digestion",
+            label: "参照情報の編集消化",
+            passed: !hasReferenceVerbatimCopy,
+            detail: hasReferenceVerbatimCopy
+              ? "参照情報の長い文がそのまま本文に使われています。事実関係は保ちつつ、読者の判断基準、条件、注意点、出典注記として編集して言い換えてください。"
+              : "参照情報は丸写しではなく、記事文脈に合わせて編集されています。",
+          },
         ]
       : []),
     ...(shouldCheckCompetitors
@@ -497,6 +509,14 @@ export function evaluateArticleQuality(
             detail: hasCompetitorReflection
               ? "競合情報の論点が、比較軸や差別化ポイントとして本文に反映されています。"
               : `競合情報の固有語彙（${competitorTerms.slice(0, 5).join("、")}）を、比較軸・不足論点・差別化ポイントとして本文に戻すと、企画記事としての独自性が上がります。`,
+          },
+          {
+            id: "competitor-insight-digestion",
+            label: "競合情報の編集消化",
+            passed: !hasCompetitorVerbatimCopy,
+            detail: hasCompetitorVerbatimCopy
+              ? "競合情報の長い文がそのまま本文に使われています。競合の主張を写すのではなく、比較軸、不足論点、差別化ポイントとして再構成してください。"
+              : "競合情報は丸写しではなく、比較・差別化の文脈に合わせて編集されています。",
           },
         ]
       : []),
@@ -678,6 +698,10 @@ function includesLongVerbatimClause(source: string | undefined, targetText: stri
     .map(normalizeComparableText)
     .filter((clause) => Array.from(clause).length >= 28)
     .some((clause) => normalizedTarget.includes(clause));
+}
+
+function includesAnyLongVerbatimClause(sources: string[] | undefined, targetText: string) {
+  return sources?.some((source) => includesLongVerbatimClause(source, targetText)) ?? false;
 }
 
 function normalizeComparableText(value: string) {

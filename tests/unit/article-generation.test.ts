@@ -78,6 +78,7 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("Avoid commodity content");
     expect(call?.instructions).toContain("generic AI-like filler");
     expect(call?.instructions).toContain("human editor who has interviewed the business");
+    expect(call?.instructions).toContain("Do not paste long reference or competitor passages");
     expect(call?.instructions).toContain("Do not paste primaryInfo verbatim");
     expect(call?.instructions).toContain("absence of AI-like generic phrasing");
     expect(input.payload.form.primaryInfo).toContain("one-person contractors");

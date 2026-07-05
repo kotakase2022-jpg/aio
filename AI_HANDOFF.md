@@ -4,24 +4,25 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Phase: Autonomous UX and quality improvement loop in progress
-- Last updated: 2026-07-05 15:10 +09:00
+- Last updated: 2026-07-05 15:15 +09:00
 
 ## 1. Current Goal
 現在の開発目的：
 
-既存アプリを「機能・画面遷移の安定性」「業務利用価値」「AIっぽさを抑えた生成記事品質」の3指標で100点に近づける。今回は、一次情報を本文に反映しながらも、入力文の丸写しになっていないかを機械的に検知する品質チェックを追加した。
+既存アプリを「機能・画面遷移の安定性」「業務利用価値」「AIっぽさを抑えた生成記事品質」の3指標で100点に近づける。今回は、参照情報・競合情報を本文へ反映しながらも、元文の丸写しになっていないかを機械的に検知する品質チェックを追加した。
 
 ## 2. Current Branch / Commit
 - Branch: codex/persistent-quality-gate-operations
-- Latest commit: current HEAD after `Detect verbatim primary info reuse`
+- Latest commit: current HEAD after `Detect verbatim source reuse`
 - Last known good commit: current HEAD after `npm run quality`
 
 ## 3. What Was Done
 今回完了したこと：
 
-- `evaluateArticleQuality`に`primary-info-digestion`チェックを追加し、一次情報の長い入力文が本文へそのまま貼られている場合に未達として検知するようにした。
-- OpenAI記事生成プロンプトに、一次情報を丸写しせず、固有名詞・意味を保ったまま読者向けの判断材料、例外、注意点、具体例へ編集する指示を追加した。
-- 単体テストで、一次情報の固有語彙は反映しているが入力文を丸写ししている記事を品質未達として固定した。
+- `evaluateArticleQuality`に`reference-info-digestion`チェックを追加し、参照情報の長い文が本文へそのまま貼られている場合に未達として検知するようにした。
+- `evaluateArticleQuality`に`competitor-insight-digestion`チェックを追加し、競合情報の長い文が本文へそのまま貼られている場合に未達として検知するようにした。
+- OpenAI記事生成プロンプトに、参照/競合の長い文を丸写しせず、定義・判断基準・注意点・比較軸・出典注記へ編集して言い換える指示を追加した。
+- 単体テストで、参照/競合の固有語彙は反映しているが元文を丸写ししている記事を品質未達として固定した。
 
 ## 4. Files Changed
 主な変更ファイル：
@@ -38,7 +39,7 @@
 - `npm run quality`が成功しており、型、Lint、テスト不正検知、単体/結合テスト、契約テスト、coverage、Playwright E2E、本番ビルドは通過済み。
 - Playwright E2Eは35件成功し、PCブラウザの主要フロー、生成、編集、保存、承認、WordPress投稿、エラー復旧、コピー/HTML出力、ログ復元、アップロード失敗復旧を確認済み。
 - 通常のローカル品質確認対象は整備済み。
-- 今回の生成品質改善により、一次情報を「反映しているように見えるが、入力文をそのまま貼っているだけ」の出力を品質未達として扱えるようになった。
+- 今回の生成品質改善により、参照情報・競合情報を「反映しているように見えるが、元文をそのまま貼っているだけ」の出力を品質未達として扱えるようになった。
 
 ## 6. Known Issues
 既知の問題：
@@ -47,7 +48,7 @@
 - `npm run test:live:readiness`は、sandbox用の確認環境変数がない状態では成功しない想定。
 - 本番DB・本番API・本番ユーザーデータをテストで変更しないこと。
 - 品質チェックから編集欄へ移る主要5導線（タイトル・FAQ件数・FAQ質問・FAQ回答・本文HTML）はmock E2Eで検証済み。
-- 一次情報の丸写し検知は単体テストで検証済み。
+- 一次情報、参照情報、競合情報の丸写し検知は単体テストで検証済み。
 - 実OpenAIのライブ生成記事に対する編集者目線の視覚確認はsandbox契約テスト環境が揃うまで未検証。
 - 3指標すべて100点の完了条件は未達。次ループでも機能棚卸し、実ブラウザ確認、生成品質改善を継続する。
 
@@ -72,14 +73,14 @@ npm run quality
 - `npm run lint`: 成功
 - `npm run typecheck`: 成功
 - `npx playwright test tests/e2e/aio-workflow.spec.ts -g "editing the title to a generic label updates the quality checklist"`: 成功（1 passed、FAQ件数/FAQ質問フォーカス確認を含む）
-- `npx vitest run tests/unit/article-quality.test.ts tests/unit/article-generation.test.ts`: 成功（2 files / 38 tests passed）
+- `npx vitest run tests/unit/article-quality.test.ts tests/unit/article-generation.test.ts`: 成功（2 files / 40 tests passed）
 - `npm run quality`: 成功
 - `npm run typecheck`: 成功（quality内）
 - `npm run lint`: 成功（quality内）
 - `npm run test:integrity`: 成功（37 files checked）
-- `npm run test`: 成功（33 files / 140 tests passed）
+- `npm run test`: 成功（33 files / 142 tests passed）
 - `npm run test:contract`: 成功（3 files / 9 tests passed）
-- `npm run test:coverage`: 成功（statements 81.54%、branches 66.85%、functions 88.52%、lines 82.05%）
+- `npm run test:coverage`: 成功（statements 81.59%、branches 67.06%、functions 88.57%、lines 82.09%）
 - `npm run test:e2e`: 成功（35 passed）
 - `npm run build`: 成功（Next.js 16.2.9 production build passed）
 
@@ -87,8 +88,8 @@ npm run quality
 
 次のAIが最初にやるべきこと：
 
-- Claude Codeは、`primary-info-digestion`のしきい値（28文字以上の長い入力節の丸写し検知）が厳しすぎないか、実務入力例に照らしてレビューする。
-- 次の改善候補は、実ブラウザでの視覚確認、OpenAI sandboxでのライブ生成品質確認、または参照/競合情報の丸写し検知追加。
+- Claude Codeは、`primary-info-digestion`、`reference-info-digestion`、`competitor-insight-digestion`のしきい値（28文字以上の長い入力節の丸写し検知）が厳しすぎないか、実務入力例に照らしてレビューする。
+- 次の改善候補は、実ブラウザでの視覚確認、OpenAI sandboxでのライブ生成品質確認、または品質チェック未達時にどの入力情報を直すべきかのUI誘導強化。
 - 外部APIの残リスクを詰める場合は、productionではなくsandbox環境を用意し、`npm run test:live:readiness`が通る状態にしてからライブ契約テストを実行する。
 
 ## 10. Do Not Touch

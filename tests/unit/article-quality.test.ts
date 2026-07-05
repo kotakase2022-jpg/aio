@@ -209,6 +209,33 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("flags reference information that is pasted verbatim instead of source-edited", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>一人親方労災保険とは、特別加入の条件と補償開始日を確認して判断する制度を指します</h2>
+        <p>結論として、加入前には条件、費用、補償開始日を分けて確認する必要があります。厚生労働省の一人親方労災保険では、特別加入、給付基礎日額、労働保険事務組合、補償開始日を確認する必要がある。</p>
+        <table><tr><th>判断基準</th><td>特別加入、給付基礎日額、費用、補償開始日を比較します。</td></tr></table>
+        <ul><li>失敗例は、加入条件だけを見て補償開始日を確認しないことです。</li><li>注意点として、労働保険事務組合ごとの運用差があります。</li></ul>
+        <h2>給付基礎日額と補償開始日を先に照合する理由</h2>
+        <p>FAQとして、参照元にない費用や対象範囲は断定しません。出典: https://example.com/reference</p>
+      `,
+      {
+        referenceTexts: [
+          "厚生労働省の一人親方労災保険では、特別加入、給付基礎日額、労働保険事務組合、補償開始日を確認する必要がある。",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "reference-info-reflection", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "reference-info-digestion", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("参照情報の長い文");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("passes competitor insight reflection when comparison axes return in the body", () => {
     const result = evaluateArticleQuality(
       `
@@ -255,6 +282,33 @@ describe("evaluateArticleQuality", () => {
       expect.objectContaining({ id: "competitor-insight-reflection", passed: false }),
     );
     expect(result.improvements.join(" ")).toContain("競合情報の固有語彙");
+    expect(result.score).toBeLessThan(100);
+  });
+
+  test("flags competitor information that is pasted verbatim instead of reframed", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、AI検索で引用されやすい構造と差別化軸を同時に設計する記事を指します</h2>
+        <p>結論として、競合がどこまで説明しているかを比較し、自社記事では不足論点まで補う必要があります。競合記事Aは料金表と導入期間を強調し、競合LP Bは補助金申請を訴求する一方、運用定着と承認フローの支援は薄い。</p>
+        <table><tr><th>比較軸</th><td>料金表、導入期間、補助金申請、運用定着、承認フローを比較します。</td></tr></table>
+        <ul><li>失敗例として、費用だけで判断し、運用定着の担当や期間を決めないケースがあります。</li><li>注意点は、補助金申請の一般論と自社の支援範囲を分けることです。</li></ul>
+        <h2>料金表訴求だけでは拾えない承認フローの詰まり</h2>
+        <p>FAQでは、参照元と競合LPを照合し、未確認情報は断定しません。出典: https://example.com/reference</p>
+      `,
+      {
+        competitorTexts: [
+          "競合記事Aは料金表と導入期間を強調し、競合LP Bは補助金申請を訴求する一方、運用定着と承認フローの支援は薄い。",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "competitor-insight-reflection", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "competitor-insight-digestion", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("競合情報の長い文");
     expect(result.score).toBeLessThan(100);
   });
 

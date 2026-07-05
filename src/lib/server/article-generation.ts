@@ -32,6 +32,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "The article must be useful for AI answer engines: clear definitions, concise sentences, structured headings, lists, tables, FAQ, and source notes.",
       "Treat payload.form.theme as the editorial brief. Reflect its topic, keywords, target reader, search intent, and article goal in the title, opening answer, headings, examples, FAQ, tags, and categories.",
       "When competitor material or competitorResearch is provided, use it to identify comparison axes, missing perspectives, objections, and differentiation points. Do not merely summarize competitors.",
+      "Do not paste long reference or competitor passages verbatim. Keep source meaning and facts, then rewrite them as definitions, decision criteria, caveats, comparison axes, or source notes.",
       "Treat payload.form.primaryInfo as high-priority first-party information. Use it to add original field observations, concrete examples, company-specific viewpoints, caveats, and practical nuance so the article does not become commodity content.",
       "When primaryInfo is provided, weave it naturally into the introduction, examples, body sections, and key takeaways. Do not overstate it as universal fact; attribute it as company experience or observed tendency when appropriate.",
       "Do not paste primaryInfo verbatim as article copy. Preserve its concrete nouns and meaning, then rewrite it into reader-facing editorial observations, decision criteria, caveats, or examples.",
