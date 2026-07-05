@@ -349,6 +349,8 @@ export function evaluateArticleQuality(
   const hasPrimaryInfoReflection =
     !shouldCheckPrimaryInfo ||
     (primaryInfoHitCount >= primaryInfoTargetHits && firstPartyAttributionPattern.test(text));
+  const hasPrimaryInfoVerbatimCopy =
+    shouldCheckPrimaryInfo && includesLongVerbatimClause(context.primaryInfo, text);
   const ctaTerms = extractSignalTerms(context.closingText, ctaStopWords);
   const closingTextWindow = text.slice(-1400);
   const ctaHitCount = ctaTerms.filter((term) =>
@@ -451,6 +453,14 @@ export function evaluateArticleQuality(
             detail: hasPrimaryInfoReflection
               ? "入力された一次情報の固有語彙が、本文内で自社経験として自然に反映されています。"
               : `一次情報の固有語彙（${primaryInfoTerms.slice(0, 5).join("、")}）を、当社の経験・相談傾向・現場観察として本文に戻すと独自性が上がります。`,
+          },
+          {
+            id: "primary-info-digestion",
+            label: "一次情報の編集消化",
+            passed: !hasPrimaryInfoVerbatimCopy,
+            detail: hasPrimaryInfoVerbatimCopy
+              ? "一次情報の入力文が長くそのまま使われています。固有語彙は残しつつ、読者向けの判断材料、例外、注意点に編集して言い換えると取材記事らしくなります。"
+              : "一次情報は丸写しではなく、記事文脈に合わせて編集されています。",
           },
         ]
       : []),
@@ -655,6 +665,23 @@ function termAppearsInText(term: string, text: string) {
   }
 
   return slidingWindows(term, 4).some((part) => text.includes(part));
+}
+
+function includesLongVerbatimClause(source: string | undefined, targetText: string) {
+  if (!source?.trim()) {
+    return false;
+  }
+
+  const normalizedTarget = normalizeComparableText(targetText);
+  return source
+    .split(/[。！？!?;；\n\r]+/)
+    .map(normalizeComparableText)
+    .filter((clause) => Array.from(clause).length >= 28)
+    .some((clause) => normalizedTarget.includes(clause));
+}
+
+function normalizeComparableText(value: string) {
+  return value.replace(/\s+/g, "").trim();
 }
 
 function slidingWindows(value: string, size: number) {

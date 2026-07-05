@@ -86,6 +86,33 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("flags primary information that is pasted verbatim instead of editorially digested", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、現場の判断材料まで引用しやすく整理する記事を指します</h2>
+        <p>結論として、一次情報は読者が判断できる材料に編集して戻す必要があります。当社の支援現場では、一人親方の事務作業はLINEでのやり取りが多く帳票不在も多い。</p>
+        <table><tr><th>判断基準</th><td>担当、期間、費用、帳票の有無を比較します。</td></tr></table>
+        <ul><li>失敗例を先に確認します。</li><li>手順と注意点を公開前に照合します。</li></ul>
+        <h2>LINEに残る承認と帳票不在をどう記事で説明するか</h2>
+        <p>FAQとして、未確認情報は断定せず、参照元と自社の観察を分けて書く必要があります。</p>
+        <p>出典: https://example.com/reference</p>
+      `,
+      {
+        primaryInfo:
+          "当社の支援現場では、一人親方の事務作業はLINEでのやり取りが多く帳票不在も多い。",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-reflection", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-digestion", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("入力文が長くそのまま使われています");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("passes theme and keyword reflection when topic terms return in the body", () => {
     const result = evaluateArticleQuality(
       `

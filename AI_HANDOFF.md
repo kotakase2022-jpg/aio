@@ -4,29 +4,32 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Phase: Autonomous UX and quality improvement loop in progress
-- Last updated: 2026-07-05 15:05 +09:00
+- Last updated: 2026-07-05 15:10 +09:00
 
 ## 1. Current Goal
 現在の開発目的：
 
-既存アプリを「機能・画面遷移の安定性」「業務利用価値」「AIっぽさを抑えた生成記事品質」の3指標で100点に近づける。今回は、生成後の編集品質チェックから該当入力欄へ移る導線について、FAQ件数とFAQ質問のフォーカスもE2Eで固定した。
+既存アプリを「機能・画面遷移の安定性」「業務利用価値」「AIっぽさを抑えた生成記事品質」の3指標で100点に近づける。今回は、一次情報を本文に反映しながらも、入力文の丸写しになっていないかを機械的に検知する品質チェックを追加した。
 
 ## 2. Current Branch / Commit
 - Branch: codex/persistent-quality-gate-operations
-- Latest commit: current HEAD after `Cover remaining FAQ quality focus paths`
+- Latest commit: current HEAD after `Detect verbatim primary info reuse`
 - Last known good commit: current HEAD after `npm run quality`
 
 ## 3. What Was Done
 今回完了したこと：
 
-- E2Eで、FAQが3件未満の未達チェックからFAQ追加ボタンへフォーカスされることを確認した。
-- E2Eで、汎用的なFAQ質問の未達チェックからFAQ質問入力欄へフォーカスされることを確認した。
-- 既存のタイトル、FAQ回答、本文HTMLフォーカス確認と同じフローに統合し、品質チェックから編集対象へ戻る主要導線を広く回帰検知できるようにした。
+- `evaluateArticleQuality`に`primary-info-digestion`チェックを追加し、一次情報の長い入力文が本文へそのまま貼られている場合に未達として検知するようにした。
+- OpenAI記事生成プロンプトに、一次情報を丸写しせず、固有名詞・意味を保ったまま読者向けの判断材料、例外、注意点、具体例へ編集する指示を追加した。
+- 単体テストで、一次情報の固有語彙は反映しているが入力文を丸写ししている記事を品質未達として固定した。
 
 ## 4. Files Changed
 主な変更ファイル：
 
-- `tests/e2e/aio-workflow.spec.ts`
+- `src/lib/article-quality.ts`
+- `src/lib/server/article-generation.ts`
+- `tests/unit/article-quality.test.ts`
+- `tests/unit/article-generation.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
@@ -35,7 +38,7 @@
 - `npm run quality`が成功しており、型、Lint、テスト不正検知、単体/結合テスト、契約テスト、coverage、Playwright E2E、本番ビルドは通過済み。
 - Playwright E2Eは35件成功し、PCブラウザの主要フロー、生成、編集、保存、承認、WordPress投稿、エラー復旧、コピー/HTML出力、ログ復元、アップロード失敗復旧を確認済み。
 - 通常のローカル品質確認対象は整備済み。
-- 今回のE2E強化により、品質チェックから該当編集欄へ移る主要5導線（タイトル・FAQ件数・FAQ質問・FAQ回答・本文HTML）が回帰検知されるようになった。
+- 今回の生成品質改善により、一次情報を「反映しているように見えるが、入力文をそのまま貼っているだけ」の出力を品質未達として扱えるようになった。
 
 ## 6. Known Issues
 既知の問題：
@@ -43,7 +46,8 @@
 - 外部OpenAI / Supabase / WordPressのライブ契約テストは、本番データ保護のためsandbox環境変数が揃わない限りfail-closedする。
 - `npm run test:live:readiness`は、sandbox用の確認環境変数がない状態では成功しない想定。
 - 本番DB・本番API・本番ユーザーデータをテストで変更しないこと。
-- 今回のUX改善はmock E2Eでタイトル・FAQ件数・FAQ質問・FAQ回答・本文HTMLフォーカスを検証済み。
+- 品質チェックから編集欄へ移る主要5導線（タイトル・FAQ件数・FAQ質問・FAQ回答・本文HTML）はmock E2Eで検証済み。
+- 一次情報の丸写し検知は単体テストで検証済み。
 - 実OpenAIのライブ生成記事に対する編集者目線の視覚確認はsandbox契約テスト環境が揃うまで未検証。
 - 3指標すべて100点の完了条件は未達。次ループでも機能棚卸し、実ブラウザ確認、生成品質改善を継続する。
 
@@ -59,6 +63,7 @@ Cursor Bugbotの指摘：
 npm run lint
 npm run typecheck
 npx playwright test tests/e2e/aio-workflow.spec.ts -g "editing the title to a generic label updates the quality checklist"
+npx vitest run tests/unit/article-quality.test.ts tests/unit/article-generation.test.ts
 npm run quality
 ```
 
@@ -67,13 +72,14 @@ npm run quality
 - `npm run lint`: 成功
 - `npm run typecheck`: 成功
 - `npx playwright test tests/e2e/aio-workflow.spec.ts -g "editing the title to a generic label updates the quality checklist"`: 成功（1 passed、FAQ件数/FAQ質問フォーカス確認を含む）
+- `npx vitest run tests/unit/article-quality.test.ts tests/unit/article-generation.test.ts`: 成功（2 files / 38 tests passed）
 - `npm run quality`: 成功
 - `npm run typecheck`: 成功（quality内）
 - `npm run lint`: 成功（quality内）
 - `npm run test:integrity`: 成功（37 files checked）
-- `npm run test`: 成功（33 files / 139 tests passed）
+- `npm run test`: 成功（33 files / 140 tests passed）
 - `npm run test:contract`: 成功（3 files / 9 tests passed）
-- `npm run test:coverage`: 成功（statements 81.51%、branches 66.76%、functions 88.4%、lines 82.02%）
+- `npm run test:coverage`: 成功（statements 81.54%、branches 66.85%、functions 88.52%、lines 82.05%）
 - `npm run test:e2e`: 成功（35 passed）
 - `npm run build`: 成功（Next.js 16.2.9 production build passed）
 
@@ -81,8 +87,8 @@ npm run quality
 
 次のAIが最初にやるべきこと：
 
-- Claude Codeは、品質チェックIDと編集欄フォーカス先の対応が自然か、今回追加したFAQ件数/FAQ質問のE2Eをレビューする。
-- 次の改善候補は、実ブラウザでの視覚確認、OpenAI sandboxでのライブ生成品質確認、または生成記事の「一次情報らしさ」をさらに測るテスト追加。
+- Claude Codeは、`primary-info-digestion`のしきい値（28文字以上の長い入力節の丸写し検知）が厳しすぎないか、実務入力例に照らしてレビューする。
+- 次の改善候補は、実ブラウザでの視覚確認、OpenAI sandboxでのライブ生成品質確認、または参照/競合情報の丸写し検知追加。
 - 外部APIの残リスクを詰める場合は、productionではなくsandbox環境を用意し、`npm run test:live:readiness`が通る状態にしてからライブ契約テストを実行する。
 
 ## 10. Do Not Touch

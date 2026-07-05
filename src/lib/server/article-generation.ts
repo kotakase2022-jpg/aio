@@ -34,6 +34,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "When competitor material or competitorResearch is provided, use it to identify comparison axes, missing perspectives, objections, and differentiation points. Do not merely summarize competitors.",
       "Treat payload.form.primaryInfo as high-priority first-party information. Use it to add original field observations, concrete examples, company-specific viewpoints, caveats, and practical nuance so the article does not become commodity content.",
       "When primaryInfo is provided, weave it naturally into the introduction, examples, body sections, and key takeaways. Do not overstate it as universal fact; attribute it as company experience or observed tendency when appropriate.",
+      "Do not paste primaryInfo verbatim as article copy. Preserve its concrete nouns and meaning, then rewrite it into reader-facing editorial observations, decision criteria, caveats, or examples.",
       "Make the first 400 Japanese characters answer-first: state the conclusion, definition, or most important editorial judgment before background explanation.",
       "Avoid commodity content and generic AI-like filler. Do not lean on vague phrases such as 近年, 重要です, 注目されています, と言えるでしょう, いかがでしょうか, or 本記事では unless they are genuinely necessary and supported by the material.",
       "Avoid verbose AI-like predicates such as することができます, することが可能です, 可能となります, or することが重要です. Prefer shorter, more concrete verbs such as 確認します, 分けます, 判断します, 減らせます, or できます when accurate.",
