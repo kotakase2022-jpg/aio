@@ -72,6 +72,8 @@ describe("WordPress REST API contract", () => {
         const content = (request.json as { content: string }).content;
         expect(content).toContain('src="http://localhost/uploads/generated/inline-contract.png"');
         expect(content).not.toContain("aio-image:inline-contract");
+        expect(content).toContain('class="aio-faq-block"');
+        expect(content).toContain("What is AIO?");
         expect((request.json as { tags: number[] }).tags).toHaveLength(3);
         sendJson(response, { link: `${server.origin}/aio-content-operations-guide/` }, 201);
         return;

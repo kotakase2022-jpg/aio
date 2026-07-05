@@ -39,6 +39,7 @@ import {
   type ArticleQualityEvaluation,
 } from "@/lib/article-quality";
 import { formatJaDateTime } from "@/lib/date";
+import { buildDraftArticleHtml } from "@/lib/draft-html";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import { cn, joinCsv, splitCsv } from "@/lib/utils";
 import type {
@@ -2988,10 +2989,12 @@ function ArticleEditor({
         {draft.faqItems.map((faq, index) => (
           <div key={`${faq.question}-${index}`} className="grid grid-cols-2 gap-3">
             <Input
+              data-testid={`draft-faq-question-${index}`}
               value={faq.question}
               onChange={(event) => updateFaq(index, "question", event.target.value)}
             />
             <Input
+              data-testid={`draft-faq-answer-${index}`}
               value={faq.answer}
               onChange={(event) => updateFaq(index, "answer", event.target.value)}
             />
@@ -3169,13 +3172,7 @@ function imageSrcForHtml(image: ArticleImage) {
 }
 
 function renderArticleHtml(draft: ArticleDraft) {
-  return draft.images.reduce((html, image) => {
-    if (!image.url) {
-      return html;
-    }
-
-    return html.replaceAll(`src="aio-image:${image.id}"`, `src="${escapeHtml(image.url)}"`);
-  }, draft.editedBodyHtml);
+  return buildDraftArticleHtml(draft);
 }
 
 function collectDraftReferenceTexts(draft: ArticleDraft) {

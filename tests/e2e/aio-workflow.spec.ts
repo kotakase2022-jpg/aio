@@ -238,9 +238,16 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     .fill("<h2>Human edited section</h2><p>Human-edited body with a concrete review note.</p>");
   await page.getByTestId("draft-tags-input").fill("AIO, Editorial QA");
   await page.getByTestId("draft-categories-input").fill("Operations, Content");
+  await page.getByTestId("draft-faq-question-0").fill("What did editorial review change?");
+  await page
+    .getByTestId("draft-faq-answer-0")
+    .fill("It added a concrete FAQ answer that must appear in the final handoff.");
   await page.getByTestId("draft-preview-tab").click();
   await expect(
     page.getByRole("article").getByRole("heading", { name: "Human Edited AIO Guide" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("It added a concrete FAQ answer that must appear in the final handoff."),
   ).toBeVisible();
   await page.getByTestId("copy-handoff-button").click();
   const editedHandoffText = await page.evaluate(
@@ -251,6 +258,9 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   expect(editedHandoffText).toContain("タグ: AIO, Editorial QA");
   expect(editedHandoffText).toContain("カテゴリ: Operations, Content");
   expect(editedHandoffText).toContain("Human-edited body with a concrete review note.");
+  expect(editedHandoffText).toContain(
+    "It added a concrete FAQ answer that must appear in the final handoff.",
+  );
 
   await page.getByTestId("save-draft-button").click();
   expect(calls.saveDraft).toBe(1);
@@ -261,6 +271,14 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     tags: ["AIO", "Editorial QA"],
     categories: ["Operations", "Content"],
   });
+  expect(calls.lastSavedDraft?.faqItems).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        question: "What did editorial review change?",
+        answer: "It added a concrete FAQ answer that must appear in the final handoff.",
+      }),
+    ]),
+  );
   expect(String(calls.lastSavedDraft?.editedBodyHtml)).toContain("Human-edited body");
   await expect(page.getByTestId("draft-action-message")).toContainText(
     "編集内容を保存しました。",
@@ -294,6 +312,14 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     tags: ["AIO", "Editorial QA"],
     categories: ["Operations", "Content"],
   });
+  expect(calls.lastWordpressDraft?.faqItems).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        question: "What did editorial review change?",
+        answer: "It added a concrete FAQ answer that must appear in the final handoff.",
+      }),
+    ]),
+  );
   expect(String(calls.lastWordpressDraft?.editedBodyHtml)).toContain("Human-edited body");
   await expect(page.getByTestId("wordpress-post-message")).toContainText(
     "WordPressへ下書き投稿しました。",

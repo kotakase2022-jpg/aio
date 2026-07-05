@@ -9,6 +9,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ArticleDraft, WordpressConnection } from "@/types/aio";
+import { buildDraftArticleHtml } from "@/lib/draft-html";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { ApiError } from "@/lib/server/http";
 import { saveDraft } from "@/lib/server/drafts";
@@ -129,7 +130,9 @@ export async function publishDraftToWordpress({
       title: draft.editedTitle,
       slug: draft.editedSlug,
       excerpt: draft.editedMetaDescription,
-      content: buildWordpressPostContent(draft, origin),
+      content: buildDraftArticleHtml(draft, {
+        imageUrlResolver: (url) => resolveAssetUrl(url, origin),
+      }),
       status,
       categories: categoryIds,
       tags: tagIds,
@@ -425,46 +428,12 @@ async function uploadMedia(
   return json.id;
 }
 
-function buildWordpressPostContent(draft: ArticleDraft, origin: string) {
-  return draft.images.reduce((html, image) => {
-    const url = image.url.trim();
-    if (!url) {
-      return html;
-    }
-
-    const resolvedUrl = resolveAssetUrl(url, origin);
-    return replaceImageSrc(
-      replaceImageSrc(html, `aio-image:${image.id}`, resolvedUrl),
-      url,
-      resolvedUrl,
-    );
-  }, draft.editedBodyHtml);
-}
-
-function replaceImageSrc(html: string, from: string, to: string) {
-  const escapedFrom = escapeRegExp(from);
-  const escapedTo = escapeHtmlAttribute(to);
-  return html.replace(new RegExp(`src=(["'])${escapedFrom}\\1`, "g"), `src="${escapedTo}"`);
-}
-
 function resolveAssetUrl(url: string, origin: string) {
   if (url.startsWith("/")) {
     return `${origin.replace(/\/$/, "")}${url}`;
   }
 
   return url;
-}
-
-function escapeHtmlAttribute(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function saveWordpressPostRecord(
