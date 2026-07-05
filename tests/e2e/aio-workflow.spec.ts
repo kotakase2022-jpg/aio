@@ -228,8 +228,40 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   expect(calls.generateImagePrompts[0]).toContain("brighter white background");
   expect(calls.generateImagePrompts[1]).toContain("more executive");
 
+  await page.getByTestId("draft-title-input").fill("Human Edited AIO Guide");
+  await page.getByTestId("draft-slug-input").fill("human-edited-aio-guide");
+  await page
+    .getByTestId("draft-meta-textarea")
+    .fill("Human-edited meta description for editorial handoff and WordPress.");
+  await page
+    .getByTestId("draft-body-html-textarea")
+    .fill("<h2>Human edited section</h2><p>Human-edited body with a concrete review note.</p>");
+  await page.getByTestId("draft-tags-input").fill("AIO, Editorial QA");
+  await page.getByTestId("draft-categories-input").fill("Operations, Content");
+  await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "Human Edited AIO Guide" }),
+  ).toBeVisible();
+  await page.getByTestId("copy-handoff-button").click();
+  const editedHandoffText = await page.evaluate(
+    () => window.localStorage.getItem("aio-e2e-last-copy") ?? "",
+  );
+  expect(editedHandoffText).toContain("タイトル: Human Edited AIO Guide");
+  expect(editedHandoffText).toContain("スラッグ: human-edited-aio-guide");
+  expect(editedHandoffText).toContain("タグ: AIO, Editorial QA");
+  expect(editedHandoffText).toContain("カテゴリ: Operations, Content");
+  expect(editedHandoffText).toContain("Human-edited body with a concrete review note.");
+
   await page.getByTestId("save-draft-button").click();
   expect(calls.saveDraft).toBe(1);
+  expect(calls.lastSavedDraft).toMatchObject({
+    editedTitle: "Human Edited AIO Guide",
+    editedSlug: "human-edited-aio-guide",
+    editedMetaDescription: "Human-edited meta description for editorial handoff and WordPress.",
+    tags: ["AIO", "Editorial QA"],
+    categories: ["Operations", "Content"],
+  });
+  expect(String(calls.lastSavedDraft?.editedBodyHtml)).toContain("Human-edited body");
   await expect(page.getByTestId("draft-action-message")).toContainText(
     "編集内容を保存しました。",
   );
@@ -256,6 +288,13 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByTestId("wordpress-post-button")).toBeEnabled();
   await page.getByTestId("wordpress-post-button").click();
   expect(calls.wordpressPost).toBe(1);
+  expect(calls.lastWordpressDraft).toMatchObject({
+    editedTitle: "Human Edited AIO Guide",
+    editedSlug: "human-edited-aio-guide",
+    tags: ["AIO", "Editorial QA"],
+    categories: ["Operations", "Content"],
+  });
+  expect(String(calls.lastWordpressDraft?.editedBodyHtml)).toContain("Human-edited body");
   await expect(page.getByTestId("wordpress-post-message")).toContainText(
     "WordPressへ下書き投稿しました。",
   );
@@ -1782,6 +1821,8 @@ async function mockCommonApiRoutes(
     wordpressConnect: 0,
     wordpressPost: 0,
     wordpressPostStatus: "" as "" | "draft" | "publish",
+    lastSavedDraft: null as Record<string, unknown> | null,
+    lastWordpressDraft: null as Record<string, unknown> | null,
   };
 
   await page.route("**/api/generation-logs", async (route) => {
@@ -1916,6 +1957,7 @@ async function mockCommonApiRoutes(
     }
 
     const body = route.request().postDataJSON() as { draft?: unknown };
+    calls.lastSavedDraft = isRecord(body.draft) ? body.draft : null;
     await route.fulfill({ json: { ok: true, draft: body.draft, storageMode: "local" } });
   });
 
@@ -1976,6 +2018,7 @@ async function mockCommonApiRoutes(
       status?: "draft" | "publish";
     };
     calls.wordpressPostStatus = body.status ?? "draft";
+    calls.lastWordpressDraft = isRecord(body.draft) ? body.draft : null;
     if (options.wordpressPostShouldFail) {
       await route.fulfill({
         status: 502,
@@ -2024,6 +2067,10 @@ function buildCompletedJobForForm(
         }
       : completedJob.draft,
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function collectUnexpectedBrowserErrors(

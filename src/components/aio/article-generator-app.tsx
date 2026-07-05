@@ -2865,6 +2865,7 @@ function ArticleEditor({
         </Field>
         <Field label="スラッグ">
           <Input
+            data-testid="draft-slug-input"
             value={draft.editedSlug}
             onChange={(event) => updateDraft("editedSlug", event.target.value)}
           />
@@ -2886,12 +2887,14 @@ function ArticleEditor({
       </Field>
       <Field label="メタディスクリプション">
         <Textarea
+          data-testid="draft-meta-textarea"
           value={draft.editedMetaDescription}
           onChange={(event) => updateDraft("editedMetaDescription", event.target.value)}
         />
       </Field>
       <Field label="本文HTML">
         <Textarea
+          data-testid="draft-body-html-textarea"
           value={draft.editedBodyHtml}
           onChange={(event) => updateDraft("editedBodyHtml", event.target.value)}
           className="min-h-[520px] font-mono text-xs"
@@ -2900,12 +2903,14 @@ function ArticleEditor({
       <div className="grid grid-cols-2 gap-4">
         <Field label="タグ">
           <Input
+            data-testid="draft-tags-input"
             value={joinCsv(draft.tags)}
             onChange={(event) => updateDraft("tags", splitCsv(event.target.value))}
           />
         </Field>
         <Field label="カテゴリ">
           <Input
+            data-testid="draft-categories-input"
             value={joinCsv(draft.categories)}
             onChange={(event) => updateDraft("categories", splitCsv(event.target.value))}
           />
