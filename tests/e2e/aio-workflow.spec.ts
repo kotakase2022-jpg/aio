@@ -411,10 +411,14 @@ test("editing the title to a generic label updates the quality checklist", async
   await expect(page.getByTestId("quality-check-failed").first()).toContainText(
     "タイトルの具体性",
   );
+  await expect(page.getByTestId("quality-check-failed").first()).toContainText("修正先: タイトル");
   await page.getByTestId("quality-edit-draft-button").first().click();
   await expect(page.getByTestId("draft-title-input")).toBeVisible();
   await expect(page.getByTestId("draft-title-input")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "FAQ件数" }),
+  ).toContainText("修正先: FAQ");
   await page
     .getByTestId("quality-check-failed")
     .filter({ hasText: "FAQ件数" })
@@ -423,6 +427,9 @@ test("editing the title to a generic label updates the quality checklist", async
   await expect(page.getByTestId("draft-faq-add-button")).toBeVisible();
   await expect(page.getByTestId("draft-faq-add-button")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "FAQ質問の具体性" }),
+  ).toContainText("修正先: FAQ質問");
   await page
     .getByTestId("quality-check-failed")
     .filter({ hasText: "FAQ質問の具体性" })
@@ -431,6 +438,9 @@ test("editing the title to a generic label updates the quality checklist", async
   await expect(page.getByTestId("draft-faq-question-0")).toBeVisible();
   await expect(page.getByTestId("draft-faq-question-0")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "FAQ回答の実務具体性" }),
+  ).toContainText("修正先: FAQ回答");
   await page
     .getByTestId("quality-check-failed")
     .filter({ hasText: "FAQ回答の実務具体性" })
@@ -439,6 +449,9 @@ test("editing the title to a generic label updates the quality checklist", async
   await expect(page.getByTestId("draft-faq-answer-0")).toBeVisible();
   await expect(page.getByTestId("draft-faq-answer-0")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "AI風の汎用表現" }),
+  ).toContainText("修正先: 本文HTML");
   await page
     .getByTestId("quality-check-failed")
     .filter({ hasText: "AI風の汎用表現" })

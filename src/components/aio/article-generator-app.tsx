@@ -2719,16 +2719,24 @@ function ArticlePreview({
                 <div className="font-semibold">{check.label}</div>
                 <div className="mt-0.5">{check.detail}</div>
                 {!check.passed ? (
-                  <Button
-                    data-testid="quality-edit-draft-button"
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => onEditDraft(check.id)}
-                  >
-                    編集タブへ
-                  </Button>
+                  <>
+                    <div
+                      data-testid="quality-edit-guidance"
+                      className="mt-2 rounded border border-amber-200 bg-white/70 px-2 py-1 text-[11px] font-medium text-amber-950"
+                    >
+                      {qualityCheckEditGuidance(check.id)}
+                    </div>
+                    <Button
+                      data-testid="quality-edit-draft-button"
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => onEditDraft(check.id)}
+                    >
+                      編集タブへ
+                    </Button>
+                  </>
                 ) : null}
               </div>
             ))}
@@ -3373,6 +3381,46 @@ function draftEditorTargetTestId(checkId: string) {
   }
 
   return "draft-body-html-textarea";
+}
+
+function qualityCheckEditGuidance(checkId: string) {
+  if (checkId.startsWith("title-")) {
+    return "修正先: タイトル。テーマ、一次情報、読者の判断軸が伝わる表現にします。";
+  }
+
+  if (checkId === "faq-count") {
+    return "修正先: FAQ。読者の不安、比較、次の行動に答える質問を追加します。";
+  }
+
+  if (checkId === "faq-answer-specificity") {
+    return "修正先: FAQ回答。条件、例、注意点、判断基準を足します。";
+  }
+
+  if (checkId.startsWith("faq-")) {
+    return "修正先: FAQ質問。テーマ、一次情報、競合差分に基づく具体的な問いにします。";
+  }
+
+  if (checkId === "primary-info-digestion") {
+    return "修正先: 本文HTML。一次情報の固有語彙を残しつつ、読者向けの判断材料や注意点へ言い換えます。";
+  }
+
+  if (checkId === "reference-info-digestion") {
+    return "修正先: 本文HTML。参照元の事実は保ち、定義、条件、注意点、出典注記として再構成します。";
+  }
+
+  if (checkId === "competitor-insight-digestion") {
+    return "修正先: 本文HTML。競合文を写さず、比較軸、不足論点、差別化ポイントへ再構成します。";
+  }
+
+  if (checkId.includes("reference")) {
+    return "修正先: 本文HTML。参照情報の固有語彙を、定義、判断基準、具体例、注意点に戻します。";
+  }
+
+  if (checkId.includes("competitor")) {
+    return "修正先: 本文HTML。競合情報を比較軸、不足論点、差別化ポイントとして整理します。";
+  }
+
+  return "修正先: 本文HTML。一般論を減らし、具体例、判断基準、注意点、出典への意識を足します。";
 }
 
 function uniqueStrings(items: string[]) {
