@@ -83,6 +83,24 @@ const mechanicalHeadingLabels = [
   "注意点",
 ];
 
+const vagueHeadingRoots = [
+  "導入",
+  "活用",
+  "運用",
+  "作成",
+  "生成",
+  "改善",
+  "比較",
+  "選び方",
+  "注意点",
+  "ポイント",
+  "メリット",
+  "デメリット",
+  "方法",
+  "流れ",
+  "手順",
+];
+
 const editorialAnchorPatterns = [
   /(事例|現場|相談|支援現場|問い合わせ|ヒアリング)/,
   /(判断基準|チェック|手順|比較|選定|優先順位)/,
@@ -687,7 +705,18 @@ function isThinHeadingSection(section: { heading: string; bodyText: string }) {
 
 function isMechanicalHeading(heading: string) {
   const normalized = heading.replace(/\s+/g, "");
-  return mechanicalHeadingLabels.some((label) => normalized === label);
+  if (mechanicalHeadingLabels.some((label) => normalized === label)) {
+    return true;
+  }
+
+  return vagueHeadingRoots.some(
+    (root) =>
+      normalized === `${root}について` ||
+      normalized === `${root}とは` ||
+      normalized === `${root}のポイント` ||
+      normalized === `${root}の流れ` ||
+      normalized === `${root}の方法`,
+  );
 }
 
 function countItems(items: string[]) {

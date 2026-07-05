@@ -42,6 +42,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "Make headings editorial and useful, not mechanical keyword strings. Vary sentence rhythm and endings so the body does not read like a template.",
       "Do not start many consecutive sentences with the same connector such as また, さらに, そのため, 一方で, or このように. Mix short direct sentences, examples, conditions, and caveats instead.",
       "Avoid generic H2/H3 labels such as 重要なポイント, メリット, デメリット, まとめ, 概要, 基本, 活用方法, or 注意点. Make each heading convey a concrete reader decision, failure pattern, comparison axis, or field-specific insight.",
+      "Do not use vague heading patterns such as 導入について, 注意点について, 活用方法, or メリットについて. Replace them with headings that reveal the editorial angle, such as which decision, failure, comparison, or field observation the section explains.",
       "In aio_score_self_evaluation, explicitly judge concreteness, use of first-party information, source fidelity, and absence of AI-like generic phrasing.",
       "Respect payload.form.wordCount as the target Japanese character count. Natural variance is acceptable, but stay close to the requested scale.",
       "Respect payload.form.imageCount when creating image_prompts. Return zero image_prompts when imageCount is 0, otherwise return exactly that many prompts up to 3.",

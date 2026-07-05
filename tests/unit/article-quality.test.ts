@@ -423,6 +423,26 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(92);
   });
 
+  test("penalizes vague about-style headings that hide the editorial angle", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、最初の400文字以内に判断基準を示す必要があります。当社の支援現場では、10件中6件で承認担当と出典確認の手順が曖昧になり、公開直前の手戻りが起きていました。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、参照元にない数字を条件なしで書かないことです。</li></ul>
+      <h2>導入について</h2>
+      <p>担当者、期間、費用を分けて確認します。現場では、承認者が決まらないままWordPress投稿直前に手戻りになる相談があります。</p>
+      <h2>注意点について</h2>
+      <p>FAQとして、参照元にない情報をどう扱うべきかがあります。未確認情報は断定せず、出典と自社経験を分けます。</p>
+      <p>出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "editorial-headings", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("機械的な見出し");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("flags strong claims that need conditions or evidence", () => {
     const result = evaluateArticleQuality(`
       <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
