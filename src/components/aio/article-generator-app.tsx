@@ -1821,6 +1821,7 @@ export function ArticleGeneratorApp() {
                     <ArticlePreview
                       draft={draft}
                       imageRegenerating={imageRegenerating}
+                      onEditDraft={() => setTab("edit")}
                       onImproveQuality={(instruction) => {
                         setArticleRegenerationInstruction(instruction);
                         setArticleRegenerationDialogOpen(true);
@@ -2477,11 +2478,13 @@ function GenerationLogsPanel({
 function ArticlePreview({
   draft,
   imageRegenerating,
+  onEditDraft,
   onImproveQuality,
   onRegenerateImages,
 }: {
   draft: ArticleDraft;
   imageRegenerating: boolean;
+  onEditDraft: () => void;
   onImproveQuality: (instruction: string) => void;
   onRegenerateImages: () => void;
 }) {
@@ -2704,6 +2707,18 @@ function ArticlePreview({
               >
                 <div className="font-semibold">{check.label}</div>
                 <div className="mt-0.5">{check.detail}</div>
+                {!check.passed ? (
+                  <Button
+                    data-testid="quality-edit-draft-button"
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2"
+                    onClick={onEditDraft}
+                  >
+                    編集タブへ
+                  </Button>
+                ) : null}
               </div>
             ))}
           </div>

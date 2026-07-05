@@ -4,25 +4,24 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Phase: Autonomous UX and quality improvement loop in progress
-- Last updated: 2026-07-05 14:47 +09:00
+- Last updated: 2026-07-05 14:51 +09:00
 
 ## 1. Current Goal
 現在の開発目的：
 
-既存アプリを「機能・画面遷移の安定性」「業務利用価値」「AIっぽさを抑えた生成記事品質」の3指標で100点に近づける。今回は、生成後の編集品質チェックでユーザーが改善優先度を見失わないよう、未達項目を先頭表示し、改善件数サマリーを追加した。
+既存アプリを「機能・画面遷移の安定性」「業務利用価値」「AIっぽさを抑えた生成記事品質」の3指標で100点に近づける。今回は、生成後の編集品質チェックで見つけた未達項目から、すぐ編集フォームへ移れる導線を追加した。
 
 ## 2. Current Branch / Commit
 - Branch: codex/persistent-quality-gate-operations
-- Latest commit: current HEAD after `Detect formulaic AI sentence openings`
+- Latest commit: current HEAD after `Prioritize failed article quality checks`
 - Last known good commit: current HEAD after `npm run quality`
 
 ## 3. What Was Done
 今回完了したこと：
 
-- 編集品質チェックに「改善優先」サマリーを追加した。
-- 未達チェックを先頭、達成チェックを後ろに並べるようにして、生成後にユーザーが最初に直すべき項目を見つけやすくした。
-- 未達/達成チェックに`data-testid`を付け、Playwrightで表示順を検証できるようにした。
-- E2Eに、タイトルとFAQを汎用化した際に「改善優先」サマリーが出て、未達チェックが先頭に来ることを追加検証した。
+- 編集品質チェックの未達項目に「編集タブへ」ボタンを追加した。
+- 「品質改善して再作成」だけでなく、ユーザーが手編集で直したい場合にも即座に編集フォームへ移動できるようにした。
+- E2Eに、未達チェックから編集タブへ移動し、タイトル編集欄が表示されることを追加検証した。
 
 ## 4. Files Changed
 主な変更ファイル：
@@ -37,7 +36,7 @@
 - `npm run quality`が成功しており、型、Lint、テスト不正検知、単体/結合テスト、契約テスト、coverage、Playwright E2E、本番ビルドは通過済み。
 - Playwright E2Eは35件成功し、PCブラウザの主要フロー、生成、編集、保存、承認、WordPress投稿、エラー復旧、コピー/HTML出力、ログ復元、アップロード失敗復旧を確認済み。
 - 通常のローカル品質確認対象は整備済み。
-- 今回のUX改善により、編集品質チェックで未達項目が先に見えるため、生成後の再作成・手編集の判断が速くなる。
+- 今回のUX改善により、編集品質チェックで未達項目を確認した後、再作成か手編集かを選びやすくなった。
 
 ## 6. Known Issues
 既知の問題：
@@ -45,7 +44,8 @@
 - 外部OpenAI / Supabase / WordPressのライブ契約テストは、本番データ保護のためsandbox環境変数が揃わない限りfail-closedする。
 - `npm run test:live:readiness`は、sandbox用の確認環境変数がない状態では成功しない想定。
 - 本番DB・本番API・本番ユーザーデータをテストで変更しないこと。
-- 今回のUX改善はmock E2Eで検証済みだが、実OpenAIのライブ生成記事に対する編集者目線の視覚確認はsandbox契約テスト環境が揃うまで未検証。
+- 今回のUX改善はmock E2Eで検証済みだが、未達チェックごとの最適な編集フィールドへの個別フォーカスは未実装。
+- 実OpenAIのライブ生成記事に対する編集者目線の視覚確認はsandbox契約テスト環境が揃うまで未検証。
 - 3指標すべて100点の完了条件は未達。次ループでも機能棚卸し、実ブラウザ確認、生成品質改善を継続する。
 
 ## 7. Bugbot Findings
@@ -82,8 +82,8 @@ npm run quality
 
 次のAIが最初にやるべきこと：
 
-- Claude Codeは、編集品質チェックの未達優先表示が見やすく、情報量過多になっていないかをレビューする。
-- 次の改善候補は、実ブラウザでの視覚確認、OpenAI sandboxでのライブ生成品質確認、または品質チェックの失敗項目から直接編集タブへ誘導するUX改善。
+- Claude Codeは、未達チェック内の「編集タブへ」導線が邪魔にならず、品質改善再作成ボタンとの使い分けが自然かをレビューする。
+- 次の改善候補は、実ブラウザでの視覚確認、OpenAI sandboxでのライブ生成品質確認、または品質チェック項目ごとにタイトル/本文/FAQの該当入力へフォーカスするUX改善。
 - 外部APIの残リスクを詰める場合は、productionではなくsandbox環境を用意し、`npm run test:live:readiness`が通る状態にしてからライブ契約テストを実行する。
 
 ## 10. Do Not Touch
