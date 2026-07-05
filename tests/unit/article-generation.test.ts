@@ -186,6 +186,7 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("first 400 Japanese characters answer-first");
     expect(call?.instructions).toContain("at least three different types of editorial evidence");
     expect(call?.instructions).toContain("Avoid generic H2/H3 labels");
+    expect(call?.instructions).toContain("Make title candidates specific and editorial");
     expect(call?.instructions).toContain("Do not use vague heading patterns");
     expect(call?.instructions).toContain("Avoid thin H2/H3 sections");
     expect(call?.instructions).toContain("at least two concrete signals");
@@ -226,6 +227,69 @@ describe("generateAioArticle", () => {
 
     expect(result.aio_score_self_evaluation.score).toBeLessThan(90);
     expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain("凡庸表現");
+  });
+
+  test("caps self-evaluation when generated titles are generic", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      selected_title: "重要なポイント",
+      title_candidates: ["重要なポイント", "概要", "まとめ"],
+      aio_score_self_evaluation: {
+        score: 99,
+        strengths: ["High claimed score"],
+        improvements: [],
+      },
+    });
+
+    const result = await generateAioArticle({
+      form: sampleFormPayload,
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
+    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
+      "タイトルが汎用的です",
+    );
+  });
+
+  test("caps self-evaluation when title candidates ignore the input theme signals", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      selected_title: "AIO workflow design checklist",
+      title_candidates: [
+        "AIO workflow design checklist",
+        "Editorial review checklist",
+        "AI search article operations",
+      ],
+      aio_score_self_evaluation: {
+        score: 99,
+        strengths: ["High claimed score"],
+        improvements: [],
+      },
+    });
+
+    const result = await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        theme: "一人親方の労災保険。キーワード: 加入条件、給付基礎日額、費用",
+        primaryInfo:
+          "当社の支援現場では、一人親方の事務作業はLINEでのやり取りが多く、帳票不在も多い。",
+      },
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
+    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
+      "タイトル候補に入力テーマ/一次情報の固有語彙",
+    );
   });
 
   test("caps self-evaluation when the generated body ignores provided primary information", async () => {
