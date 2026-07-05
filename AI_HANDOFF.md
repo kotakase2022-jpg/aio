@@ -4,24 +4,24 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Phase: Autonomous UX and quality improvement loop in progress
-- Last updated: 2026-07-05 15:00 +09:00
+- Last updated: 2026-07-05 15:05 +09:00
 
 ## 1. Current Goal
 現在の開発目的：
 
-既存アプリを「機能・画面遷移の安定性」「業務利用価値」「AIっぽさを抑えた生成記事品質」の3指標で100点に近づける。今回は、生成後の編集品質チェックから該当入力欄へ移る導線について、タイトルだけでなくFAQ回答・本文HTMLのフォーカスもE2Eで固定した。
+既存アプリを「機能・画面遷移の安定性」「業務利用価値」「AIっぽさを抑えた生成記事品質」の3指標で100点に近づける。今回は、生成後の編集品質チェックから該当入力欄へ移る導線について、FAQ件数とFAQ質問のフォーカスもE2Eで固定した。
 
 ## 2. Current Branch / Commit
 - Branch: codex/persistent-quality-gate-operations
-- Latest commit: current HEAD after `Link quality checks to draft editing`
+- Latest commit: current HEAD after `Cover remaining FAQ quality focus paths`
 - Last known good commit: current HEAD after `npm run quality`
 
 ## 3. What Was Done
 今回完了したこと：
 
-- E2Eで、タイトル品質の未達チェックからタイトル入力欄へフォーカスされることを確認した。
-- E2Eで、FAQ回答の未達チェックからFAQ回答入力欄へフォーカスされることを確認した。
-- E2Eで、本文のAI風汎用表現チェックから本文HTML入力欄へフォーカスされることを確認した。
+- E2Eで、FAQが3件未満の未達チェックからFAQ追加ボタンへフォーカスされることを確認した。
+- E2Eで、汎用的なFAQ質問の未達チェックからFAQ質問入力欄へフォーカスされることを確認した。
+- 既存のタイトル、FAQ回答、本文HTMLフォーカス確認と同じフローに統合し、品質チェックから編集対象へ戻る主要導線を広く回帰検知できるようにした。
 
 ## 4. Files Changed
 主な変更ファイル：
@@ -35,7 +35,7 @@
 - `npm run quality`が成功しており、型、Lint、テスト不正検知、単体/結合テスト、契約テスト、coverage、Playwright E2E、本番ビルドは通過済み。
 - Playwright E2Eは35件成功し、PCブラウザの主要フロー、生成、編集、保存、承認、WordPress投稿、エラー復旧、コピー/HTML出力、ログ復元、アップロード失敗復旧を確認済み。
 - 通常のローカル品質確認対象は整備済み。
-- 今回のE2E強化により、品質チェックから該当編集欄へ移る主要3導線（タイトル・FAQ回答・本文HTML）が回帰検知されるようになった。
+- 今回のE2E強化により、品質チェックから該当編集欄へ移る主要5導線（タイトル・FAQ件数・FAQ質問・FAQ回答・本文HTML）が回帰検知されるようになった。
 
 ## 6. Known Issues
 既知の問題：
@@ -43,7 +43,7 @@
 - 外部OpenAI / Supabase / WordPressのライブ契約テストは、本番データ保護のためsandbox環境変数が揃わない限りfail-closedする。
 - `npm run test:live:readiness`は、sandbox用の確認環境変数がない状態では成功しない想定。
 - 本番DB・本番API・本番ユーザーデータをテストで変更しないこと。
-- 今回のUX改善はmock E2Eでタイトル・FAQ回答・本文HTMLフォーカスを検証済み。FAQ件数/FAQ質問への個別フォーカスE2Eは未追加。
+- 今回のUX改善はmock E2Eでタイトル・FAQ件数・FAQ質問・FAQ回答・本文HTMLフォーカスを検証済み。
 - 実OpenAIのライブ生成記事に対する編集者目線の視覚確認はsandbox契約テスト環境が揃うまで未検証。
 - 3指標すべて100点の完了条件は未達。次ループでも機能棚卸し、実ブラウザ確認、生成品質改善を継続する。
 
@@ -66,7 +66,7 @@ npm run quality
 
 - `npm run lint`: 成功
 - `npm run typecheck`: 成功
-- `npx playwright test tests/e2e/aio-workflow.spec.ts -g "editing the title to a generic label updates the quality checklist"`: 成功（1 passed）
+- `npx playwright test tests/e2e/aio-workflow.spec.ts -g "editing the title to a generic label updates the quality checklist"`: 成功（1 passed、FAQ件数/FAQ質問フォーカス確認を含む）
 - `npm run quality`: 成功
 - `npm run typecheck`: 成功（quality内）
 - `npm run lint`: 成功（quality内）
@@ -81,8 +81,8 @@ npm run quality
 
 次のAIが最初にやるべきこと：
 
-- Claude Codeは、品質チェックIDと編集欄フォーカス先の対応が自然か、特にFAQ件数/FAQ質問の導線をレビューする。
-- 次の改善候補は、FAQ件数/FAQ質問フォーカスのE2E追加、実ブラウザでの視覚確認、またはOpenAI sandboxでのライブ生成品質確認。
+- Claude Codeは、品質チェックIDと編集欄フォーカス先の対応が自然か、今回追加したFAQ件数/FAQ質問のE2Eをレビューする。
+- 次の改善候補は、実ブラウザでの視覚確認、OpenAI sandboxでのライブ生成品質確認、または生成記事の「一次情報らしさ」をさらに測るテスト追加。
 - 外部APIの残リスクを詰める場合は、productionではなくsandbox環境を用意し、`npm run test:live:readiness`が通る状態にしてからライブ契約テストを実行する。
 
 ## 10. Do Not Touch
