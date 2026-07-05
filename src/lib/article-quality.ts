@@ -37,6 +37,16 @@ const genericPhrases = [
   "理解しておきましょう",
 ];
 
+const verboseAiPhrases = [
+  "することができます",
+  "することが可能です",
+  "することが重要です",
+  "することが大切です",
+  "可能となります",
+  "有効です",
+  "役立ちます",
+];
+
 const unsupportedStrongClaims = [
   "必ず",
   "絶対に",
@@ -251,6 +261,7 @@ export function evaluateArticleQuality(
   const sentenceEndings = extractSentenceEndings(text);
   const leadingConnectors = extractLeadingConnectors(text);
   const genericPhraseHits = countPhraseHits(text, genericPhrases);
+  const verboseAiPhraseHits = countPhraseHits(text, verboseAiPhrases);
   const unsupportedClaimHits = countPhraseHits(text, unsupportedStrongClaims);
   const hasNumbers = /[0-9０-９]/.test(text);
   const hasConcreteAnchors =
@@ -340,6 +351,15 @@ export function evaluateArticleQuality(
         genericPhraseHits === 0
           ? "凡庸なAI風表現は目立ちません。"
           : `${genericPhraseHits}件の凡庸表現候補があります。`,
+    },
+    {
+      id: "verbose-ai-phrasing",
+      label: "AI風の冗長表現",
+      passed: verboseAiPhraseHits <= 1,
+      detail:
+        verboseAiPhraseHits <= 1
+          ? "「することができます」型の冗長表現は目立ちません。"
+          : `${verboseAiPhraseHits}件の冗長なAI風表現候補があります。「できる」「確認します」「分けます」など短く具体的な述語に置き換えると自然になります。`,
     },
     {
       id: "concrete-detail",
@@ -504,6 +524,7 @@ export function evaluateArticleQuality(
     100 -
       failed.length * 8 -
       Math.min(genericPhraseHits, 6) * 2 -
+      Math.min(verboseAiPhraseHits, 6) * 2 -
       Math.min(unsupportedClaimHits, 4) * 2,
   );
 

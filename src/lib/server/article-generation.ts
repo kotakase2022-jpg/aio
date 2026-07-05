@@ -34,6 +34,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "When primaryInfo is provided, weave it naturally into the introduction, examples, body sections, and key takeaways. Do not overstate it as universal fact; attribute it as company experience or observed tendency when appropriate.",
       "Make the first 400 Japanese characters answer-first: state the conclusion, definition, or most important editorial judgment before background explanation.",
       "Avoid commodity content and generic AI-like filler. Do not lean on vague phrases such as 近年, 重要です, 注目されています, と言えるでしょう, いかがでしょうか, or 本記事では unless they are genuinely necessary and supported by the material.",
+      "Avoid verbose AI-like predicates such as することができます, することが可能です, 可能となります, or することが重要です. Prefer shorter, more concrete verbs such as 確認します, 分けます, 判断します, 減らせます, or できます when accurate.",
       "Avoid unsupported strong claims such as 必ず, 絶対に, 完全に, 誰でも, 唯一, すべて解決, or 確実に unless the source material proves them and the sentence includes conditions or caveats.",
       "Write as a human editor who has interviewed the business: each major section should include at least one concrete decision criterion, field example, operational caveat, failure pattern, or source-backed detail.",
       "Avoid thin H2/H3 sections. Every H2/H3 body should include at least two concrete signals such as a number, field observation, decision criterion, failure/risk note, team/cost/timing detail, or source/caveat note.",
