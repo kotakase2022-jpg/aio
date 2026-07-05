@@ -1150,6 +1150,17 @@ export function ArticleGeneratorApp() {
     );
   }
 
+  function focusDraftEditorForQualityCheck(checkId: string) {
+    setTab("edit");
+    window.setTimeout(() => {
+      const target = document.querySelector<HTMLElement>(
+        `[data-testid="${draftEditorTargetTestId(checkId)}"]`,
+      );
+      target?.focus();
+      target?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 0);
+  }
+
   async function fetchInputs(
     inputs: KeyValueInput[],
     files: AttachedFileInput[] = [],
@@ -1821,7 +1832,7 @@ export function ArticleGeneratorApp() {
                     <ArticlePreview
                       draft={draft}
                       imageRegenerating={imageRegenerating}
-                      onEditDraft={() => setTab("edit")}
+                      onEditDraft={(checkId) => focusDraftEditorForQualityCheck(checkId)}
                       onImproveQuality={(instruction) => {
                         setArticleRegenerationInstruction(instruction);
                         setArticleRegenerationDialogOpen(true);
@@ -2484,7 +2495,7 @@ function ArticlePreview({
 }: {
   draft: ArticleDraft;
   imageRegenerating: boolean;
-  onEditDraft: () => void;
+  onEditDraft: (checkId: string) => void;
   onImproveQuality: (instruction: string) => void;
   onRegenerateImages: () => void;
 }) {
@@ -2714,7 +2725,7 @@ function ArticlePreview({
                     variant="secondary"
                     size="sm"
                     className="mt-2"
-                    onClick={onEditDraft}
+                    onClick={() => onEditDraft(check.id)}
                   >
                     編集タブへ
                   </Button>
@@ -3342,6 +3353,26 @@ function combineQualityEvaluations(
       ...faqEvaluation.improvements,
     ]),
   };
+}
+
+function draftEditorTargetTestId(checkId: string) {
+  if (checkId.startsWith("title-")) {
+    return "draft-title-input";
+  }
+
+  if (checkId === "faq-count") {
+    return "draft-faq-add-button";
+  }
+
+  if (checkId === "faq-answer-specificity") {
+    return "draft-faq-answer-0";
+  }
+
+  if (checkId.startsWith("faq-")) {
+    return "draft-faq-question-0";
+  }
+
+  return "draft-body-html-textarea";
 }
 
 function uniqueStrings(items: string[]) {

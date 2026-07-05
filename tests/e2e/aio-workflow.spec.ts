@@ -405,6 +405,7 @@ test("editing the title to a generic label updates the quality checklist", async
   );
   await page.getByTestId("quality-edit-draft-button").first().click();
   await expect(page.getByTestId("draft-title-input")).toBeVisible();
+  await expect(page.getByTestId("draft-title-input")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
   await page.getByTestId("quality-improve-regenerate-button").click();
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
