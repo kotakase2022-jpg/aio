@@ -137,6 +137,7 @@ export function ArticleGeneratorApp() {
   const [logsError, setLogsError] = useState("");
   const [saving, setSaving] = useState(false);
   const [draftActionMessage, setDraftActionMessage] = useState("");
+  const [draftActionError, setDraftActionError] = useState("");
   const [posting, setPosting] = useState(false);
   const [imageRegenerating, setImageRegenerating] = useState(false);
   const [imageRegenerationDialogOpen, setImageRegenerationDialogOpen] = useState(false);
@@ -665,9 +666,18 @@ export function ArticleGeneratorApp() {
 
   async function saveCurrentDraft() {
     if (!draft) return;
+    const validationMessage = validateDraftForSubmission(draft);
+    if (validationMessage) {
+      setActiveError("");
+      setDraftActionMessage("");
+      setDraftActionError(validationMessage);
+      setTab("edit");
+      return;
+    }
     setSaving(true);
     setActiveError("");
     setDraftActionMessage("");
+    setDraftActionError("");
     try {
       const saved = await apiPost<{ draft: ArticleDraft }>("/api/save-draft", {
         draft: prepareDraftForSave(draft),
@@ -683,9 +693,18 @@ export function ArticleGeneratorApp() {
 
   async function approveCurrentDraft() {
     if (!draft) return;
+    const validationMessage = validateDraftForSubmission(draft);
+    if (validationMessage) {
+      setActiveError("");
+      setDraftActionMessage("");
+      setDraftActionError(validationMessage);
+      setTab("edit");
+      return;
+    }
     setSaving(true);
     setActiveError("");
     setDraftActionMessage("");
+    setDraftActionError("");
     try {
       const approved = await apiPost<{ draft: ArticleDraft }>("/api/approve-draft", {
         draftId: draft.id,
@@ -740,9 +759,19 @@ export function ArticleGeneratorApp() {
 
   async function postToWordpress() {
     if (!draft || !connection) return;
+    const validationMessage = validateDraftForSubmission(draft);
+    if (validationMessage) {
+      setActiveError("");
+      setWpPostMessage("");
+      setDraftActionMessage("");
+      setDraftActionError(validationMessage);
+      setTab("edit");
+      return;
+    }
     setPosting(true);
     setActiveError("");
     setWpPostMessage("");
+    setDraftActionError("");
     try {
       const result = await apiPost<{ postUrl: string; draft: ArticleDraft }>(
         "/api/wordpress/post",
@@ -1821,6 +1850,15 @@ export function ArticleGeneratorApp() {
                       aria-live="polite"
                     >
                       {draftActionMessage}
+                    </div>
+                  ) : null}
+                  {draftActionError ? (
+                    <div
+                      data-testid="draft-action-error"
+                      className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-800"
+                      aria-live="polite"
+                    >
+                      {draftActionError}
                     </div>
                   ) : null}
                 </CardContent>
@@ -3235,6 +3273,28 @@ function buildEditorialHandoffText(draft: ArticleDraft) {
     "本文HTML:",
     renderArticleHtml(draft),
   ].join("\n");
+}
+
+function validateDraftForSubmission(draft: ArticleDraft) {
+  const missingFields = [
+    draft.editedTitle.trim() ? "" : "タイトル",
+    draft.editedSlug.trim() ? "" : "スラッグ",
+    stripHtmlText(draft.editedBodyHtml).trim() ? "" : "本文HTML",
+  ].filter(Boolean);
+
+  if (missingFields.length === 0) {
+    return "";
+  }
+
+  return `${missingFields.join("、")}を入力してください。保存・承認・WordPress投稿の前に編集内容を確認してください。`;
+}
+
+function stripHtmlText(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
 }
 
 function safeDownloadName(value: string) {

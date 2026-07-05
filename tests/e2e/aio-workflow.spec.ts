@@ -1270,6 +1270,46 @@ test("draft save failure keeps edits visible and recoverable", async ({ page }) 
   expect(errors()).toEqual([]);
 });
 
+test("invalid edited drafts are blocked before save or approval requests", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for invalid draft validation.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("draft-edit-tab").click();
+  await page.getByTestId("draft-title-input").fill("");
+  await page.getByTestId("save-draft-button").click();
+
+  expect(calls.saveDraft).toBe(0);
+  await expect(page.getByTestId("draft-action-error")).toContainText(
+    "タイトルを入力してください。",
+  );
+  await expect(page.getByTestId("draft-title-input")).toBeVisible();
+
+  await page.getByTestId("approve-draft-button").click();
+  expect(calls.approveDraft).toBe(0);
+  await expect(page.getByTestId("draft-action-error")).toContainText(
+    "保存・承認・WordPress投稿の前に編集内容を確認してください。",
+  );
+  await expect(page.getByTestId("wordpress-post-button")).toBeDisabled();
+  expect(errors()).toEqual([]);
+});
+
 test("draft approval failure keeps the editable draft visible and recoverable", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/approve-draft$/],
