@@ -69,6 +69,9 @@ describe("WordPress REST API contract", () => {
           categories: [11],
           featured_media: 301,
         });
+        const content = (request.json as { content: string }).content;
+        expect(content).toContain('src="http://localhost/uploads/generated/inline-contract.png"');
+        expect(content).not.toContain("aio-image:inline-contract");
         expect((request.json as { tags: number[] }).tags).toHaveLength(3);
         sendJson(response, { link: `${server.origin}/aio-content-operations-guide/` }, 201);
         return;
@@ -88,6 +91,8 @@ describe("WordPress REST API contract", () => {
       });
       const draft = createSampleDraft({
         status: "approved",
+        editedBodyHtml:
+          '<h2>Contract body</h2><figure data-image-slot="inline-1"><img src="aio-image:inline-contract" alt="Inline"></figure><p><img src="/uploads/generated/inline-contract.png" alt="Inline duplicate"></p>',
         images: [
           {
             id: "featured-contract",
@@ -96,6 +101,15 @@ describe("WordPress REST API contract", () => {
             path: "generated/featured.png",
             prompt: "contract image",
             altText: "Contract featured image",
+            source: "generated",
+          },
+          {
+            id: "inline-contract",
+            slot: "inline-1",
+            url: "/uploads/generated/inline-contract.png",
+            path: "generated/inline-contract.png",
+            prompt: "inline image",
+            altText: "Contract inline image",
             source: "generated",
           },
         ],
@@ -250,6 +264,80 @@ describe("WordPress REST API contract", () => {
       const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
       expect(requestNames).toContain("POST /wp-json/wp/v2/media");
       expect(requestNames).not.toContain("POST /wp-json/wp/v2/posts");
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("skips featured media upload when the featured image URL is empty", async () => {
+    const server = await createMockHttpServer((request, response) => {
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, []);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, { id: 11, name: (request.json as { name: string }).name }, 201);
+        return;
+      }
+
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/tags") {
+        sendJson(response, []);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/tags") {
+        sendJson(response, { id: 21, name: (request.json as { name: string }).name }, 201);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/posts") {
+        expect(request.json).toMatchObject({
+          status: "draft",
+        });
+        expect(request.json).not.toHaveProperty("featured_media");
+        sendJson(response, { link: `${server.origin}/post-without-featured-media/` }, 201);
+        return;
+      }
+
+      sendJson(response, { message: `Unexpected route ${request.method} ${request.pathname}` }, 500);
+    });
+
+    try {
+      const { saveWordpressConnection, publishDraftToWordpress } = await import(
+        "@/lib/server/wordpress"
+      );
+      const connection = await saveWordpressConnection({
+        siteUrl: server.origin,
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      });
+      const draft = createSampleDraft({
+        status: "approved",
+        images: [
+          {
+            id: "featured-empty-url",
+            slot: "featured",
+            url: "",
+            path: "data-url-omitted",
+            prompt: "omitted image",
+            altText: "Omitted featured image",
+            source: "generated",
+          },
+        ],
+      });
+
+      const result = await publishDraftToWordpress({
+        draft,
+        connectionId: connection.id,
+        status: "draft",
+        origin: "http://localhost",
+      });
+
+      expect(result.postUrl).toBe(`${server.origin}/post-without-featured-media/`);
+      const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
+      expect(requestNames).not.toContain("POST /wp-json/wp/v2/media");
+      expect(requestNames).toContain("POST /wp-json/wp/v2/posts");
     } finally {
       await server.close();
     }
