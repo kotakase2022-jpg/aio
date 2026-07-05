@@ -393,10 +393,14 @@ test("editing the title to a generic label updates the quality checklist", async
   await page.getByTestId("draft-title-input").fill("重要なポイント");
   await page.getByTestId("draft-faq-question-0").fill("メリットは何ですか？");
   await page.getByTestId("draft-faq-answer-0").fill("重要です。");
+  await page
+    .getByTestId("draft-body-html-textarea")
+    .fill("<h2>重要なポイント</h2><p>近年、多くの企業で注目されています。重要です。</p>");
   await page.getByTestId("draft-preview-tab").click();
 
   await expect(page.getByText("タイトルの具体性")).toBeVisible();
   await expect(page.getByText(/タイトルが汎用的です/)).toBeVisible();
+  await expect(page.getByText("AI風の汎用表現")).toBeVisible();
   await expect(page.getByText("FAQ回答の実務具体性")).toBeVisible();
   await expect(page.getByText(/FAQ回答が一般論寄りです/)).toBeVisible();
   await expect(page.getByTestId("quality-priority-summary")).toContainText("改善優先:");
@@ -406,6 +410,22 @@ test("editing the title to a generic label updates the quality checklist", async
   await page.getByTestId("quality-edit-draft-button").first().click();
   await expect(page.getByTestId("draft-title-input")).toBeVisible();
   await expect(page.getByTestId("draft-title-input")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "FAQ回答の実務具体性" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-faq-answer-0")).toBeVisible();
+  await expect(page.getByTestId("draft-faq-answer-0")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "AI風の汎用表現" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
   await page.getByTestId("quality-improve-regenerate-button").click();
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
