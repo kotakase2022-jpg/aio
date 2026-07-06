@@ -241,7 +241,7 @@ describe("article generation job runner", () => {
     vi.mocked(generateAioArticle).mockResolvedValueOnce(sampleArticleResult);
     vi.mocked(createArticleImagesForDraft).mockImplementationOnce(async (_article, _form, options) => {
       const error = new Error("Image API timeout");
-      options?.onImageFailure?.("featured", error, {
+      options?.onImageFailure?.({
         slot: "featured",
         prompt: "Failed featured prompt",
         altText: "Failed featured image",

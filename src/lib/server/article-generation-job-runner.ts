@@ -99,7 +99,7 @@ export async function runArticleGenerationJob(jobId: string) {
     await updateGenerationStep(jobId, "images", "running");
     const imageFailures: ArticleImageFailure[] = [];
     const images = await createArticleImagesForDraft(article, freshJob.inputPayload, {
-      onImageFailure: (_slot, _error, failure) => {
+      onImageFailure: (failure) => {
         imageFailures.push(failure);
       },
     });

@@ -99,8 +99,12 @@ describe("article image helpers", () => {
         imageCount: 2,
       },
       {
-        onImageFailure: (slot, error, failure) => {
-          failures.push(`${slot}:${error instanceof Error ? error.message : "unknown"}`);
+        onImageFailure: (failure) => {
+          failures.push(
+            `${failure.slot}:${
+              failure.error instanceof Error ? failure.error.message : "unknown"
+            }`,
+          );
           failedPrompts.push(failure.prompt);
         },
       },

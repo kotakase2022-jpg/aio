@@ -43,11 +43,7 @@ export async function createArticleImagesForDraft(
   article: ArticleGenerationResult,
   form: ArticleFormPayload,
   options: {
-    onImageFailure?: (
-      slot: "featured" | "inline-1" | "inline-2",
-      error: unknown,
-      failure: ArticleImageFailure,
-    ) => void;
+    onImageFailure?: (failure: ArticleImageFailure) => void;
   } = {},
 ) {
   const imageCount = normalizeImageCount(form.imageCount);
@@ -91,7 +87,7 @@ export async function createArticleImagesForDraft(
       return [result.value];
     }
 
-    options.onImageFailure?.(prompts[index].slot, result.reason, {
+    options.onImageFailure?.({
       slot: prompts[index].slot,
       prompt: prompts[index].prompt,
       altText: prompts[index].alt_text,
