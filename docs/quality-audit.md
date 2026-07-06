@@ -61,11 +61,11 @@ The latest pushed GitHub Actions run for this branch also passed after the revie
 - Run: `28764371615`
 - Result: success.
 
-The current PR branch head is documentation-only commit `3af134a`. The PR is open, non-draft, and
-mergeable according to the GitHub connector. The latest hosted Actions conclusion for `3af134a`
-could not be re-read during the 2026-07-06 11:57 +09:00 pass because unauthenticated GitHub REST
-requests were rate-limited. Use GitHub UI, authenticated `gh`, or a later connector/API check for
-that final hosted-CI proof.
+The current PR branch contains handoff/status documentation commits after `0865661`. The PR is open,
+non-draft, and mergeable according to the GitHub connector. The latest hosted Actions conclusion for
+the current branch head could not be re-read during the 2026-07-06 11:57 +09:00 pass because
+unauthenticated GitHub REST requests were rate-limited. Use GitHub UI, authenticated `gh`, or a later
+connector/API check for that final hosted-CI proof.
 
 Current E2E coverage includes 45 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
@@ -145,7 +145,7 @@ recovery verification, and live generated-output quality review are not yet comp
 
 Highest-value next actions:
 
-1. Re-check the latest hosted Actions result for branch head `3af134a` using GitHub UI,
+1. Re-check the latest hosted Actions result for the current branch head using GitHub UI,
    authenticated `gh`, or a later connector/API call.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.

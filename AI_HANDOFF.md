@@ -16,10 +16,10 @@ Current objective:
 
 ## 2. Current Branch / Commit
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest pushed branch head: `3af134a Clean up handoff status wording`
+- Latest branch head: use `git log -1` or PR metadata as the source of truth; recent branch-head commits are handoff/status documentation only.
 - Latest pushed substantive code commit: `3a43b96 Address remaining review reliability findings`
 - Latest verified hosted quality-gate commit: `0865661 Record latest quality gate success`
-- Last known good local state: this working tree after the remaining P2 review findings passed local `npm run quality` and GitHub Actions passed on `0865661`; the later `3af134a` commit is documentation-only and local pre-push checks passed when it was pushed.
+- Last known good local state: this working tree after the remaining P2 review findings passed local `npm run quality` and GitHub Actions passed on `0865661`; later handoff/status documentation commits passed local pre-push checks when pushed.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 
 ## 3. What Was Done
@@ -86,9 +86,9 @@ Completed in this Codex pass:
 - Re-fetched PR #1 comments after the latest push. No new CodeRabbit inline findings were visible; the visible review comments were the previously addressed Codex/Bugbot findings.
 - Re-checked the later pushed GitHub Actions run for `0865661`; `quality-gate` completed successfully.
 - Re-fetched PR #1 comments again after `0865661`; no new CodeRabbit inline findings were visible.
-- Re-checked PR #1 after `3af134a`; PR is open, non-draft, mergeable, and points at head SHA `3af134a9fe1479c67a1adc588f985732a414b2a9`.
+- Re-checked PR #1 after the latest handoff/status documentation push; PR is open, non-draft, and mergeable.
 - Confirmed CodeRabbit is installed and functioning on PR #1: CodeRabbit posted a review-in-progress walkthrough, resolved `.coderabbit.yaml` in response to `@coderabbitai configuration`, accepted `@coderabbitai review`, and added a generated PR summary to the PR body.
-- Tried to re-check the latest hosted Actions run for `3af134a`, but unauthenticated GitHub REST calls are currently rate-limited. Do not keep polling anonymously; use GitHub UI, authenticated `gh`, or a later connector/API check if latest hosted CI proof is required.
+- Tried to re-check the latest hosted Actions run for the branch head, but unauthenticated GitHub REST calls are currently rate-limited. Do not keep polling anonymously; use GitHub UI, authenticated `gh`, or a later connector/API check if latest hosted CI proof is required.
 
 Previously completed in the broader Loop 2 + Loop 3 uncommitted diff:
 - Shared source URL normalization in `src/lib/source-url.ts`.
@@ -168,7 +168,7 @@ The pushed PR branch also includes the larger existing Loop 2 + Loop 3 diff acro
 - GitHub Actions `quality-gate` run `28764222460` for `2ecdb0d` completed successfully. The job `Typecheck, lint, tests, E2E, build` passed all steps.
 - `0865661` has been pushed to PR #1.
 - GitHub Actions `quality-gate` run `28764371615` for `0865661` completed successfully. The job `Typecheck, lint, tests, E2E, build` passed all steps.
-- `3af134a` has been pushed to PR #1 as the latest branch head. It is documentation-only and followed successful local pre-push checks, but the latest hosted Actions conclusion could not be re-read in this pass because the public GitHub REST API is rate-limited.
+- Handoff/status documentation commits after `0865661` have been pushed to PR #1 and followed successful local pre-push checks, but the latest hosted Actions conclusion could not be re-read in this pass because the public GitHub REST API is rate-limited.
 - PR #1 is currently open, non-draft, and mergeable according to the GitHub connector. CodeRabbit has produced PR output, including a generated PR summary in the body.
 - No deploy, production DB write, production API mutation, force push, or secret output was performed.
 
@@ -176,8 +176,8 @@ The pushed PR branch also includes the larger existing Loop 2 + Loop 3 diff acro
 - Live OpenAI / Supabase / WordPress sandbox verification is still not completed. Existing E2E tests mock external services to avoid production data/API damage.
 - `npm run test:live:readiness` reports missing `AIO_LIVE_CONTRACT_TESTS`, Supabase live-test confirmation/write variables, and WordPress sandbox credentials. It also warns that the current Supabase host does not look like a sandbox/staging host.
 - Real generated-article quality review and live WordPress recovery remain manual/sandbox follow-up work.
-- Latest hosted Actions status for `3af134a` should be checked via GitHub UI, authenticated `gh`, or a later connector/API call. The unauthenticated REST API returned a rate-limit error in this pass.
-- CodeRabbit review output should be checked again later if CodeRabbit posts new inline findings after the latest branch head `3af134a`.
+- Latest hosted Actions status for the current branch head should be checked via GitHub UI, authenticated `gh`, or a later connector/API call. The unauthenticated REST API returned a rate-limit error in this pass.
+- CodeRabbit review output should be checked again later if CodeRabbit posts new inline findings after the latest branch head.
 - The three high-level 100/100 targets are not yet fully proven because live sandbox/manual checks remain.
 
 ## 7. Bugbot Findings
@@ -405,13 +405,13 @@ Results:
   - Job: `Typecheck, lint, tests, E2E, build`.
   - Result: success.
 - GitHub connector PR comment fetch after `0865661`: no new CodeRabbit inline findings visible; only previously addressed Codex/Bugbot findings were present.
-- GitHub connector PR fetch after `3af134a`: PR #1 is open, non-draft, mergeable, and head SHA is `3af134a9fe1479c67a1adc588f985732a414b2a9`.
+- GitHub connector PR fetch after the latest handoff/status documentation push: PR #1 is open, non-draft, and mergeable.
 - GitHub issue-comment fetch: CodeRabbit output is present. It includes a review-in-progress walkthrough, `.coderabbit.yaml` configuration resolution, accepted review trigger, and generated PR summary. No actionable CodeRabbit inline findings were visible in fetched comments.
 - Unauthenticated GitHub REST Actions check: failed with API rate-limit 403 for the current public IP. This was recorded as a verification limitation, not a code failure.
 
 ## 9. Next Recommended Action
 Next first action for Claude Code:
-1. Re-check the latest hosted Actions result for branch head `3af134a` using GitHub UI, authenticated `gh`, or a later connector/API call. Avoid repeated unauthenticated API polling while rate-limited.
+1. Re-check the latest hosted Actions result for the current branch head using GitHub UI, authenticated `gh`, or a later connector/API call. Avoid repeated unauthenticated API polling while rate-limited.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push. Record findings here and fix Critical/High issues first.
 3. Confirm the Codex automated review P2 findings are resolved by the latest pushed code, including the newsletter, author portrait, and live-env fixes.
 4. Confirm the old Cursor Bugbot "Resume job UI desync" thread is resolved by the resume-state CTA block and E2E coverage.
