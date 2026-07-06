@@ -6,7 +6,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: Previous handoff had `Current owner: Claude Code`, `Next owner: Codex`, and `Loop: 3`; Claude Code returned the same uncommitted Loop 2 + Loop 3 worktree to Codex for the next development pass.
 - Phase: Autonomous Improvement / Handoff
-- Last updated: 2026-07-06 11:42 +09:00
+- Last updated: 2026-07-06 11:48 +09:00
 
 ## 1. Current Goal
 Current objective:
@@ -17,10 +17,9 @@ Current objective:
 ## 2. Current Branch / Commit
 - Branch: `codex/persistent-quality-gate-operations`
 - Latest pushed substantive code commit: `3a43b96 Address remaining review reliability findings`
-- Latest pushed handoff/docs commit before this update: `2ecdb0d Clarify handoff commit state`
-- Last known good local state: this working tree after the remaining P2 review findings passed local `npm run quality` and GitHub Actions passed on `2ecdb0d`.
+- Latest verified pushed commit before this handoff edit: `0865661 Record latest quality gate success`
+- Last known good local state: this working tree after the remaining P2 review findings passed local `npm run quality` and GitHub Actions passed on `0865661`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- Important: a final commit containing this handoff and the latest quality-check change may follow this entry and should be pushed to PR #1.
 
 ## 3. What Was Done
 Completed in this Codex pass:
@@ -81,9 +80,11 @@ Completed in this Codex pass:
 - Added regression tests for newsletter article evidence preservation, uploaded author portrait preservation when the body already has an author section, and live sandbox env overriding production-like shell env.
 - Ran targeted Vitest, lint, typecheck, and full `npm run quality`; all passed locally.
 - Committed and pushed the remaining P2 fixes to PR #1 as `3a43b96`.
-- Confirmed the GitHub Actions `quality-gate` run for `3a43b96` started and was still in progress at this handoff update.
+- Confirmed the GitHub Actions `quality-gate` run for `3a43b96` started; a later check showed the run completed successfully.
 - Re-checked the latest pushed GitHub Actions run for `2ecdb0d`; `quality-gate` completed successfully.
 - Re-fetched PR #1 comments after the latest push. No new CodeRabbit inline findings were visible; the visible review comments were the previously addressed Codex/Bugbot findings.
+- Re-checked the later pushed GitHub Actions run for `0865661`; `quality-gate` completed successfully.
+- Re-fetched PR #1 comments again after `0865661`; no new CodeRabbit inline findings were visible.
 
 Previously completed in the broader Loop 2 + Loop 3 uncommitted diff:
 - Shared source URL normalization in `src/lib/source-url.ts`.
@@ -125,7 +126,7 @@ Main files changed in this Codex pass:
 - `tests/unit/file-extraction.test.ts`
 - `tests/unit/live-readiness-script.test.ts`
 
-The worktree also still contains the larger existing Loop 2 + Loop 3 diff across:
+The pushed PR branch also includes the larger existing Loop 2 + Loop 3 diff across:
 - `src/components/aio/article-generator-app.tsx`
 - `src/components/aio/demo-login-form.tsx`
 - `src/lib/article-quality.ts`
@@ -138,11 +139,11 @@ The worktree also still contains the larger existing Loop 2 + Loop 3 diff across
 - `tests/fixtures/article.ts`
 - `tests/integration/drafts-supabase.integration.test.ts`
 - multiple `tests/unit/*` files
-- untracked `src/lib/quality-regeneration-action.ts`
-- untracked `src/lib/source-url.ts`
-- untracked `tests/unit/quality-edit-guidance.test.ts`
-- untracked `tests/unit/quality-regeneration-action-coverage.test.ts`
-- untracked `tests/unit/source-url.test.ts`
+- `src/lib/quality-regeneration-action.ts`
+- `src/lib/source-url.ts`
+- `tests/unit/quality-edit-guidance.test.ts`
+- `tests/unit/quality-regeneration-action-coverage.test.ts`
+- `tests/unit/source-url.test.ts`
 
 ## 5. Current Status
 - `npm run quality` passes locally after the latest Codex change, including the remaining P2 review reliability fixes.
@@ -161,13 +162,15 @@ The worktree also still contains the larger existing Loop 2 + Loop 3 diff across
 - `3a43b96` has been pushed to PR #1.
 - `2ecdb0d` has been pushed to PR #1.
 - GitHub Actions `quality-gate` run `28764222460` for `2ecdb0d` completed successfully. The job `Typecheck, lint, tests, E2E, build` passed all steps.
+- `0865661` has been pushed to PR #1.
+- GitHub Actions `quality-gate` run `28764371615` for `0865661` completed successfully. The job `Typecheck, lint, tests, E2E, build` passed all steps.
 - No deploy, production DB write, production API mutation, force push, or secret output was performed.
 
 ## 6. Known Issues
 - Live OpenAI / Supabase / WordPress sandbox verification is still not completed. Existing E2E tests mock external services to avoid production data/API damage.
 - `npm run test:live:readiness` reports missing `AIO_LIVE_CONTRACT_TESTS`, Supabase live-test confirmation/write variables, and WordPress sandbox credentials. It also warns that the current Supabase host does not look like a sandbox/staging host.
 - Real generated-article quality review and live WordPress recovery remain manual/sandbox follow-up work.
-- CodeRabbit review output should be checked again later if CodeRabbit posts a new review after pushed commit `2ecdb0d`.
+- CodeRabbit review output should be checked again later if CodeRabbit posts a new review after pushed commit `0865661`.
 - The three high-level 100/100 targets are not yet fully proven because live sandbox/manual checks remain.
 
 ## 7. Bugbot Findings
@@ -373,7 +376,7 @@ Results:
   - Pre-push `npm run test:integrity`: passed, 40 files checked.
   - Pre-push `npm run test`: passed, 36 files / 228 tests.
   - Pre-push `npm run test:contract`: passed, 3 files / 9 tests.
-- GitHub Actions workflow run `28764168546`: started for commit `3a43b96` and was still `in_progress` when checked.
+- GitHub Actions workflow run `28764168546`: completed successfully for commit `3a43b96` after an initial in-progress check.
 - `git commit -m "Update handoff after review fixes push"`: passed, created `1b7e60d`.
 - `git push -u origin codex/persistent-quality-gate-operations`: passed and pushed `1b7e60d`.
 - `git commit -m "Clarify handoff commit state"`: passed, created `2ecdb0d`.
@@ -383,6 +386,18 @@ Results:
   - Job: `Typecheck, lint, tests, E2E, build`.
   - Result: success.
 - GitHub connector PR comment fetch after the latest push: no new CodeRabbit inline findings visible; only previously addressed Codex/Bugbot findings were present.
+- `git commit -m "Record latest quality gate success"`: passed, created `0865661`.
+- `git push -u origin codex/persistent-quality-gate-operations`: passed and pushed `0865661`.
+  - Pre-push `npm run lint`: passed.
+  - Pre-push `npm run typecheck`: passed.
+  - Pre-push `npm run test:integrity`: passed, 40 files checked.
+  - Pre-push `npm run test`: passed, 36 files / 228 tests.
+  - Pre-push `npm run test:contract`: passed, 3 files / 9 tests.
+- GitHub Actions workflow run `28764371615`: completed successfully for commit `0865661`.
+  - Workflow: `quality-gate`.
+  - Job: `Typecheck, lint, tests, E2E, build`.
+  - Result: success.
+- GitHub connector PR comment fetch after `0865661`: no new CodeRabbit inline findings visible; only previously addressed Codex/Bugbot findings were present.
 
 ## 9. Next Recommended Action
 Next first action for Claude Code:
@@ -401,7 +416,7 @@ Please focus review on:
 - Whether `subscription`/`subscribe` widget detection should include or exclude any additional token combinations.
 - The larger quality-check additions in `article-quality`, `draft-html`, title/FAQ quality, and regeneration-action mapping.
 - E2E coverage realism for PC workflows, especially mocked OpenAI/Supabase/WordPress boundaries.
-- Whether the untracked files are correctly included before staging.
+- Whether the files that were previously untracked are correctly represented in the pushed PR diff.
 - Whether `.coderabbit.yaml` is appropriately conservative for this public OSS repository and does not create excessive review noise.
 - Whether `docs/quality-audit.md` accurately captures the feature inventory, proof gaps, and active self-scores.
 - Whether the `scroll-mt-[360px]` anchor clearance and disabled draft-only nav items are the right long-term UX.

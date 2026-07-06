@@ -55,10 +55,10 @@ The latest previously verified pushed GitHub Actions run also passed:
 
 The latest pushed GitHub Actions run for this branch also passed after the review-finding fixes:
 
-- Commit: `2ecdb0d`
+- Commit: `0865661`
 - Workflow: `quality-gate`
 - Job: `Typecheck, lint, tests, E2E, build`
-- Run: `28764222460`
+- Run: `28764371615`
 - Result: success.
 
 Current E2E coverage includes 45 Chromium PC tests across the core article workflow, required-input
@@ -122,7 +122,7 @@ These gaps prevent a true 100/100 completion claim:
   findings should still be checked if a later CodeRabbit review appears.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. The current remaining
   review-finding fixes have also been pushed as `3a43b96`, and hosted CI confirmation is green
-  through docs commit `2ecdb0d`.
+  through docs commit `0865661`.
 
 ## Current Self Score
 
