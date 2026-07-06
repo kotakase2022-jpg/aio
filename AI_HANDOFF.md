@@ -4,25 +4,25 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: Previous handoffs showed Loop 3 continuing on the active PR. This pass continued the same CodeRabbit-oriented improvement loop.
-- Phase: Autonomous Improvement / CodeRabbit Finding Fix / Handoff
-- Last updated: 2026-07-06 16:54 +09:00
+- Loop number inferred from: Previous handoffs showed Loop 3 continuing on the active PR. This pass is a handoff pause requested by the user before starting the next implementation item.
+- Phase: Handoff / Paused by user
+- Last updated: 2026-07-06 16:57 +09:00
 
 ## 1. Current Goal
 今回の目的：
 
 - AIO記事生成アプリを、機能信頼性・PCブラウザ画面遷移・日常利用UX・非commodity content品質の観点で100/100へ近づける。
 - CodeRabbit OSSを標準PRレビューとして使い、Cursor Bugbotは任意/予備扱いにする。
-- 今回はCodeRabbit残指摘のうち、WordPress term response validationを補強した。
+- 今回はユーザー指示により、次の実装へ入る前にキリの良いところで停止し、Claude Codeへ引き継げる状態にする。
 
 Goal自体は未完了。100/100到達には、残CodeRabbit指摘、ライブ/sandbox契約テスト、実操作での生成品質検証がまだ必要。
 
 ## 2. Current Branch / Commit / PR
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest local commit: `6c86a8a` `Validate WordPress term ids`
-- Previous pushed commit at start of this pass: `2eb449c` `Update handoff after OpenAI transport error fix`
-- Last known good commit: `6c86a8a`; `npm.cmd run quality` passed locally after this change.
-- Current local status: `.claude/` の未追跡ディレクトリのみ。今回も触っていない。
+- Latest pushed commit: `a6bf0ea` `Update handoff after WordPress term validation`
+- Last known good implementation commit: `6c86a8a` `Validate WordPress term ids`
+- Last known good verification: `npm.cmd run quality` passed after `6c86a8a`.
+- Current local status before this handoff update: `.claude/` の未追跡ディレクトリのみ。今回も触っていない。
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - CodeRabbit OSS: 標準レビュー担当。
 - Cursor Bugbot: 任意/予備。今回未実行。
@@ -30,35 +30,30 @@ Goal自体は未完了。100/100到達には、残CodeRabbit指摘、ライブ/s
 ## 3. What Was Done
 今回完了したこと：
 
-- `AI_HANDOFF.md`、WordPress実装、WordPress契約テスト、現ワークツリーを確認した。
-- `src/lib/server/wordpress.ts` のterm ID検証を補強した。
-  - WordPress term search結果で一致したtermの `id` が正の整数であることを検証。
-  - WordPress term create結果の `id` が正の整数であることを検証。
-  - 文字列ID、欠落ID、0以下、不正IDが投稿payloadへ混入する前に502 `ApiError` で停止するようにした。
-  - term nameの読み取りを `readTermName` に寄せ、不正な `name` でもruntime crashしないようにした。
-- `tests/contract/wordpress.contract.test.ts` に回帰テストを追加した。
-  - 検索済みtermが非数値IDを返すケース。
-  - 作成済みtermが非数値IDを返すケース。
-  - どちらもWordPress post作成前に停止することを確認。
-- UI仕様・API契約・画面遷移は意図的に変更していない。
+- 現状確認のみ実施した。
+- 直近の状態：
+  - WordPress term ID validation対応は完了済み。
+  - `a6bf0ea` までpush済み。
+  - 作業ツリーは `.claude/` 未追跡以外クリーン。
+- 次に着手する予定だった `draft-html author fallback safety` は、ユーザーからの引き継ぎ指示を受けたため未着手。
+- `AI_HANDOFF.md` をClaude Code向けの最新状態へ更新した。
 
 ## 4. Files Changed
-主な変更ファイル：
+今回の主な変更ファイル：
+
+- `AI_HANDOFF.md`
+
+直近完了済みの実装変更：
 
 - `src/lib/server/wordpress.ts`
 - `tests/contract/wordpress.contract.test.ts`
-- `AI_HANDOFF.md`
 
 ## 5. Current Status
 現在の状態：
 
-- `npm.cmd run quality` は成功。
-- WordPress契約テストは6件成功。
-- 全体テストは36ファイル / 241テスト成功。
-- 契約テストは3ファイル / 11テスト成功。
-- 生成開始、画像生成、停止、復元、履歴、WordPress投稿などを含む47件のChromium PC E2Eが成功。
-- coverageは statements 85.37%、branches 71.45%、functions 91.35%、lines 85.76%。
-- 作業ツリーは `.claude/` 未追跡を除きクリーン予定。`.claude/` は触っていない。
+- `a6bf0ea` までリモートpush済み。
+- `.claude/` は未追跡のまま存在するが、触っていない。
+- このハンドオフ更新では実装コードを変更していない。
 - 本番deploy、本番DB/API書き込み、secret出力、force push、破壊的操作は行っていない。
 
 ## 6. Known Issues
@@ -77,9 +72,8 @@ Goal自体は未完了。100/100到達には、残CodeRabbit指摘、ライブ/s
 ## 7. CodeRabbit Review
 CodeRabbit OSSが標準レビュー。
 
-- 今回対応:
-  - Data integrity: WordPress category/tag term responseの `id` を実行時検証し、不正IDを投稿payloadへ混ぜないようにした。
 - 直近対応済み:
+  - Data integrity: WordPress category/tag term responseの `id` を実行時検証し、不正IDを投稿payloadへ混ぜないようにした。
   - High/maintainability: OpenAI network/timeout retry exhaustion時に生ErrorがUIへ流れる可能性をなくし、日本語復旧メッセージ付き `ApiError` に統一。
   - Trivial/maintainability: `generateArticle` 内のobsoleteな非window分岐を削除。
   - Trivial/maintainability: `hasReference` / `hasTone` の重複ロジックを共通ヘルパー化。
@@ -90,7 +84,19 @@ CodeRabbit OSSが標準レビュー。
   - 任意/予備扱いのまま。
 
 ## 8. Verification Results
-実行した確認コマンドと結果：
+今回のハンドオフ更新で実行した確認：
+
+```bash
+git status --short --branch
+git log -3 --pretty=format:"%h %s"
+```
+
+結果：
+
+- 作業ツリーは `.claude/` 未追跡以外クリーン。
+- 最新コミットは `a6bf0ea Update handoff after WordPress term validation`。
+
+直近の実装検証：
 
 ```bash
 npx.cmd vitest run tests/contract/wordpress.contract.test.ts
@@ -105,37 +111,33 @@ npm.cmd run quality
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed.
 - `npm.cmd run quality`: passed.
-  - typecheck passed.
-  - lint passed.
-  - test:integrity passed, 40 files.
   - test passed, 36 files / 241 tests.
   - test:contract passed, 3 files / 11 tests.
-  - test:coverage passed, statements 85.37%, branches 71.45%, functions 91.35%, lines 85.76%.
   - test:e2e passed, 47 Chromium PC tests.
   - build passed with Next.js 16.2.9.
-
-Commit hook:
-
-- `6c86a8a` 作成時の pre-commit `lint` / `test:integrity`: passed.
 
 ## 9. Next Recommended Action
 次にClaude Codeが最初にやるべきこと：
 
-1. `6c86a8a` の差分を確認する。
-2. WordPress term ID検証のエラーメッセージ、502扱い、正の整数制約が妥当かレビューする。
-3. PR #1のCodeRabbit最新コメントを確認する。
-4. 次の高優先CodeRabbit指摘へ進む。おすすめはdraft-html author fallback safety、またはfile extraction inline XML text joining。
+1. `a6bf0ea` までの差分とCodeRabbit最新コメントを確認する。
+2. 次の未対応指摘として `draft-html author fallback safety` に着手する。
+3. 具体的には `src/lib/draft-html.ts` の `appendAuthorBlockWhenNeeded` / `hasExistingAuthorSection` 周辺を確認する。
+4. 想定リスク：
+   - 本文に「この記事の執筆者」見出しだけがある場合、実際の執筆者名・肩書き・紹介文が欠けても既存author section扱いになり、管理されたauthor blockが追加されない可能性がある。
+5. 修正する場合は `tests/unit/draft-html.test.ts` に、見出しだけ/不完全なauthor sectionを管理ブロックで補完または置換する回帰テストを追加する。
+6. 変更後は `npm.cmd run quality` を実行する。
 
 ## 10. Suggested Review Scope for Claude Code
 Claude Codeに重点レビューしてほしい範囲：
 
-- `src/lib/server/wordpress.ts`
-  - `ensureTerms`
-  - `readWordpressTermId`
-  - `readTermName`
-- `tests/contract/wordpress.contract.test.ts`
-  - non-numeric existing term ID
-  - non-numeric created term ID
+- `src/lib/draft-html.ts`
+  - `appendAuthorBlockWhenNeeded`
+  - `hasExistingAuthorSection`
+  - `removeExistingAuthorProfileBlock`
+- `tests/unit/draft-html.test.ts`
+  - author block duplication prevention
+  - incomplete author heading fallback
+  - uploaded portrait preservation
 - PR #1のCodeRabbit最新コメント。
 
 ## 11. Do Not Touch
