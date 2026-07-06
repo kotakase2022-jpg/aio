@@ -259,7 +259,7 @@ const primaryInfoStopWords = new Set([
 ]);
 
 const firstPartyAttributionPattern =
-  /(当社|弊社|自社|支援現場|現場|相談|ヒアリング|経験|観察|実務|お客様|クライアント|our|we|field support|support team|client|customer|observed|observation|experience)/i;
+  /(当社|弊社|自社|支援現場|現場|相談|ヒアリング|経験|観察|実務|お客様|クライアント|\bour\b|\bwe\b|field support|support team|client|customer|observed|observation|experience)/i;
 
 const ctaStopWords = new Set([
   ...primaryInfoStopWords,
@@ -393,7 +393,7 @@ const competitorStopWords = new Set([
 ]);
 
 const competitivePositioningPattern =
-  /(競合|他社|比較|差別化|上位記事|競合記事|競合LP|LP|不足|一方|対して|対比|独自|比較軸|勝ち筋|訴求|competitor|competition|differentiation|compared|whereas|positioning)/i;
+  /(競合|他社|比較|差別化|上位記事|競合記事|競合LP|\bLP\b|不足|一方|対して|対比|独自|比較軸|勝ち筋|訴求|competitor|competition|differentiation|compared|whereas|positioning)/i;
 
 export function evaluateArticleQuality(
   html: string,

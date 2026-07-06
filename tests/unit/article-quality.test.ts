@@ -62,6 +62,30 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
+  test("does not treat English attribution fragments inside other words as first-party context", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article operations require source notes and approval owners</h2>
+        <p>The opening reviews approval owners, LINE workflows, missing forms, and back-office records. However, this paragraph only describes the workflow hour and the review power structure; it never attributes the claim to a company team.</p>
+        <table><tr><th>Decision point</th><td>Approval owner, LINE workflow, forms status, and review timing are checked before publication.</td></tr></table>
+        <ul><li>Failure pattern: teams publish field-like claims without attribution.</li><li>Review note: keep source notes and caveats near operational claims.</li></ul>
+        <h2>Back-office records need attributed operating claims</h2>
+        <p>FAQ: editors separate source evidence from unsupported operational anecdotes. Source: https://example.com/reference</p>
+      `,
+      {
+        primaryInfo:
+          "Our support team sees LINE approvals, missing forms, and unclear back-office records in review workflows.",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-reflection", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-opening-placement", passed: false }),
+    );
+  });
+
   test("flags first-party information that is only mentioned after a generic opening", () => {
     const result = evaluateArticleQuality(
       `
@@ -724,6 +748,28 @@ describe("evaluateArticleQuality", () => {
     );
     expect(result.improvements.join(" ")).toContain("競合情報の固有語彙");
     expect(result.score).toBeLessThan(100);
+  });
+
+  test("does not treat lp fragments inside English words as competitor positioning", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article operations require source-aware publishing workflows</h2>
+        <p>Conclusion: the article should explain pricing, implementation timeline, grant support, onboarding, and approval flow without pretending that these terms alone are a competitive comparison.</p>
+        <table><tr><th>Decision point</th><td>Pricing, implementation timeline, grant support, onboarding, and approval flow are organized for publication checks.</td></tr></table>
+        <ul><li>Failure pattern: multiple operational points appear without a contrast.</li><li>Review note: help readers verify source notes and caveats.</li></ul>
+        <h2>Publishing workflows still need a clear contrast</h2>
+        <p>FAQ: editors should add actual comparison axes before calling this a differentiated article. Source: https://example.com/reference</p>
+      `,
+      {
+        competitorTexts: [
+          "A rival article emphasizes pricing and implementation timeline. Another landing page promotes grant support, while onboarding and approval flow are thinner.",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "competitor-insight-reflection", passed: false }),
+    );
   });
 
   test("flags competitor information that is pasted verbatim instead of reframed", () => {
