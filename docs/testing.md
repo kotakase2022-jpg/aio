@@ -136,11 +136,14 @@ NEXT_PUBLIC_SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 AIO_LIVE_SUPABASE_ALLOW_WRITE=1
 AIO_LIVE_CONFIRM_NON_PRODUCTION=1
+AIO_LIVE_SANDBOX_HOST_ALLOWLIST=
 ```
 
 `test:live:supabase` writes a disposable `article_inputs` generation job, reads it back, confirms it
 appears in logs, and deletes the row in cleanup. Use only a staging project with the app schema
-installed.
+installed. If the sandbox host does not contain an obvious sandbox marker such as `sandbox`,
+`staging`, `test`, `dev`, `preview`, or `demo` (for example a randomly named Supabase project),
+add the exact hostname to `AIO_LIVE_SANDBOX_HOST_ALLOWLIST` after verifying it is not production.
 
 WordPress live checks require a sandbox WordPress site and Application Password:
 
@@ -151,12 +154,14 @@ WORDPRESS_SANDBOX_APPLICATION_PASSWORD=
 AIO_LIVE_WORDPRESS_ALLOW_POST=1
 AIO_LIVE_WORDPRESS_ALLOW_MEDIA=1
 AIO_LIVE_CONFIRM_NON_PRODUCTION=1
+AIO_LIVE_SANDBOX_HOST_ALLOWLIST=
 WORDPRESS_ENCRYPTION_KEY=
 ```
 
 `test:live:wordpress` creates a disposable draft post with a tiny featured image, verifies it
 through the REST API, and deletes both the post and uploaded media in cleanup. Use only a sandbox
-WordPress user that can create and delete posts and media.
+WordPress user that can create and delete posts and media. If the sandbox hostname is not visibly a
+sandbox/staging/test host, add the exact hostname to `AIO_LIVE_SANDBOX_HOST_ALLOWLIST`.
 
 If any live test fails, do not mark the external integration risk as resolved. Fix the
 implementation or sandbox configuration, rerun the failing live command, and keep failure output out

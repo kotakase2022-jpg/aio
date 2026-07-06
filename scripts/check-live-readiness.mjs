@@ -116,13 +116,21 @@ function warnProductionLikeUrl(name) {
 
   const looksSandbox =
     /(^localhost$|\.local$|sandbox|staging|stage|test|dev|preview|demo)/i.test(host);
-  if (looksSandbox || cleanEnvValue(process.env.AIO_LIVE_CONFIRM_NON_PRODUCTION) === "1") {
+  if (looksSandbox || sandboxHostAllowlistIncludes(host)) {
     return [];
   }
 
   return [
-    `${name} host (${host}) does not look like a sandbox/staging host. Keep AIO_LIVE_CONFIRM_NON_PRODUCTION=1 only after verifying this is not production.`,
+    `${name} host (${host}) does not look like a sandbox/staging host. Add the exact host to AIO_LIVE_SANDBOX_HOST_ALLOWLIST only after verifying it is not production.`,
   ];
+}
+
+function sandboxHostAllowlistIncludes(host) {
+  return cleanEnvValue(process.env.AIO_LIVE_SANDBOX_HOST_ALLOWLIST)
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(host);
 }
 
 function loadDotenvFiles() {

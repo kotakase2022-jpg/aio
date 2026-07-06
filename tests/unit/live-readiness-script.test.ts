@@ -85,6 +85,53 @@ describe("check-live-readiness script", () => {
       expect(result.stderr).toContain("Live sandbox checks are not ready.");
     });
   });
+
+  test("fails closed for production-like live write hosts unless explicitly allowlisted", async () => {
+    await withTempProject(async (projectDir) => {
+      await writeFile(
+        path.join(projectDir, ".env.live.local"),
+        [
+          "AIO_LIVE_CONTRACT_TESTS=1",
+          "NEXT_PUBLIC_SUPABASE_URL=https://production.example.com",
+          "SUPABASE_SERVICE_ROLE_KEY=sandbox-service-role",
+          "AIO_LIVE_SUPABASE_ALLOW_WRITE=1",
+          "AIO_LIVE_CONFIRM_NON_PRODUCTION=1",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await runReadiness(projectDir, "supabase");
+
+      expect(result.code).toBe(1);
+      expect(result.stdout).toContain(
+        "NEXT_PUBLIC_SUPABASE_URL host (production.example.com) does not look like a sandbox/staging host.",
+      );
+      expect(result.stdout).toContain("AIO_LIVE_SANDBOX_HOST_ALLOWLIST");
+      expect(result.stderr).toContain("Live sandbox checks are not ready.");
+    });
+  });
+
+  test("allows an explicitly reviewed non-production host through the live sandbox allowlist", async () => {
+    await withTempProject(async (projectDir) => {
+      await writeFile(
+        path.join(projectDir, ".env.live.local"),
+        [
+          "AIO_LIVE_CONTRACT_TESTS=1",
+          "NEXT_PUBLIC_SUPABASE_URL=https://reviewed-project.supabase.co",
+          "SUPABASE_SERVICE_ROLE_KEY=sandbox-service-role",
+          "AIO_LIVE_SUPABASE_ALLOW_WRITE=1",
+          "AIO_LIVE_CONFIRM_NON_PRODUCTION=1",
+          "AIO_LIVE_SANDBOX_HOST_ALLOWLIST=reviewed-project.supabase.co",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await runReadiness(projectDir, "supabase");
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("- supabase: ready");
+    });
+  });
 });
 
 async function withTempProject(callback: (projectDir: string) => Promise<void>) {
