@@ -70,6 +70,40 @@ const activeGenerationJobStorageKey = "aio-active-generation-job-id";
 const lastClosingTextStorageKey = "aio-last-closing-text";
 const lastAuthorStorageKey = "aio-last-author";
 
+function hasUsableReferenceInput(
+  references: KeyValueInput[],
+  referenceFiles: AttachedFileInput[],
+) {
+  return (
+    references.some((item) => item.url?.trim() || item.text?.trim()) ||
+    referenceFiles.some((file) => file.ok && file.text?.trim())
+  );
+}
+
+function hasUsableVisualTone(visualTone: VisualToneInput) {
+  return Boolean(
+    (visualTone.mode === "preset" && visualTone.preset) ||
+      (visualTone.mode === "custom" && visualTone.custom?.trim()) ||
+      (visualTone.mode === "upload" && visualTone.uploadedImageUrl),
+  );
+}
+
+function getGeneratedImageSlots(images: ArticleImage[]) {
+  return new Set(
+    images
+      .filter((image) => image.source === "generated")
+      .map((image) => image.slot),
+  );
+}
+
+function getMissingGeneratedImagePrompts(
+  imagePrompts: ArticleGenerationResult["image_prompts"],
+  images: ArticleImage[],
+) {
+  const generatedImageSlots = getGeneratedImageSlots(images);
+  return imagePrompts.filter((prompt) => !generatedImageSlots.has(prompt.slot));
+}
+
 const tonePresets = [
   "シンプルなBtoBホワイトペーパー風",
   "金融機関向けの信頼感あるトーン",
@@ -203,26 +237,17 @@ export function ArticleGeneratorApp() {
   );
 
   const canGenerate = useMemo(() => {
-    const hasReference =
-      references.some((item) => item.url?.trim() || item.text?.trim()) ||
-      referenceFiles.some((file) => file.ok && file.text?.trim());
-    const hasTone =
-      (visualTone.mode === "preset" && visualTone.preset) ||
-      (visualTone.mode === "custom" && visualTone.custom?.trim()) ||
-      (visualTone.mode === "upload" && visualTone.uploadedImageUrl);
-    return Boolean(hasReference && hasTone);
+    return (
+      hasUsableReferenceInput(references, referenceFiles) &&
+      hasUsableVisualTone(visualTone)
+    );
   }, [referenceFiles, references, visualTone]);
   const generateRequirementMessage = useMemo(() => {
     if (canGenerate) return "";
 
     const missing: string[] = [];
-    const hasReference =
-      references.some((item) => item.url?.trim() || item.text?.trim()) ||
-      referenceFiles.some((file) => file.ok && file.text?.trim());
-    const hasTone =
-      (visualTone.mode === "preset" && visualTone.preset) ||
-      (visualTone.mode === "custom" && visualTone.custom?.trim()) ||
-      (visualTone.mode === "upload" && visualTone.uploadedImageUrl);
+    const hasReference = hasUsableReferenceInput(references, referenceFiles);
+    const hasTone = hasUsableVisualTone(visualTone);
 
     if (!hasReference) missing.push("参照情報");
     if (!hasTone) missing.push("画像トーン");
@@ -1009,9 +1034,9 @@ export function ArticleGeneratorApp() {
     if (!draft) return;
 
     const generatedImages = draft.images.filter((image) => image.source === "generated");
-    const generatedImageSlots = new Set(generatedImages.map((image) => image.slot));
-    const missingImagePrompts = draft.aiResult.image_prompts.filter(
-      (prompt) => !generatedImageSlots.has(prompt.slot),
+    const missingImagePrompts = getMissingGeneratedImagePrompts(
+      draft.aiResult.image_prompts,
+      draft.images,
     );
     if (generatedImages.length === 0 && missingImagePrompts.length === 0) {
       setActiveError("再作成できる生成画像または画像プロンプトがありません。");
@@ -2567,21 +2592,16 @@ function ArticlePreview({
   onImproveQuality: (instruction: string) => void;
   onRegenerateImages: () => void;
 }) {
-  const generatedImageSlots = useMemo(
-    () =>
-      new Set(
-        draft.images
-          .filter((image) => image.source === "generated")
-          .map((image) => image.slot),
-      ),
-    [draft.images],
-  );
+  const generatedImageSlots = useMemo(() => getGeneratedImageSlots(draft.images), [
+    draft.images,
+  ]);
   const missingGeneratedImagePrompts = useMemo(
     () =>
-      draft.aiResult.image_prompts.filter(
-        (prompt) => !generatedImageSlots.has(prompt.slot),
+      getMissingGeneratedImagePrompts(
+        draft.aiResult.image_prompts,
+        draft.images,
       ),
-    [draft.aiResult.image_prompts, generatedImageSlots],
+    [draft.aiResult.image_prompts, draft.images],
   );
   const canRegenerateImages =
     generatedImageSlots.size > 0 || missingGeneratedImagePrompts.length > 0;
