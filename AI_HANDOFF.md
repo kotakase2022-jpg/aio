@@ -19,8 +19,9 @@ This pass focused on article-quality signal matching so English input terms are 
 
 ## 2. Current Branch / Commit / PR
 - Branch: codex/persistent-quality-gate-operations
-- Latest pushed commit for this handoff: f4f9f36 `Require English signal term boundaries`
-- Last known good commit: f4f9f36; local `npm.cmd run quality` passes after this fix.
+- Latest implementation commit in this pass: f4f9f36 `Require English signal term boundaries`
+- Branch head also includes subsequent handoff-only status updates.
+- Last known good implementation commit: f4f9f36; local `npm.cmd run quality` passes after this fix.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - CodeRabbit OSS review status after push: Installed and responding on PR #1; latest visible status context is `PENDING`.
 - Hosted CI status after push: GitHub Actions `quality-gate` / `Typecheck, lint, tests, E2E, build` is `QUEUED` for commit `f4f9f36`.
