@@ -16,8 +16,8 @@ Current objective:
 
 ## 2. Current Branch / Commit
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest pushed commit before this handoff update: `3a43b96 Address remaining review reliability findings`
-- Latest pushed code commit before this handoff update: `3a43b96 Address remaining review reliability findings`
+- Latest pushed substantive code commit: `3a43b96 Address remaining review reliability findings`
+- Previous pushed handoff/docs commit before this final clarification: `1b7e60d Update handoff after review fixes push`
 - Last known good local state: this working tree after the remaining P2 review findings passed local `npm run quality`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - Important: a final commit containing this handoff and the latest quality-check change may follow this entry and should be pushed to PR #1.
