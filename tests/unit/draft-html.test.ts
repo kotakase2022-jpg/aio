@@ -34,6 +34,26 @@ describe("draft HTML rendering", () => {
     expect(html.match(/What is AIO\?/g)).toHaveLength(1);
   });
 
+  test("keeps edited FAQ answers when the question already exists in the body", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml:
+          "<h2>FAQ</h2><h3>What is AIO?</h3><p>Old generated answer.</p>",
+        faqItems: [
+          {
+            question: "What is AIO?",
+            answer: "Edited answer approved by the reviewer.",
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('class="aio-faq-block"');
+    expect(html.match(/What is AIO\?/g)).toHaveLength(2);
+    expect(html).toContain("Old generated answer.");
+    expect(html).toContain("Edited answer approved by the reviewer.");
+  });
+
   test("resolves placeholder and relative image URLs through the supplied resolver", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({

@@ -57,16 +57,27 @@ export function appendFaqBlockWhenNeeded(html: string, faqItems: FaqItem[]) {
   }
 
   const text = normalizeText(stripHtmlText(withoutManagedFaq));
-  const questionItems = items.filter((item) => item.question);
-  const allQuestionsAlreadyInBody =
-    questionItems.length > 0 &&
-    questionItems.every((item) => text.includes(normalizeText(item.question)));
+  const itemsMissingFromBody = items.filter((item) => !faqItemAlreadyVisible(item, text));
 
-  if (allQuestionsAlreadyInBody) {
+  if (itemsMissingFromBody.length === 0) {
     return withoutManagedFaq;
   }
 
-  return `${withoutManagedFaq}\n${buildFaqBlockHtml(items)}`;
+  return `${withoutManagedFaq}\n${buildFaqBlockHtml(itemsMissingFromBody)}`;
+}
+
+function faqItemAlreadyVisible(
+  item: { question: string; answer: string },
+  normalizedBodyText: string,
+) {
+  const questionVisible = item.question
+    ? normalizedBodyText.includes(normalizeText(item.question))
+    : true;
+  const answerVisible = item.answer
+    ? normalizedBodyText.includes(normalizeText(item.answer))
+    : true;
+
+  return questionVisible && answerVisible;
 }
 
 export function appendSourceBlockWhenNeeded(html: string, draft: ArticleDraft) {
