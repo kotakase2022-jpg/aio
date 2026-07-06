@@ -87,6 +87,14 @@ describe("quality regeneration action coverage", () => {
     expect(action).toContain("判断基準");
   });
 
+  test("keeps generic opening density regeneration focused on first-party context", () => {
+    const action = qualityRegenerationAction("generic-opening-density");
+
+    expect(action).toContain("冒頭400字以内");
+    expect(action).toContain("一次情報");
+    expect(action).toContain("現場で見た条件");
+  });
+
   test("keeps an explicit non-empty fallback action for future quality checks", () => {
     const fallback = qualityRegenerationAction("future-quality-check");
 

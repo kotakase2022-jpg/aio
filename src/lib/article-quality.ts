@@ -421,6 +421,8 @@ export function evaluateArticleQuality(
     /(結論|先に結論|要するに|つまり|最初に押さえるべき|とは、|とは )/.test(openingText);
   const genericOpeningHits = findGenericOpeningHits(openingText);
   const hasSpecificOpeningFrame = genericOpeningHits.length === 0;
+  const genericOpeningPhraseHits = countPhraseHits(openingText, genericPhrases);
+  const hasLowGenericOpeningDensity = genericOpeningPhraseHits <= 1;
   const endingText = text.slice(-520);
   const genericEndingHits = findGenericEndingHits(endingText);
   const hasSpecificEndingFrame = genericEndingHits.length === 0;
@@ -574,6 +576,14 @@ export function evaluateArticleQuality(
         : `冒頭に「${genericOpeningHits
             .slice(0, 3)
             .join("」「")}」型のテンプレ表現があります。背景説明から入らず、読者が最初に判断できる結論、定義、現場観察、条件から書き出すと自然になります。`,
+    },
+    {
+      id: "generic-opening-density",
+      label: "冒頭の汎用表現密度",
+      passed: hasLowGenericOpeningDensity,
+      detail: hasLowGenericOpeningDensity
+        ? "冒頭に汎用句が集中しておらず、固有の判断材料から入れています。"
+        : `冒頭420文字以内に${genericOpeningPhraseHits}件の汎用表現があります。冒頭は「近年」「重要です」「本記事では」型を減らし、参照情報・一次情報・現場で見た条件や判断を先に示してください。`,
     },
     {
       id: "generic-ending-frame",
@@ -893,6 +903,7 @@ export function evaluateArticleQuality(
     100 -
       failed.length * 8 -
       Math.min(genericPhraseHits, 6) * 2 -
+      Math.min(Math.max(0, genericOpeningPhraseHits - 1), 4) * 2 -
       Math.min(genericOpeningHits.length, 4) * 3 -
       Math.min(genericEndingHits.length, 4) * 3 -
       Math.min(verboseAiPhraseHits, 6) * 2 -

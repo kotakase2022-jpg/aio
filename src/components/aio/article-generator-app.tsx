@@ -3448,6 +3448,10 @@ export function qualityCheckEditGuidance(checkId: string) {
     return "修正先: 本文HTML。冒頭をテンプレ導入ではなく、結論、定義、現場観察、条件から書き出します。";
   }
 
+  if (checkId === "generic-opening-density") {
+    return "修正先: 本文HTML。冒頭400字以内の汎用句を減らし、参照情報、一次情報、現場で見た条件、読者の判断材料から始めます。";
+  }
+
   if (checkId === "generic-ending-frame") {
     return "修正先: 本文HTML。末尾の定型句を削り、記事固有の判断基準、次に確認する情報、問い合わせ前の準備事項に置き換えます。";
   }

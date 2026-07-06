@@ -31,6 +31,7 @@ describe("qualityCheckEditGuidance", () => {
       ["theme-keyword-reflection", "入力テーマ・キーワード"],
       ["primary-info-reflection", "当社の経験"],
       ["cta-reflection", "記事末尾の自然な次アクション"],
+      ["generic-opening-density", "冒頭400字以内の汎用句"],
     ] as const;
 
     for (const [checkId, expectedText] of expectations) {

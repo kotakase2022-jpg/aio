@@ -14,6 +14,10 @@ export function qualityRegenerationAction(checkId: string) {
     return "冒頭を背景説明から始めず、結論、定義、現場観察、条件のいずれかで書き出す。";
   }
 
+  if (checkId === "generic-opening-density") {
+    return "冒頭400字以内の近年、重要です、本記事では等を削り、参照情報、一次情報、現場で見た条件、読者の判断材料から書き出す。";
+  }
+
   if (checkId === "generic-ending-frame") {
     return "末尾の定型句を削り、記事固有の判断基準、次に確認する情報、問い合わせ前の準備事項へ置き換える。";
   }

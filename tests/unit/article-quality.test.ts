@@ -938,6 +938,24 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("flags dense generic phrases in the opening even when later sections are concrete", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、AIO記事では参照元、一次情報、競合差分を分けて公開前に確認します。本記事では、この確認体制が重要です。公開前レビューでは、承認担当、出典、未確認情報の扱いを同じ表で見比べます。</p>
+      <p>当社の支援現場では、12件の相談で承認担当と出典確認の手順が曖昧でした。一人親方支援ではLINEで相談が進み、帳票や確認履歴が残らないまま原稿化されるケースがあります。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、参照元にない数字を条件なしで書かないことです。</li></ul>
+      <h2>公開前に確認すべき編集判断</h2>
+      <p>FAQとして、どこまでを自社経験として書けるかを確認します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-opening-density", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("冒頭420文字以内");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("flags repeated explain-and-introduce boilerplate beyond the opening", () => {
     const result = evaluateArticleQuality(`
       <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
