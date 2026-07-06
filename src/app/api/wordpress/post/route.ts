@@ -2,13 +2,12 @@ import { z } from "zod";
 import { ApiError, errorJson, okJson } from "@/lib/server/http";
 import { getDraft } from "@/lib/server/drafts";
 import { publishDraftToWordpress } from "@/lib/server/wordpress";
-import type { ArticleDraft } from "@/types/aio";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 const schema = z.object({
-  draft: z.record(z.string(), z.unknown()),
+  draft: z.object({ id: z.string().min(1) }).passthrough(),
   connectionId: z.string().min(1),
   connection: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(["draft", "publish"]),
@@ -17,13 +16,12 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const body = schema.parse(await request.json());
-    const requestDraft = body.draft as ArticleDraft;
-    const draft = requestDraft.id ? await getDraft(requestDraft.id) : null;
+    const draft = await getDraft(body.draft.id);
     if (!draft) {
       throw new ApiError(
-        "Draft not found.",
+        "WordPress投稿するドラフトが見つかりません。",
         404,
-        "Save and approve the draft before posting to WordPress.",
+        "下書きを保存・承認してからWordPress投稿してください。",
       );
     }
 

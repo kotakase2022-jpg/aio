@@ -131,4 +131,61 @@ describe("WordPress post route", () => {
     expect(getDraft).toHaveBeenCalledWith(clientDraft.id);
     expect(publishDraftToWordpress).not.toHaveBeenCalled();
   });
+
+  test("rejects a WordPress post payload when draft id is not a string", async () => {
+    const { publishDraftToWordpress } = await import("@/lib/server/wordpress");
+    const { getDraft } = await import("@/lib/server/drafts");
+    const { POST } = await import("@/app/api/wordpress/post/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/wordpress/post", {
+        method: "POST",
+        headers: { origin: "https://app.example.com" },
+        body: JSON.stringify({
+          draft: { id: { unsafe: "object-id" }, status: "approved" },
+          connectionId: "wp-connection-1",
+          status: "draft",
+        }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json).toMatchObject({
+      ok: false,
+      error: "入力内容が不正です。",
+    });
+    expect(getDraft).not.toHaveBeenCalled();
+    expect(publishDraftToWordpress).not.toHaveBeenCalled();
+  });
+
+  test("returns a Japanese recovery message when the persisted draft is missing", async () => {
+    const { publishDraftToWordpress } = await import("@/lib/server/wordpress");
+    const { getDraft } = await import("@/lib/server/drafts");
+    const draft = createSampleDraft({ status: "approved" });
+    vi.mocked(getDraft).mockResolvedValueOnce(null);
+    const { POST } = await import("@/app/api/wordpress/post/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/wordpress/post", {
+        method: "POST",
+        headers: { origin: "https://app.example.com" },
+        body: JSON.stringify({
+          draft,
+          connectionId: "wp-connection-1",
+          status: "draft",
+        }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(json).toMatchObject({
+      ok: false,
+      error: "WordPress投稿するドラフトが見つかりません。",
+      detail: "下書きを保存・承認してからWordPress投稿してください。",
+    });
+    expect(getDraft).toHaveBeenCalledWith(draft.id);
+    expect(publishDraftToWordpress).not.toHaveBeenCalled();
+  });
 });
