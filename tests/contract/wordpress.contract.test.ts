@@ -176,7 +176,7 @@ describe("WordPress REST API contract", () => {
 
       await expect(
         publishDraftToWordpress({
-          draft: createSampleDraft({ status: "approved" }),
+          draft: createSampleDraft({ status: "approved", tags: [] }),
           connectionId: connection.id,
           status: "draft",
           origin: "http://localhost",
@@ -190,6 +190,93 @@ describe("WordPress REST API contract", () => {
       const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
       expect(requestNames).toContain("GET /wp-json/wp/v2/categories");
       expect(requestNames).not.toContain("POST /wp-json/wp/v2/media");
+      expect(requestNames).not.toContain("POST /wp-json/wp/v2/posts");
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("stops before posting when a matched WordPress term has a non-numeric id", async () => {
+    const server = await createMockHttpServer((request, response) => {
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, [{ id: "11", name: "Content Marketing" }]);
+        return;
+      }
+
+      sendJson(response, { message: `Unexpected route ${request.method} ${request.pathname}` }, 500);
+    });
+
+    try {
+      const { saveWordpressConnection, publishDraftToWordpress } = await import(
+        "@/lib/server/wordpress"
+      );
+      const connection = await saveWordpressConnection({
+        siteUrl: server.origin,
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      });
+
+      await expect(
+        publishDraftToWordpress({
+          draft: createSampleDraft({ status: "approved", tags: [] }),
+          connectionId: connection.id,
+          status: "draft",
+          origin: "http://localhost",
+        }),
+      ).rejects.toMatchObject({
+        status: 502,
+        message: "Unexpected WordPress category search response.",
+        detail: "WordPress REST API returned a term without a numeric id.",
+      });
+
+      const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
+      expect(requestNames).toContain("GET /wp-json/wp/v2/categories");
+      expect(requestNames).not.toContain("POST /wp-json/wp/v2/posts");
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("stops before posting when a created WordPress term has a non-numeric id", async () => {
+    const server = await createMockHttpServer((request, response) => {
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, []);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, { id: "11", name: (request.json as { name: string }).name }, 201);
+        return;
+      }
+
+      sendJson(response, { message: `Unexpected route ${request.method} ${request.pathname}` }, 500);
+    });
+
+    try {
+      const { saveWordpressConnection, publishDraftToWordpress } = await import(
+        "@/lib/server/wordpress"
+      );
+      const connection = await saveWordpressConnection({
+        siteUrl: server.origin,
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      });
+
+      await expect(
+        publishDraftToWordpress({
+          draft: createSampleDraft({ status: "approved", tags: [] }),
+          connectionId: connection.id,
+          status: "draft",
+          origin: "http://localhost",
+        }),
+      ).rejects.toMatchObject({
+        status: 502,
+        message: "Unexpected WordPress category create response.",
+        detail: "WordPress REST API returned a term without a numeric id.",
+      });
+
+      const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
+      expect(requestNames).toContain("POST /wp-json/wp/v2/categories");
       expect(requestNames).not.toContain("POST /wp-json/wp/v2/posts");
     } finally {
       await server.close();

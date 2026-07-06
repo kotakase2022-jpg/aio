@@ -327,13 +327,10 @@ async function ensureTerms(
       );
     }
 
-    const existing = searchJson as Array<{
-      id: number;
-      name: string;
-    }>;
-    const match = existing.find((item) => item.name.toLowerCase() === name.toLowerCase());
+    const existing = searchJson as Array<Record<string, unknown>>;
+    const match = existing.find((item) => readTermName(item).toLowerCase() === name.toLowerCase());
     if (match) {
-      ids.push(match.id);
+      ids.push(readWordpressTermId(match, type, "search"));
       continue;
     }
 
@@ -342,21 +339,38 @@ async function ensureTerms(
       headers: { Authorization: authHeader, "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     });
-    const created = (await createResponse.json().catch(() => ({}))) as {
-      id?: number;
-      message?: string;
-    };
-    if (!createResponse.ok || !created.id) {
+    const created = (await createResponse.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!createResponse.ok) {
       throw new ApiError(
         `Failed to create WordPress ${singularTerm(type)}.`,
         createResponse.status,
         readWordpressError(created),
       );
     }
-    ids.push(created.id);
+    ids.push(readWordpressTermId(created, type, "create"));
   }
 
   return ids;
+}
+
+function readWordpressTermId(
+  value: Record<string, unknown>,
+  type: "categories" | "tags",
+  operation: "search" | "create",
+) {
+  if (Number.isInteger(value.id) && Number(value.id) > 0) {
+    return Number(value.id);
+  }
+
+  throw new ApiError(
+    `Unexpected WordPress ${singularTerm(type)} ${operation} response.`,
+    502,
+    "WordPress REST API returned a term without a numeric id.",
+  );
+}
+
+function readTermName(value: Record<string, unknown>) {
+  return typeof value.name === "string" ? value.name : "";
 }
 
 function singularTerm(type: "categories" | "tags") {
