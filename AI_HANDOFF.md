@@ -16,10 +16,10 @@ Current objective:
 
 ## 2. Current Branch / Commit
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest pushed implementation commit: `ed3214f Strengthen AIO quality gates and review flow`
-- Last known good commit: `ed3214f` plus the current follow-up resume-job fix has passed `npm run quality`.
+- Latest pushed code commit: `8e794e0 Fix resumed generation CTA state`
+- Last known good code commit: `8e794e0`, which passed local `npm run quality` before push.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- Important: This handoff update and the resume-job fix should be pushed as a follow-up commit after this file is saved.
+- Important: The branch has been pushed. A final handoff-only commit may follow this entry if this file is updated after the code fix.
 
 ## 3. What Was Done
 Completed in this Codex pass:
@@ -107,7 +107,8 @@ The worktree also still contains the larger existing Loop 2 + Loop 3 diff across
 - Live readiness is currently not ready. This is expected and safe: the readiness script stopped before live provider calls.
 - PR #1 is open against `main` and points at `codex/persistent-quality-gate-operations`.
 - CodeRabbit is installed/enabled for `kotakase2022-jpg/aio`; CodeRabbit configuration was confirmed on PR #1 and review was manually triggered.
-- CodeRabbit status is still pending for head commit `ed3214f7018cbd2d045beb0acba04c1385d6187f` at the time of this handoff.
+- CodeRabbit status is still pending for pushed head commit `8e794e0d30123f358cdb6937899e03f59bf9217f` at the time of this handoff.
+- GitHub Actions `Typecheck, lint, tests, E2E, build` was still in progress for `8e794e0d30123f358cdb6937899e03f59bf9217f` immediately after push.
 - No deploy, production DB write, production API mutation, force push, or secret output was performed.
 
 ## 6. Known Issues
@@ -223,6 +224,8 @@ Results:
   - `npm run test:coverage`: passed, statements 84.5%, branches 70.69%, functions 90.74%, lines 84.97%.
   - `npm run test:e2e`: passed, 45 Chromium PC tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
+- `git commit -m "Fix resumed generation CTA state"`: passed, created `8e794e0`.
+- `git push -u origin codex/persistent-quality-gate-operations` after the resume-job fix: passed. The pre-push hook also passed lint, typecheck, test integrity, unit tests, and contract tests.
 - Final `npm run quality` after the manual-smoke documentation, anchor fix, and E2E regression update: passed.
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
