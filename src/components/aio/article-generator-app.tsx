@@ -931,39 +931,72 @@ export function ArticleGeneratorApp() {
       let nextBodyHtml = draft.editedBodyHtml;
       const rewriteInstruction = instruction.trim();
       const regenerationFailures: string[] = [];
-
-      for (const image of generatedImages) {
-        try {
-          const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-            prompt: buildImageRegenerationPrompt(image.prompt, rewriteInstruction, draft.aiResult),
-            slot: image.slot,
-            altText: image.altText,
-          });
-
-          nextImages = nextImages.map((item) =>
-            item.id === image.id ? result.image : item,
-          );
-          nextBodyHtml = replaceImageReferences(nextBodyHtml, image, result.image);
-        } catch (error) {
-          regenerationFailures.push(`${image.slot}: ${readError(error)}`);
-        }
-      }
+      const regenerationTasks = [
+        ...generatedImages.map((image) => ({
+          slot: image.slot,
+          run: async () => ({
+            type: "replace" as const,
+            image,
+            nextImage: (
+              await apiPost<{ image: ArticleImage }>("/api/generate-image", {
+                prompt: buildImageRegenerationPrompt(
+                  image.prompt,
+                  rewriteInstruction,
+                  draft.aiResult,
+                ),
+                slot: image.slot,
+                altText: image.altText,
+              })
+            ).image,
+          }),
+        })),
+        ...missingImagePrompts.map((prompt) => ({
+          slot: prompt.slot,
+          run: async () => ({
+            type: "recover" as const,
+            nextImage: (
+              await apiPost<{ image: ArticleImage }>("/api/generate-image", {
+                prompt: buildImageRegenerationPrompt(
+                  prompt.prompt,
+                  rewriteInstruction,
+                  draft.aiResult,
+                ),
+                slot: prompt.slot,
+                altText: prompt.alt_text,
+              })
+            ).image,
+          }),
+        })),
+      ];
 
       const recoveredImages: ArticleImage[] = [];
-      for (const prompt of missingImagePrompts) {
-        try {
-          const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-            prompt: buildImageRegenerationPrompt(prompt.prompt, rewriteInstruction, draft.aiResult),
-            slot: prompt.slot,
-            altText: prompt.alt_text,
-          });
+      const regenerationResults = await Promise.allSettled(
+        regenerationTasks.map((task) => task.run()),
+      );
 
-          recoveredImages.push(result.image);
-          nextImages = [...nextImages, result.image];
-        } catch (error) {
-          regenerationFailures.push(`${prompt.slot}: ${readError(error)}`);
+      regenerationResults.forEach((outcome, index) => {
+        const task = regenerationTasks[index];
+        if (outcome.status === "rejected") {
+          regenerationFailures.push(`${task.slot}: ${readError(outcome.reason)}`);
+          return;
         }
-      }
+
+        const value = outcome.value;
+        if (value.type === "replace") {
+          nextImages = nextImages.map((item) =>
+            item.id === value.image.id ? value.nextImage : item,
+          );
+          nextBodyHtml = replaceImageReferences(
+            nextBodyHtml,
+            value.image,
+            value.nextImage,
+          );
+          return;
+        }
+
+        recoveredImages.push(value.nextImage);
+        nextImages = [...nextImages, value.nextImage];
+      });
 
       if (recoveredImages.length) {
         nextBodyHtml = injectImages(nextBodyHtml, recoveredImages);
@@ -2683,7 +2716,7 @@ function ArticlePreview({
           }
         >
           <div className="space-y-3">
-            {draft.images.length === 0 && missingGeneratedImagePrompts.length > 0 ? (
+            {missingGeneratedImagePrompts.length > 0 ? (
               <div
                 data-testid="missing-generated-images-recovery"
                 className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"

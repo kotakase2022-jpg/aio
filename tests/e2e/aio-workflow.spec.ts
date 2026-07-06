@@ -1123,6 +1123,7 @@ test("bulk image regeneration preserves successful images when a later image fai
   };
   const calls = await mockCommonApiRoutes(page, completedJob, {
     generateImageFailOnCalls: [2],
+    generateImageDelayMs: 50,
   });
 
   await login(page);
@@ -1142,12 +1143,62 @@ test("bulk image regeneration preserves successful images when a later image fai
 
   await expect(page.getByText("一部の画像再作成に失敗しました。")).toBeVisible();
   expect(calls.generateImage).toBe(2);
+  expect(calls.generateImageMaxConcurrency).toBe(2);
   await expect(page.getByTestId("image-regeneration-progress")).toHaveAttribute(
     "aria-valuenow",
     "100",
   );
   await expect(page.locator('img[src*="regenerated-1.png"]').first()).toBeVisible();
   await expect(page.getByRole("dialog", { name: "画像のみ再作成" })).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
+test("missing generated image recovery is visible when only some image slots failed", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    inputPayload: {
+      ...completedJob.draft!.inputPayload,
+      imageCount: 2,
+    },
+    aiResult: {
+      ...completedJob.draft!.aiResult,
+      image_prompts: [
+        ...completedJob.draft!.aiResult.image_prompts,
+        {
+          slot: "inline-1",
+          purpose: "Inline process image",
+          prompt: "Detailed editorial workflow image for inline explanation",
+          alt_text: "Inline editorial workflow image",
+        },
+      ],
+    },
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text for partial missing image recovery.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await expect(page.getByTestId("missing-generated-images-recovery")).toContainText(
+    "画像プロンプトは残っている",
+  );
+  await expect(page.getByTestId("missing-generated-images-recovery")).toContainText("inline-1");
+  await expect(page.locator('img[alt="AIO workflow hero image"]').first()).toBeVisible();
   expect(errors()).toEqual([]);
 });
 
@@ -2969,6 +3020,7 @@ async function mockCommonApiRoutes(
     competitorResearchFailOnce?: boolean;
     generateImageShouldFail?: boolean;
     generateImageFailOnCalls?: number[];
+    generateImageDelayMs?: number;
     generationJobFailureCall?: number;
     wordpressPostShouldFail?: boolean;
     wordpressConnectShouldReturnRawValidation?: boolean;
@@ -2981,6 +3033,8 @@ async function mockCommonApiRoutes(
     saveDraft: 0,
     approveDraft: 0,
     generateImage: 0,
+    generateImageActive: 0,
+    generateImageMaxConcurrency: 0,
     generateImagePrompts: [] as string[],
     competitorResearch: 0,
     extractFile: 0,
@@ -3117,37 +3171,54 @@ async function mockCommonApiRoutes(
 
   await page.route("**/api/generate-image", async (route) => {
     calls.generateImage += 1;
+    calls.generateImageActive += 1;
+    calls.generateImageMaxConcurrency = Math.max(
+      calls.generateImageMaxConcurrency,
+      calls.generateImageActive,
+    );
+    const callIndex = calls.generateImage;
     if (
-      options.generateImageShouldFail ||
-      options.generateImageFailOnCalls?.includes(calls.generateImage)
+      options.generateImageDelayMs &&
+      options.generateImageDelayMs > 0
     ) {
-      await route.fulfill({
-        status: 500,
-        json: { ok: false, error: "画像再作成に失敗しました。" },
-      });
-      return;
+      await new Promise((resolve) => setTimeout(resolve, options.generateImageDelayMs));
     }
 
-    const body = route.request().postDataJSON() as {
-      prompt?: string;
-      slot?: "featured" | "inline-1" | "inline-2";
-      altText?: string;
-    };
-    calls.generateImagePrompts.push(body.prompt ?? "");
-    await route.fulfill({
-      json: {
-        ok: true,
-        image: {
-          id: `regenerated-${calls.generateImage}`,
-          slot: body.slot ?? "featured",
-          url: `/mock-images/regenerated-${calls.generateImage}.png`,
-          path: `generated/regenerated-${calls.generateImage}.png`,
-          prompt: body.prompt,
-          altText: body.altText ?? "Regenerated image",
-          source: "generated",
+    try {
+      if (
+        options.generateImageShouldFail ||
+        options.generateImageFailOnCalls?.includes(callIndex)
+      ) {
+        await route.fulfill({
+          status: 500,
+          json: { ok: false, error: "画像再作成に失敗しました。" },
+        });
+        return;
+      }
+
+      const body = route.request().postDataJSON() as {
+        prompt?: string;
+        slot?: "featured" | "inline-1" | "inline-2";
+        altText?: string;
+      };
+      calls.generateImagePrompts.push(body.prompt ?? "");
+      await route.fulfill({
+        json: {
+          ok: true,
+          image: {
+            id: `regenerated-${callIndex}`,
+            slot: body.slot ?? "featured",
+            url: `/mock-images/regenerated-${callIndex}.png`,
+            path: `generated/regenerated-${callIndex}.png`,
+            prompt: body.prompt,
+            altText: body.altText ?? "Regenerated image",
+            source: "generated",
+          },
         },
-      },
-    });
+      });
+    } finally {
+      calls.generateImageActive -= 1;
+    }
   });
 
   await page.route("**/api/save-draft", async (route) => {
