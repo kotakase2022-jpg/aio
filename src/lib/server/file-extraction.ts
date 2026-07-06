@@ -309,7 +309,6 @@ function isHtmlNoiseMarker(marker: string) {
     "breadcrumb",
     "breadcrumbs",
     "pagination",
-    "newsletter",
     "popup",
     "modal",
     "advert",
@@ -366,8 +365,31 @@ function isHtmlNoiseMarker(marker: string) {
         "widgets",
       ].includes(token),
     );
+  const hasNewsletterWidget =
+    tokenSet.has("newsletter") &&
+    tokens.some((token) =>
+      [
+        "banner",
+        "banners",
+        "box",
+        "boxes",
+        "button",
+        "buttons",
+        "cta",
+        "email",
+        "form",
+        "forms",
+        "mail",
+        "modal",
+        "popup",
+        "signup",
+        "subscribe",
+        "widget",
+        "widgets",
+      ].includes(token),
+    );
 
-  return hasShareWidget || hasSocialWidget || hasAdBanner || hasSubscribeWidget;
+  return hasShareWidget || hasSocialWidget || hasAdBanner || hasSubscribeWidget || hasNewsletterWidget;
 }
 
 function extractPdfTextFallback(buffer: Buffer) {

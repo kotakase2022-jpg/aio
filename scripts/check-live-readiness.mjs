@@ -126,12 +126,13 @@ function warnProductionLikeUrl(name) {
 }
 
 function loadDotenvFiles() {
-  for (const fileName of [".env.live.local", ".env.live", ".env.local", ".env"]) {
+  for (const fileName of [".env", ".env.local", ".env.live", ".env.live.local"]) {
     const filePath = path.join(process.cwd(), fileName);
     if (!existsSync(filePath)) {
       continue;
     }
 
+    const isLiveFile = fileName.startsWith(".env.live");
     const text = readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
     for (const line of text.split(/\r?\n/)) {
       const trimmed = line.trim();
@@ -146,7 +147,7 @@ function loadDotenvFiles() {
 
       const key = trimmed.slice(0, separator).trim();
       const value = cleanEnvValue(trimmed.slice(separator + 1));
-      if (key && process.env[key] == null) {
+      if (key && (isLiveFile || process.env[key] == null)) {
         process.env[key] = value;
       }
     }

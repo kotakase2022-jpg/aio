@@ -76,6 +76,7 @@ describe("extractAttachmentText", () => {
             <section class="subscription-pricing"><p>Subscription pricing article evidence should stay.</p></section>
             <section class="market-share-analysis"><p>Market share analysis article evidence should stay.</p></section>
             <section class="revenue-share"><p>Revenue share article evidence should stay.</p></section>
+            <section class="newsletter-strategy"><p>Newsletter strategy article evidence should stay.</p></section>
             <div class="share-buttons">Share this article</div>
             <div class="social-links">Follow us on social media</div>
             <div class="subscribe-box">Subscribe now</div>
@@ -100,6 +101,7 @@ describe("extractAttachmentText", () => {
     expect(text).toContain("Subscription pricing article evidence should stay.");
     expect(text).toContain("Market share analysis article evidence should stay.");
     expect(text).toContain("Revenue share article evidence should stay.");
+    expect(text).toContain("Newsletter strategy article evidence should stay.");
     expect(text).not.toContain("secret");
     expect(text).not.toContain("Accept all cookies");
     expect(text).not.toContain("Home / Blog");

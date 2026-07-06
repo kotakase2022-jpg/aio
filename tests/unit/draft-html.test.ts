@@ -117,11 +117,41 @@ describe("draft HTML rendering", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
         editedBodyHtml: "<h2>この記事の執筆者</h2><p>Test Author</p>",
+        author: {
+          name: "Test Author",
+          title: "Content Strategist",
+          bio: "Writes practical B2B content operations guides.",
+          imageUrl: "",
+        },
       }),
     );
 
     expect(html.match(/この記事の執筆者/g)).toHaveLength(1);
     expect(html).not.toContain('class="aio-author-block"');
+  });
+
+  test("replaces an AI-written author section when an uploaded portrait must be preserved", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml:
+          "<h2>この記事の執筆者</h2><p>Test Author</p><p>Content Strategist</p><p>[uploaded author image]</p><h2>Next section</h2><p>Body continues.</p>",
+        author: {
+          name: "Test Author",
+          title: "Content Strategist",
+          bio: "Writes practical B2B content operations guides.",
+          imageUrl: "/uploads/authors/test-author.png",
+        },
+      }),
+      {
+        imageUrlResolver: (url) => `https://app.example.com${url}`,
+      },
+    );
+
+    expect(html).toContain('class="aio-author-block"');
+    expect(html).toContain('src="https://app.example.com/uploads/authors/test-author.png"');
+    expect(html).not.toContain("[uploaded author image]");
+    expect(html).toContain("<h2>Next section</h2>");
+    expect(html.match(/この記事の執筆者/g)).toHaveLength(2);
   });
 
   test("appends the author block when the author name appears only incidentally", () => {
@@ -147,6 +177,12 @@ describe("draft HTML rendering", () => {
       createSampleDraft({
         editedBodyHtml:
           "<section><p>Test Author</p><p>Content Strategist</p><p>Writes practical B2B content operations guides.</p></section>",
+        author: {
+          name: "Test Author",
+          title: "Content Strategist",
+          bio: "Writes practical B2B content operations guides.",
+          imageUrl: "",
+        },
       }),
     );
 

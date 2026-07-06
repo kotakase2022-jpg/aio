@@ -11,6 +11,8 @@ type BuildDraftArticleHtmlOptions = {
   imageUrlResolver?: (url: string) => string;
 };
 
+const authorSectionHeading = "この記事の執筆者";
+
 export function buildDraftArticleHtml(
   draft: ArticleDraft,
   options: BuildDraftArticleHtmlOptions = {},
@@ -107,6 +109,13 @@ export function appendAuthorBlockWhenNeeded(
 
   const text = normalizeText(stripHtmlText(withoutManagedAuthor));
   if (hasExistingAuthorSection(text, normalizedAuthor)) {
+    if (normalizedAuthor.imageUrl) {
+      const withoutExistingAuthor = removeExistingAuthorProfileBlock(
+        withoutManagedAuthor,
+        normalizedAuthor,
+      );
+      return `${withoutExistingAuthor}\n${buildAuthorBlockHtml(normalizedAuthor, options)}`.trim();
+    }
     return withoutManagedAuthor;
   }
 
@@ -117,7 +126,7 @@ function hasExistingAuthorSection(
   normalizedBodyText: string,
   author: Required<Pick<AuthorInput, "name" | "title" | "bio" | "imageUrl">>,
 ) {
-  const headingAlreadyVisible = normalizedBodyText.includes(normalizeText("この記事の執筆者"));
+  const headingAlreadyVisible = normalizedBodyText.includes(normalizeText(authorSectionHeading));
   if (headingAlreadyVisible) {
     return true;
   }
@@ -169,16 +178,50 @@ function buildAuthorBlockHtml(
     : "";
   const image = imageUrl
     ? `<img src="${escapeHtmlAttribute(imageUrl)}" alt="${escapeHtmlAttribute(
-        author.name || "この記事の執筆者",
+        author.name || authorSectionHeading,
       )}" />`
     : "";
   const title = author.title ? `<p class="aio-author-title">${escapeHtml(author.title)}</p>` : "";
   const bio = author.bio ? `<p class="aio-author-bio">${escapeHtml(author.bio)}</p>` : "";
   const name = author.name || "執筆者";
 
-  return `<section class="aio-author-block" aria-label="この記事の執筆者"><h2>この記事の執筆者</h2>\n<div class="aio-author-profile">${image}<div><h3>${escapeHtml(
+  return `<section class="aio-author-block" aria-label="${authorSectionHeading}"><h2>${authorSectionHeading}</h2>\n<div class="aio-author-profile">${image}<div><h3>${escapeHtml(
     name,
   )}</h3>${title}${bio}</div></div>\n</section>`;
+}
+
+function removeExistingAuthorProfileBlock(
+  html: string,
+  author: Required<Pick<AuthorInput, "name" | "title" | "bio" | "imageUrl">>,
+) {
+  const escapedHeading = escapeRegExp(authorSectionHeading);
+  const sectionWithHeading = new RegExp(
+    `<section\\b[^>]*>[\\s\\S]*?<h[2-3][^>]*>\\s*${escapedHeading}\\s*<\\/h[2-3]>[\\s\\S]*?<\\/section>`,
+    "i",
+  );
+  const fromHeadingToNextSection = new RegExp(
+    `<h[2-3][^>]*>\\s*${escapedHeading}\\s*<\\/h[2-3]>[\\s\\S]*?(?=<h[12]\\b|<section\\b|$)`,
+    "i",
+  );
+  const withoutHeadingSection = html.replace(sectionWithHeading, "").replace(fromHeadingToNextSection, "");
+  if (withoutHeadingSection !== html) {
+    return withoutHeadingSection.trim();
+  }
+
+  const escapedName = author.name ? escapeRegExp(author.name) : "";
+  if (!escapedName) {
+    return html;
+  }
+
+  return html
+    .replace(
+      new RegExp(
+        `<section\\b[^>]*>[\\s\\S]*?${escapedName}[\\s\\S]*?<\\/section>`,
+        "i",
+      ),
+      "",
+    )
+    .trim();
 }
 
 function removeManagedFaqBlock(html: string) {

@@ -6,7 +6,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: Previous handoff had `Current owner: Claude Code`, `Next owner: Codex`, and `Loop: 3`; Claude Code returned the same uncommitted Loop 2 + Loop 3 worktree to Codex for the next development pass.
 - Phase: Autonomous Improvement / Handoff
-- Last updated: 2026-07-06 11:24 +09:00
+- Last updated: 2026-07-06 11:34 +09:00
 
 ## 1. Current Goal
 Current objective:
@@ -16,9 +16,9 @@ Current objective:
 
 ## 2. Current Branch / Commit
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest pushed commit before this handoff update: `984decc Update handoff with latest CI status`
-- Latest pushed code commit: `012d786 Address PR review reliability findings`
-- Last known good local state: this working tree after the primary-information opening-placement quality check passed local `npm run quality`.
+- Latest pushed commit before this handoff update: `51c518c Strengthen primary information quality checks`
+- Latest pushed code commit before this handoff update: `51c518c Strengthen primary information quality checks`
+- Last known good local state: this working tree after the remaining P2 review findings passed local `npm run quality`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - Important: a final commit containing this handoff and the latest quality-check change may follow this entry and should be pushed to PR #1.
 
@@ -73,6 +73,13 @@ Completed in this Codex pass:
 - Updated the core PC E2E workflow to verify the new checklist row and that regeneration instructions include the opening-placement fix.
 - Updated `docs/quality-audit.md` with the new quality evidence and latest local full-gate result.
 - Ran targeted Vitest and Playwright checks plus full `npm run quality`; all passed after the E2E selector was tightened for the new duplicate primary-info wording.
+- Re-checked PR #1 after CodeRabbit installation. CodeRabbit is installed and responding, and the latest pushed `51c518c` GitHub Actions `quality-gate` run completed successfully.
+- Addressed three additional valid Codex automated review P2 findings:
+  - `newsletter` HTML class/id markers are no longer removed as generic noise unless paired with subscribe/form/widget context, preserving legitimate newsletter-strategy reference sections.
+  - Draft HTML rendering now replaces an AI-written author section with the managed author block when an uploaded author portrait must be preserved.
+  - Live sandbox readiness loading now lets `.env.live` / `.env.live.local` override shell app env values, preventing production-like shell Supabase/WordPress values from winning over disposable sandbox settings.
+- Added regression tests for newsletter article evidence preservation, uploaded author portrait preservation when the body already has an author section, and live sandbox env overriding production-like shell env.
+- Ran targeted Vitest, lint, typecheck, and full `npm run quality`; all passed locally.
 
 Previously completed in the broader Loop 2 + Loop 3 uncommitted diff:
 - Shared source URL normalization in `src/lib/source-url.ts`.
@@ -107,6 +114,12 @@ Main files changed in this Codex pass:
 - `src/components/aio/article-generator-app.tsx`
 - `tests/unit/article-quality.test.ts`
 - `tests/e2e/aio-workflow.spec.ts`
+- `scripts/check-live-readiness.mjs`
+- `src/lib/draft-html.ts`
+- `src/lib/server/file-extraction.ts`
+- `tests/unit/draft-html.test.ts`
+- `tests/unit/file-extraction.test.ts`
+- `tests/unit/live-readiness-script.test.ts`
 
 The worktree also still contains the larger existing Loop 2 + Loop 3 diff across:
 - `src/components/aio/article-generator-app.tsx`
@@ -128,7 +141,7 @@ The worktree also still contains the larger existing Loop 2 + Loop 3 diff across
 - untracked `tests/unit/source-url.test.ts`
 
 ## 5. Current Status
-- `npm run quality` passes locally after the latest Codex change, including the PR review reliability fixes.
+- `npm run quality` passes locally after the latest Codex change, including the remaining P2 review reliability fixes.
 - A manual PC-browser smoke pass for the initial workflow passes with zero console errors.
 - A manual PC-browser smoke pass for an already generated draft passes with zero console errors.
 - The targeted core workflow E2E passes after adding the sticky-anchor and draft-only-nav regression assertions.
@@ -138,16 +151,16 @@ The worktree also still contains the larger existing Loop 2 + Loop 3 diff across
 - PR #1 is open against `main` and points at `codex/persistent-quality-gate-operations`.
 - CodeRabbit is installed/enabled for `kotakase2022-jpg/aio`; CodeRabbit configuration was confirmed on PR #1 and review was manually triggered.
 - CodeRabbit is installed and responding on PR #1. No CodeRabbit inline findings were present in the GitHub connector output during this pass; the visible actionable findings were Codex automated review P2 comments, fixed in `012d786`.
-- `68599d8` has been pushed to PR #1.
-- GitHub Actions `quality-gate` run `28763096146` for `68599d8` completed successfully. The job `Typecheck, lint, tests, E2E, build` passed all steps.
-- Local `npm run quality` passed at 2026-07-06 11:24 +09:00 after the latest primary-information opening-placement change.
+- `51c518c` has been pushed to PR #1.
+- GitHub Actions `quality-gate` run `28763865925` for `51c518c` completed successfully. The job `Typecheck, lint, tests, E2E, build` passed all steps.
+- Local `npm run quality` passed at 2026-07-06 11:33 +09:00 after the latest remaining P2 review-finding fixes.
 - No deploy, production DB write, production API mutation, force push, or secret output was performed.
 
 ## 6. Known Issues
 - Live OpenAI / Supabase / WordPress sandbox verification is still not completed. Existing E2E tests mock external services to avoid production data/API damage.
 - `npm run test:live:readiness` reports missing `AIO_LIVE_CONTRACT_TESTS`, Supabase live-test confirmation/write variables, and WordPress sandbox credentials. It also warns that the current Supabase host does not look like a sandbox/staging host.
 - Real generated-article quality review and live WordPress recovery remain manual/sandbox follow-up work.
-- CodeRabbit review output should be checked again later. The latest fetched PR timeline still showed the user `@coderabbitai review` request at 2026-07-06 10:55 +09:00 but no new CodeRabbit reply to that request yet.
+- CodeRabbit review output should be checked again later after the next push containing the remaining P2 fixes.
 - The three high-level 100/100 targets are not yet fully proven because live sandbox/manual checks remain.
 
 ## 7. Bugbot Findings
@@ -164,6 +177,10 @@ Automated review findings and status:
   - Require widget context before dropping share sections.
   - Apply backoff when `Retry-After` is absent.
   - Preserve each XLSX shared string entry.
+- Codex automated review P2 findings addressed in this local handoff update:
+  - Require widget context before dropping newsletters.
+  - Preserve uploaded author portraits when an author section exists.
+  - Let live sandbox env override shell app env.
 - Do not run Bugbot again by default. Use Bugbot only if CodeRabbit is unavailable, a second opinion is materially useful, or the user explicitly asks for it.
 
 ## 8. Verification Results
@@ -326,13 +343,29 @@ Results:
   - `npm run test:coverage`: passed, statements 84.82%, branches 71.12%, functions 91.01%, lines 85.25%.
   - `npm run test:e2e`: passed, 45 Chromium PC tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
+- GitHub Actions workflow run `28763865925`: completed successfully for commit `51c518c`.
+  - Job `Typecheck, lint, tests, E2E, build`: success.
+- `npx vitest run tests/unit/file-extraction.test.ts tests/unit/draft-html.test.ts tests/unit/live-readiness-script.test.ts`: passed, 3 files / 36 tests.
+- `npm run lint`: passed.
+- `npm run typecheck`: initially failed because the new live-readiness test helper used `NodeJS.ProcessEnv` for a partial override map; fixed by using `Record<string, string>`.
+- `npm run typecheck`: passed after the test helper type fix.
+- Latest `npm run quality` after the remaining P2 review-finding fixes: passed.
+  - `npm run typecheck`: passed.
+  - `npm run lint`: passed.
+  - `npm run test:integrity`: passed, 40 files checked.
+  - `npm run test`: passed, 36 files / 228 tests.
+  - `npm run test:contract`: passed, 3 files / 9 tests.
+  - `npm run test:coverage`: passed, statements 84.79%, branches 71.06%, functions 91.05%, lines 85.21%.
+  - `npm run test:e2e`: passed, 45 Chromium PC tests.
+  - `npm run build`: passed, Next.js 16.2.9 production build.
+- `git diff --check`: passed.
 
 ## 9. Next Recommended Action
 Next first action for Claude Code:
-1. Re-check PR #1 for CodeRabbit's latest reply/findings after the 10:55 `@coderabbitai review` request. Record findings here and fix Critical/High issues first.
-2. Confirm the old Codex automated review P2 findings are considered resolved by `012d786`.
+1. Re-check PR #1 for CodeRabbit's latest reply/findings after the latest push. Record findings here and fix Critical/High issues first.
+2. Confirm the Codex automated review P2 findings are resolved by the latest pushed code, including the newsletter, author portrait, and live-env fixes.
 3. Confirm the old Cursor Bugbot "Resume job UI desync" thread is resolved by the resume-state CTA block and E2E coverage.
-4. Review the PR review reliability fixes in `scripts/setup-husky.mjs`, `src/lib/server/file-extraction.ts`, `src/lib/server/openai.ts`, and related tests.
+4. Review the PR review reliability fixes in `scripts/setup-husky.mjs`, `scripts/check-live-readiness.mjs`, `src/lib/server/file-extraction.ts`, `src/lib/server/openai.ts`, `src/lib/draft-html.ts`, and related tests.
 5. Review the new `primary-info-opening-placement` check for whether it is strict enough to prevent commodity content but not so strict that it blocks legitimate article structures.
 6. Review `docs/quality-audit.md` for accuracy against the actual app/test state.
 7. Prepare disposable `.env.live.local` settings if live sandbox verification is required, then rerun `npm run test:live:readiness`.
@@ -354,6 +387,9 @@ Please focus review on:
 - Whether the OpenAI retry backoff behavior is appropriate for rate-limit recovery without making generation feel stuck.
 - Whether the XLSX rich-text shared string parsing covers the real files users attach.
 - Whether the new primary-information opening-placement check improves non-commodity output without creating false positives for articles that intentionally delay field evidence.
+- Whether newsletter-related sections should have additional keep/remove heuristics beyond the current subscribe/form/widget context rule.
+- Whether replacing an AI-written author section with the managed author block is acceptable for all preview/copy/download/WordPress outputs when an uploaded portrait exists.
+- Whether live sandbox env precedence should additionally fail on live-file/shell conflicts, or whether the current live-file override behavior is sufficient and safer.
 
 ## 11. Do Not Touch
 Avoid touching:

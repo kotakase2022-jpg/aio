@@ -41,6 +41,31 @@ describe("check-live-readiness script", () => {
     });
   });
 
+  test("lets .env.live.local override production-like shell app env", async () => {
+    await withTempProject(async (projectDir) => {
+      await writeFile(
+        path.join(projectDir, ".env.live.local"),
+        [
+          "AIO_LIVE_CONTRACT_TESTS=1",
+          "NEXT_PUBLIC_SUPABASE_URL=https://aio-sandbox.supabase.co",
+          "SUPABASE_SERVICE_ROLE_KEY=sandbox-service-role",
+          "AIO_LIVE_SUPABASE_ALLOW_WRITE=1",
+          "AIO_LIVE_CONFIRM_NON_PRODUCTION=1",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await runReadiness(projectDir, "supabase", {
+        NEXT_PUBLIC_SUPABASE_URL: "https://production.example.com",
+        SUPABASE_SERVICE_ROLE_KEY: "production-service-role",
+      });
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("- supabase: ready");
+      expect(result.stdout).not.toContain("production.example.com");
+    });
+  });
+
   test("fails closed when sandbox write confirmation is missing", async () => {
     await withTempProject(async (projectDir) => {
       await writeFile(
@@ -71,11 +96,15 @@ async function withTempProject(callback: (projectDir: string) => Promise<void>) 
   }
 }
 
-async function runReadiness(projectDir: string, provider: string) {
+async function runReadiness(
+  projectDir: string,
+  provider: string,
+  envOverrides: Record<string, string> = {},
+) {
   try {
     const { stdout, stderr } = await execFileAsync(process.execPath, [scriptPath, provider], {
       cwd: projectDir,
-      env: cleanProcessEnv(),
+      env: { ...cleanProcessEnv(), ...envOverrides },
     });
     return { code: 0, stdout, stderr };
   } catch (error) {

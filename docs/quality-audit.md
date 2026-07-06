@@ -32,8 +32,8 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-06 11:24 +09:00 after adding the
-primary-information opening-placement quality check:
+The latest local full gate passed on 2026-07-06 11:33 +09:00 after addressing
+three additional P2 review findings:
 
 - `npm run typecheck`
 - `npm run lint`
@@ -46,16 +46,16 @@ primary-information opening-placement quality check:
 
 The latest previously verified pushed GitHub Actions run also passed:
 
-- Commit: `68599d8`
+- Commit: `51c518c`
 - Workflow: `quality-gate`
 - Job: `Typecheck, lint, tests, E2E, build`
-- Run: `28763096146`
+- Run: `28763865925`
 - Result: success across setup, dependency install, typecheck, lint, test integrity, unit/integration
   tests, external contract tests, coverage, Playwright E2E, production build, and artifact upload.
 
-Note: the current local primary-information opening-placement change is not included in that
-previously verified pushed run yet. It passed the local full quality gate above and should be
-rechecked in GitHub Actions after the next push.
+Note: the current local review-finding fixes are not included in that previously verified pushed
+run yet. They passed the local full quality gate above and should be rechecked in GitHub Actions
+after the next push.
 
 Current E2E coverage includes 45 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
@@ -66,6 +66,11 @@ Article-quality coverage now also checks that supplied first-party/primary infor
 the opening decision frame, not only later in the body. This prevents drafts from passing quality
 checks when they read like generic AI copy until a late paragraph briefly mentions the user's own
 field evidence.
+
+The latest review-finding regression coverage also checks that newsletter-related article evidence
+is not stripped as HTML noise, uploaded author portraits survive even when the AI wrote an author
+section, and `.env.live.local` overrides production-like shell app env during live sandbox readiness
+checks.
 
 Additional manual PC browser smoke on 2026-07-06:
 
@@ -107,11 +112,12 @@ These gaps prevent a true 100/100 completion claim:
   initial form, sticky CTA, generation logs, primary-information input, left-card anchor movement,
   generated draft preview/editing, fullscreen preview, copy recovery, HTML export messaging, and
   WordPress section visibility. A live WordPress recovery pass still remains for sandbox credentials.
-- CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. A review was
-  requested again after the latest push, but the latest fetched PR comments did not yet include a
-  new CodeRabbit reply to the latest request or inline CodeRabbit findings for commit `68599d8`.
+- CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. Codex automated
+  review surfaced additional P2 findings after commit `984decc`; the current local work addresses
+  the remaining newsletter, author portrait, and live-env findings. CodeRabbit's latest inline
+  findings should still be checked after the next push.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. The current local worktree
-  was clean after push, so the remaining risk is hosted review completion, not unstaged drift.
+  has review-finding fixes that still need commit, push, and hosted CI confirmation.
 
 ## Current Self Score
 
