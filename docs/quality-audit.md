@@ -53,9 +53,8 @@ The latest previously verified pushed GitHub Actions run also passed:
 - Result: success across setup, dependency install, typecheck, lint, test integrity, unit/integration
   tests, external contract tests, coverage, Playwright E2E, production build, and artifact upload.
 
-Note: the current local review-finding fixes are not included in that previously verified pushed
-run yet. They passed the local full quality gate above and should be rechecked in GitHub Actions
-after the next push.
+Note: the review-finding fixes were pushed as `3a43b96` after this local gate. GitHub Actions run
+`28764168546` started for that commit and should be checked for final hosted confirmation.
 
 Current E2E coverage includes 45 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
@@ -113,11 +112,12 @@ These gaps prevent a true 100/100 completion claim:
   generated draft preview/editing, fullscreen preview, copy recovery, HTML export messaging, and
   WordPress section visibility. A live WordPress recovery pass still remains for sandbox credentials.
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. Codex automated
-  review surfaced additional P2 findings after commit `984decc`; the current local work addresses
+  review surfaced additional P2 findings after commit `984decc`; pushed commit `3a43b96` addresses
   the remaining newsletter, author portrait, and live-env findings. CodeRabbit's latest inline
-  findings should still be checked after the next push.
-- The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. The current local worktree
-  has review-finding fixes that still need commit, push, and hosted CI confirmation.
+  findings should still be checked after the new push.
+- The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. The current remaining
+  review-finding fixes have also been pushed as `3a43b96`; hosted CI confirmation for that commit
+  was still pending at the time of this note.
 
 ## Current Self Score
 
