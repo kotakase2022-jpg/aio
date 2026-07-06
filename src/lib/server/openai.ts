@@ -83,20 +83,13 @@ async function callOpenAIJson<T extends { error?: { message?: string; code?: str
         body: JSON.stringify(body),
       });
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new ApiError(
-          "OpenAI API request timed out.",
-          504,
-          "入力量を減らすか、時間をおいて再実行してください。",
-        );
-      }
-
       if (attempt < maxRetries) {
         await wait(getRetryDelayMs(attempt));
         continue;
       }
 
-      throw error;
+      const openAIError = formatOpenAITransportError(error);
+      throw new ApiError(openAIError.message, openAIError.status, openAIError.detail);
     } finally {
       clearTimeout(timer);
     }
@@ -233,6 +226,28 @@ function formatOpenAIError(
 
   return {
     message: "OpenAI API request failed.",
+    detail,
+  };
+}
+
+function formatOpenAITransportError(error: unknown) {
+  const rawMessage =
+    error instanceof Error ? cleanEnvValue(error.message) : cleanEnvValue(String(error));
+  const detail = rawMessage || undefined;
+
+  if (error instanceof Error && error.name === "AbortError") {
+    return {
+      status: 504,
+      message:
+        "OpenAI APIの応答がタイムアウトしました。入力量を減らすか、時間をおいて再実行してください。",
+      detail,
+    };
+  }
+
+  return {
+    status: 502,
+    message:
+      "OpenAI APIへの接続に失敗しました。ネットワーク状態を確認し、時間をおいて再実行してください。",
     detail,
   };
 }

@@ -141,6 +141,58 @@ describe("OpenAI server wrapper", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  test("retries transient OpenAI network failures before returning a structured response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockRejectedValueOnce(new Error("fetch failed"))
+        .mockRejectedValueOnce(new DOMException("The operation was aborted.", "AbortError"))
+        .mockResolvedValueOnce(
+          Response.json({ output_text: JSON.stringify({ value: "recovered" }) }),
+        ),
+    );
+
+    await expect(
+      createStructuredResponse<{ value: string }>({
+        instructions: "Return JSON.",
+        input: "{}",
+        schemaName: "network_retry_schema",
+        schema: { type: "object" },
+      }),
+    ).resolves.toEqual({ value: "recovered" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("maps exhausted OpenAI network failures to Japanese recovery guidance", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("socket hang up");
+    }));
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 502,
+      message:
+        "OpenAI APIへの接続に失敗しました。ネットワーク状態を確認し、時間をおいて再実行してください。",
+      detail: "socket hang up",
+    });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("maps exhausted OpenAI timeouts to Japanese recovery guidance", async () => {
+    process.env.OPENAI_MAX_RETRIES = "1";
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }));
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 504,
+      message:
+        "OpenAI APIの応答がタイムアウトしました。入力量を減らすか、時間をおいて再実行してください。",
+      detail: "The operation was aborted.",
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   test("does not retry OpenAI insufficient quota errors", async () => {
     vi.stubGlobal(
       "fetch",
