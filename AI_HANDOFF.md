@@ -19,11 +19,11 @@ This pass focused on article-quality signal matching so English input terms are 
 
 ## 2. Current Branch / Commit / PR
 - Branch: codex/persistent-quality-gate-operations
-- Latest local commit before this handoff update: 64b1811 `Update handoff with post-push review status`
-- Last known good commit: 64b1811 before this local fix; local `npm.cmd run quality` passes after this fix.
+- Latest pushed commit for this handoff: f4f9f36 `Require English signal term boundaries`
+- Last known good commit: f4f9f36; local `npm.cmd run quality` passes after this fix.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status before this local commit: Installed and responding on PR #1; latest visible status context was `PENDING`.
-- Hosted CI status before this local commit: GitHub Actions `quality-gate` / `Typecheck, lint, tests, E2E, build` was `IN_PROGRESS` for the previous pushed head.
+- CodeRabbit OSS review status after push: Installed and responding on PR #1; latest visible status context is `PENDING`.
+- Hosted CI status after push: GitHub Actions `quality-gate` / `Typecheck, lint, tests, E2E, build` is `QUEUED` for commit `f4f9f36`.
 
 ## 3. What Was Done
 This Codex pass continued article-quality false-positive hardening:
@@ -51,17 +51,17 @@ No AGENTS/CLAUDE operating-rule changes were needed; both already describe CodeR
 
 ## 6. Known Issues
 - Live OpenAI/Supabase/WordPress sandbox verification remains unproven.
-- Latest hosted GitHub Actions after the next push must be checked.
-- CodeRabbit review/status after the next push must be checked.
+- Latest hosted GitHub Actions is queued after the push and must be checked.
+- CodeRabbit review/status is pending after the push and must be checked.
 - The broader 100/100 target still needs continued manual/live validation and iterative UX/content-quality improvements.
 
 ## 7. CodeRabbit Review
 CodeRabbit OSS findings and response status:
 
-- Review status: Installed and responding on PR #1. `.coderabbit.yaml` is present and was acknowledged by CodeRabbit in prior checks.
+- Review status: Installed and responding on PR #1. `.coderabbit.yaml` is present and was acknowledged by CodeRabbit in prior checks. Latest post-push status context is pending.
 - Critical findings: None visible from the latest public PR data checked before this pass.
 - Resolved findings in this pass: Additional non-CodeRabbit article-quality false positives where English signal terms were counted inside unrelated longer words.
-- Deferred findings: Live sandbox verification and any new CodeRabbit comments after the next push.
+- Deferred findings: Live sandbox verification and any new CodeRabbit comments after the latest push.
 - False positives / not applicable: None recorded in this pass.
 
 ## 8. Optional Bugbot Findings
@@ -101,15 +101,15 @@ Claude Code should first review this small signal-matching/test change:
 
 1. Confirm that English/ASCII signal terms still match legitimate standalone words, including hyphen/underscore tokens.
 2. Confirm that substring false positives such as `form` inside `platform` no longer pass first-party or competitor reflection checks.
-3. Re-check PR #1 CodeRabbit output and hosted GitHub Actions after the latest push completes.
+3. Re-check PR #1 CodeRabbit output and hosted GitHub Actions after the latest queued run completes.
 
 After that, resume broader 100/100 improvement work one item at a time, preferably starting with live sandbox contract verification planning for OpenAI/Supabase/WordPress.
 
 ## 11. Suggested Review Scope for Claude Code
 - `src/lib/article-quality.ts`
 - `tests/unit/article-quality.test.ts`
-- PR #1 CodeRabbit comments/status after the next push completes.
-- Hosted GitHub Actions status after the next push completes.
+- PR #1 CodeRabbit comments/status after the pending review completes.
+- Hosted GitHub Actions status after the queued run completes.
 
 ## 12. Risk Notes
 - The signal-matching fix intentionally changes only ASCII/English token matching. Japanese/non-ASCII substring and sliding-window behavior remains unchanged.
