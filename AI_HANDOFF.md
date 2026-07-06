@@ -18,7 +18,7 @@ Goal全体は未完了。残指摘、sandbox契約テスト、実生成品質検
 ## 2. Current Branch / Commit / PR
 - Branch: codex/persistent-quality-gate-operations
 - Latest implementation commit: 5742d7e `Preserve author fallback block`
-- Latest handoff commit: このファイル更新後に別コミット予定
+- Latest handoff update: このファイルが最新のCodex→Claude Code引き継ぎ記録。正確なHEADは `git log -1 --pretty=format:"%h %s"` で確認すること。
 - Last known good commit: 5742d7e `Preserve author fallback block`
 - Last known good verification: `npm.cmd run quality` 成功（§8）。
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
