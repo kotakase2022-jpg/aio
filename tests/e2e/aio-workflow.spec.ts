@@ -2436,9 +2436,10 @@ test("active generation job is restored after a page reload and opens the comple
     page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
   ).resolves.toBe("job-reload-resume-e2e");
 
-  shouldReturnCompleted = true;
   await page.reload();
+  await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
 
+  shouldReturnCompleted = true;
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
   ).toBeVisible();

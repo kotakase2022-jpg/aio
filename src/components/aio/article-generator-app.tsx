@@ -138,6 +138,7 @@ export function ArticleGeneratorApp() {
   const [draft, setDraft] = useState<ArticleDraft | null>(null);
   const [tab, setTab] = useState<"preview" | "edit">("preview");
   const [activeGenerationJobId, setActiveGenerationJobId] = useState<string | null>(null);
+  const [generationResumeChecked, setGenerationResumeChecked] = useState(false);
   const [generationLogs, setGenerationLogs] = useState<GenerationLogSummary[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsExpanded, setLogsExpanded] = useState(false);
@@ -234,13 +235,17 @@ export function ArticleGeneratorApp() {
   useEffect(() => {
     void loadGenerationLogs();
 
-    const storedJobId = window.localStorage.getItem(activeGenerationJobStorageKey);
-    if (storedJobId) {
-      generationPollingRef.current = storedJobId;
-      window.setTimeout(() => {
+    const resumeTimer = window.setTimeout(() => {
+      const storedJobId = window.localStorage.getItem(activeGenerationJobStorageKey);
+      if (storedJobId) {
+        generationPollingRef.current = storedJobId;
+        setActiveGenerationJobId(storedJobId);
         void pollGenerationJob(storedJobId);
-      }, 0);
-    }
+      }
+      setGenerationResumeChecked(true);
+    }, 0);
+
+    return () => window.clearTimeout(resumeTimer);
     // Run once on mount to resume a server-side job that may outlive the tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1286,7 +1291,7 @@ export function ArticleGeneratorApp() {
             <Button
               data-testid="article-primary-button"
               onClick={handlePrimaryArticleButton}
-              disabled={!isGenerating && !canGenerate}
+              disabled={!generationResumeChecked || (!isGenerating && !canGenerate)}
               variant={isGenerating ? "secondary" : "default"}
             >
               {isGenerating ? <StopCircle /> : <Sparkles />}

@@ -6,7 +6,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: Previous handoff had `Current owner: Claude Code`, `Next owner: Codex`, and `Loop: 3`; Claude Code returned the same uncommitted Loop 2 + Loop 3 worktree to Codex for the next development pass.
 - Phase: Autonomous Improvement / Handoff
-- Last updated: 2026-07-06 10:25 +09:00
+- Last updated: 2026-07-06 10:39 +09:00
 
 ## 1. Current Goal
 Current objective:
@@ -16,9 +16,10 @@ Current objective:
 
 ## 2. Current Branch / Commit
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest commit: `d20ac08 Validate source digestion threshold`
-- Last known good commit: `d20ac08` plus the current uncommitted Loop 2 + Loop 3 worktree has passed `npm run quality`.
-- Important: The worktree still contains a large uncommitted diff. Several new files are untracked and must be staged deliberately before any commit.
+- Latest pushed implementation commit: `ed3214f Strengthen AIO quality gates and review flow`
+- Last known good commit: `ed3214f` plus the current follow-up resume-job fix has passed `npm run quality`.
+- PR: https://github.com/kotakase2022-jpg/aio/pull/1
+- Important: This handoff update and the resume-job fix should be pushed as a follow-up commit after this file is saved.
 
 ## 3. What Was Done
 Completed in this Codex pass:
@@ -45,6 +46,12 @@ Completed in this Codex pass:
 - Confirmed CodeRabbit GitHub App was already installed for the account, added `kotakase2022-jpg/aio` to its selected repository access, and verified GitHub now shows `Selected 3 repositories` including `kotakase2022-jpg/aio`.
 - Re-ran the full local quality gate after the CodeRabbit installation documentation updates; it passed.
 - Ran a focused secret-pattern scan over the repository. Matches were limited to documented/test dummy values, not real keys.
+- Committed and pushed the large quality/review-flow diff to `codex/persistent-quality-gate-operations`.
+- Updated PR #1 title/body to match the current broader implementation diff.
+- Added `@coderabbitai configuration` and `@coderabbitai review` comments on PR #1.
+- Verified CodeRabbit replied with resolved configuration and "Review triggered"; CodeRabbit commit status remains pending at the time of this handoff.
+- Addressed the prior Cursor Bugbot finding "Resume job UI desync": the primary CTA is blocked until resume-state restoration is checked, and stored generation jobs set `activeGenerationJobId` before polling starts.
+- Added an E2E assertion that a reloaded active generation job shows `記事作成をストップ` before the completed draft opens.
 
 Previously completed in the broader Loop 2 + Loop 3 uncommitted diff:
 - Shared source URL normalization in `src/lib/source-url.ts`.
@@ -91,22 +98,23 @@ The worktree also still contains the larger existing Loop 2 + Loop 3 diff across
 - untracked `tests/unit/source-url.test.ts`
 
 ## 5. Current Status
-- `npm run quality` passes locally after the latest Codex change.
+- `npm run quality` passes locally after the latest Codex change, including the resume-job fix.
 - A manual PC-browser smoke pass for the initial workflow passes with zero console errors.
 - A manual PC-browser smoke pass for an already generated draft passes with zero console errors.
 - The targeted core workflow E2E passes after adding the sticky-anchor and draft-only-nav regression assertions.
 - Test integrity, unit/integration tests, contract tests, coverage, Playwright E2E, and production build all pass.
 - `docs/quality-audit.md` now records the current inventory and why the three 100/100 scores are still unproven.
 - Live readiness is currently not ready. This is expected and safe: the readiness script stopped before live provider calls.
-- The current diff is still intentionally uncommitted.
-- CodeRabbit is installed/enabled for `kotakase2022-jpg/aio`; an actual PR review by CodeRabbit is still pending until a PR is opened or updated.
+- PR #1 is open against `main` and points at `codex/persistent-quality-gate-operations`.
+- CodeRabbit is installed/enabled for `kotakase2022-jpg/aio`; CodeRabbit configuration was confirmed on PR #1 and review was manually triggered.
+- CodeRabbit status is still pending for head commit `ed3214f7018cbd2d045beb0acba04c1385d6187f` at the time of this handoff.
 - No deploy, production DB write, production API mutation, force push, or secret output was performed.
 
 ## 6. Known Issues
 - Live OpenAI / Supabase / WordPress sandbox verification is still not completed. Existing E2E tests mock external services to avoid production data/API damage.
 - `npm run test:live:readiness` reports missing `AIO_LIVE_CONTRACT_TESTS`, Supabase live-test confirmation/write variables, and WordPress sandbox credentials. It also warns that the current Supabase host does not look like a sandbox/staging host.
 - Real generated-article quality review and live WordPress recovery remain manual/sandbox follow-up work.
-- The large uncommitted diff should be reviewed carefully before staging/committing. Untracked files are required by tests and should not be missed.
+- CodeRabbit review is pending. If it remains pending for a long time, check the PR timeline and CodeRabbit dashboard/app status.
 - The three high-level 100/100 targets are not yet fully proven because live sandbox/manual checks remain.
 
 ## 7. Bugbot Findings
@@ -114,8 +122,10 @@ Automated review findings and status:
 - CodeRabbit OSS is now the standard automated PR reviewer for this repository.
 - CodeRabbit GitHub App is installed and includes `kotakase2022-jpg/aio` in the selected repository list.
 - Cursor Bugbot is optional/backup only. Do not run Bugbot by default.
-- No CodeRabbit PR review has run for this uncommitted diff yet, and no Bugbot findings were provided in this Codex pass.
-- Recommended next step after Claude Code review: open/update the PR and let CodeRabbit review the full diff. Use Bugbot only if CodeRabbit is unavailable, a second opinion is materially useful, or the user explicitly asks for it.
+- CodeRabbit PR review has been triggered on PR #1 and is currently pending.
+- CodeRabbit configuration comment succeeded and showed `.coderabbit.yaml` as the resolved repository config.
+- Prior Cursor Bugbot finding "Resume job UI desync" was verified against current code, reproduced as a valid risk, fixed, and covered by E2E.
+- Do not run Bugbot again by default. Use Bugbot only if CodeRabbit is unavailable, a second opinion is materially useful, or the user explicitly asks for it.
 
 ## 8. Verification Results
 Commands run in this Codex pass:
@@ -132,6 +142,15 @@ npm run test:live:readiness
 npx playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep "PC browser can complete"
 Chrome/GitHub manual verification for CodeRabbit installation
 git diff --check
+git commit -m "Strengthen AIO quality gates and review flow"
+git push -u origin codex/persistent-quality-gate-operations
+GitHub PR update for PR #1
+@coderabbitai configuration
+@coderabbitai review
+npx playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep "active generation job is restored"
+npm run lint
+npm run typecheck
+npm run quality
 ```
 
 Results:
@@ -185,6 +204,25 @@ Results:
   - `npm run test:coverage`: passed, statements 84.5%, branches 70.69%, functions 90.74%, lines 84.97%.
   - `npm run test:e2e`: passed, 45 Chromium PC tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
+- `git commit -m "Strengthen AIO quality gates and review flow"`: passed, created `ed3214f`.
+- First `git push -u origin codex/persistent-quality-gate-operations`: failed with a transient `curl 55 Send failure: Connection was reset`; no remote update occurred.
+- Second `git push -u origin codex/persistent-quality-gate-operations`: passed. The pre-push hook also passed lint, typecheck, test integrity, unit tests, and contract tests.
+- PR #1 update: passed. PR URL is https://github.com/kotakase2022-jpg/aio/pull/1.
+- `@coderabbitai configuration`: succeeded. CodeRabbit replied with the resolved `.coderabbit.yaml` configuration.
+- `@coderabbitai review`: succeeded. CodeRabbit replied that review was triggered, but the `CodeRabbit` commit status remained pending after several minutes of polling.
+- Prior Cursor Bugbot finding review: "Resume job UI desync" was still applicable before this follow-up fix. Fixed in `src/components/aio/article-generator-app.tsx`.
+- `npx playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep "active generation job is restored"`: passed after the resume-job fix.
+- `npm run lint`: passed after the resume-job fix.
+- `npm run typecheck`: passed after the resume-job fix.
+- Latest `npm run quality` after the resume-job fix: passed.
+  - `npm run typecheck`: passed.
+  - `npm run lint`: passed.
+  - `npm run test:integrity`: passed, 40 files checked.
+  - `npm run test`: passed, 36 files / 223 tests.
+  - `npm run test:contract`: passed, 3 files / 9 tests.
+  - `npm run test:coverage`: passed, statements 84.5%, branches 70.69%, functions 90.74%, lines 84.97%.
+  - `npm run test:e2e`: passed, 45 Chromium PC tests.
+  - `npm run build`: passed, Next.js 16.2.9 production build.
 - Final `npm run quality` after the manual-smoke documentation, anchor fix, and E2E regression update: passed.
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
@@ -197,18 +235,16 @@ Results:
 
 ## 9. Next Recommended Action
 Next first action for Claude Code:
-1. Review the small latest Codex fix in `src/lib/server/file-extraction.ts` and `tests/unit/file-extraction.test.ts`.
-2. Confirm the HTML noise marker policy is conservative enough: keep article sections like `subscription-pricing`, remove widget blocks like `subscribe-box` and newsletters.
-3. Review the broader uncommitted Loop 2 + Loop 3 diff and verify untracked files are included before commit/PR.
+1. Confirm this follow-up handoff/resume-job fix commit was pushed to PR #1.
+2. Check PR #1 for CodeRabbit completion. Record findings here and fix Critical/High issues first.
+3. Confirm the old Cursor Bugbot "Resume job UI desync" thread is now resolved by the resume-state CTA block and E2E coverage.
 4. Review the CodeRabbit OSS migration docs/config added in this pass.
 5. Review the sticky-anchor and draft-only navigation changes in `src/components/aio/article-generator-app.tsx` and the E2E assertions in `tests/e2e/aio-workflow.spec.ts`.
 6. Review the generated-draft manual smoke notes in this handoff and `docs/quality-audit.md`.
 7. Review `docs/quality-audit.md` for accuracy against the actual app/test state.
 8. Prepare disposable `.env.live.local` settings if live sandbox verification is required, then rerun `npm run test:live:readiness`.
-9. Open/update the PR and let the installed CodeRabbit app review the diff. Record CodeRabbit findings here.
-10. Comment `@coderabbitai configuration` on the PR to verify the effective CodeRabbit settings.
-11. Use Cursor Bugbot only as optional backup if CodeRabbit is unavailable, a second opinion is needed, or the user explicitly asks for it.
-12. If CodeRabbit and quality checks are clean, prepare a deliberate commit/PR flow. Do not push to `main` directly.
+9. Use Cursor Bugbot only as optional backup if CodeRabbit is unavailable, a second opinion is needed, or the user explicitly asks for it.
+10. If CodeRabbit and quality checks are clean, continue the PR review/merge preparation. Do not push to `main` directly.
 
 ## 10. Suggested Review Scope for Claude Code
 Please focus review on:
