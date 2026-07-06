@@ -240,7 +240,13 @@ describe("article generation job runner", () => {
     });
     vi.mocked(generateAioArticle).mockResolvedValueOnce(sampleArticleResult);
     vi.mocked(createArticleImagesForDraft).mockImplementationOnce(async (_article, _form, options) => {
-      options?.onImageFailure?.("featured", new Error("Image API timeout"));
+      const error = new Error("Image API timeout");
+      options?.onImageFailure?.("featured", error, {
+        slot: "featured",
+        prompt: "Failed featured prompt",
+        altText: "Failed featured image",
+        error,
+      });
       return [];
     });
     vi.mocked(saveDraft).mockImplementationOnce(async (draft) => ({
@@ -258,8 +264,10 @@ describe("article generation job runner", () => {
     expect(completed?.status).toBe("completed");
     expect(imageStep).toMatchObject({
       status: "done",
-      detail: "0枚を反映・1枚失敗（本文のみ続行）",
     });
+    expect(imageStep?.detail).toContain("画像生成は全て失敗しました");
+    expect(imageStep?.detail).toContain("featured: Image API timeout");
+    expect(imageStep?.detail).toContain("画像のみ再作成");
     expect(savedDraft.images).toEqual([]);
     expect(savedDraft.editedBodyHtml).not.toContain("data-image-slot");
   });

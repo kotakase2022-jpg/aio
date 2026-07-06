@@ -1009,8 +1009,12 @@ export function ArticleGeneratorApp() {
     if (!draft) return;
 
     const generatedImages = draft.images.filter((image) => image.source === "generated");
-    if (generatedImages.length === 0) {
-      setActiveError("再作成できる生成画像がありません。");
+    const generatedImageSlots = new Set(generatedImages.map((image) => image.slot));
+    const missingImagePrompts = draft.aiResult.image_prompts.filter(
+      (prompt) => !generatedImageSlots.has(prompt.slot),
+    );
+    if (generatedImages.length === 0 && missingImagePrompts.length === 0) {
+      setActiveError("再作成できる生成画像または画像プロンプトがありません。");
       return;
     }
 
@@ -1033,6 +1037,23 @@ export function ArticleGeneratorApp() {
           item.id === image.id ? result.image : item,
         );
         nextBodyHtml = replaceImageReferences(nextBodyHtml, image, result.image);
+      }
+
+      const recoveredImages: ArticleImage[] = [];
+      for (const prompt of missingImagePrompts) {
+        const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
+          prompt: buildImageRegenerationPrompt(prompt.prompt, rewriteInstruction, draft.aiResult),
+          slot: prompt.slot,
+          altText: prompt.alt_text,
+        });
+
+        recoveredImages.push(result.image);
+        nextImages = [...nextImages, result.image];
+      }
+
+      if (recoveredImages.length) {
+        nextBodyHtml = injectImages(nextBodyHtml, recoveredImages);
+        nextImages = sortArticleImages(nextImages);
       }
 
       setDraft({
@@ -2524,7 +2545,24 @@ function ArticlePreview({
   onImproveQuality: (instruction: string) => void;
   onRegenerateImages: () => void;
 }) {
-  const canRegenerateImages = draft.images.some((image) => image.source === "generated");
+  const generatedImageSlots = useMemo(
+    () =>
+      new Set(
+        draft.images
+          .filter((image) => image.source === "generated")
+          .map((image) => image.slot),
+      ),
+    [draft.images],
+  );
+  const missingGeneratedImagePrompts = useMemo(
+    () =>
+      draft.aiResult.image_prompts.filter(
+        (prompt) => !generatedImageSlots.has(prompt.slot),
+      ),
+    [draft.aiResult.image_prompts, generatedImageSlots],
+  );
+  const canRegenerateImages =
+    generatedImageSlots.size > 0 || missingGeneratedImagePrompts.length > 0;
   const bodyQualityEvaluation = useMemo(
     () =>
       evaluateArticleQuality(renderArticleHtml(draft), {
@@ -2827,6 +2865,22 @@ function ArticlePreview({
           }
         >
           <div className="space-y-3">
+            {draft.images.length === 0 && missingGeneratedImagePrompts.length > 0 ? (
+              <div
+                data-testid="missing-generated-images-recovery"
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
+              >
+                初回画像生成に失敗した可能性があります。画像プロンプトは残っているため、
+                「画像のみ再作成」から再試行できます。
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {missingGeneratedImagePrompts.map((prompt) => (
+                    <Badge key={prompt.slot} variant="default">
+                      {prompt.slot}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {draft.images.map((image) => (
               <div key={image.id}>
                 <PreviewImage
@@ -3297,6 +3351,16 @@ function injectImages(html: string, images: ArticleImage[]) {
   });
 
   return output;
+}
+
+function sortArticleImages(images: ArticleImage[]) {
+  const slotOrder: Record<ArticleImage["slot"], number> = {
+    featured: 0,
+    "inline-1": 1,
+    "inline-2": 2,
+  };
+
+  return [...images].sort((first, second) => slotOrder[first.slot] - slotOrder[second.slot]);
 }
 
 function imageFigure(image: ArticleImage) {

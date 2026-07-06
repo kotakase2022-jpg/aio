@@ -3,6 +3,13 @@ import { generateImageBase64 } from "@/lib/server/openai";
 import { storeAsset } from "@/lib/server/storage";
 import type { ArticleFormPayload, ArticleGenerationResult, ArticleImage } from "@/types/aio";
 
+export type ArticleImageFailure = {
+  slot: "featured" | "inline-1" | "inline-2";
+  prompt: string;
+  altText: string;
+  error: unknown;
+};
+
 export async function createGeneratedArticleImage({
   prompt,
   slot,
@@ -36,7 +43,11 @@ export async function createArticleImagesForDraft(
   article: ArticleGenerationResult,
   form: ArticleFormPayload,
   options: {
-    onImageFailure?: (slot: "featured" | "inline-1" | "inline-2", error: unknown) => void;
+    onImageFailure?: (
+      slot: "featured" | "inline-1" | "inline-2",
+      error: unknown,
+      failure: ArticleImageFailure,
+    ) => void;
   } = {},
 ) {
   const imageCount = normalizeImageCount(form.imageCount);
@@ -80,7 +91,12 @@ export async function createArticleImagesForDraft(
       return [result.value];
     }
 
-    options.onImageFailure?.(prompts[index].slot, result.reason);
+    options.onImageFailure?.(prompts[index].slot, result.reason, {
+      slot: prompts[index].slot,
+      prompt: prompts[index].prompt,
+      altText: prompts[index].alt_text,
+      error: result.reason,
+    });
     return [];
   });
 }

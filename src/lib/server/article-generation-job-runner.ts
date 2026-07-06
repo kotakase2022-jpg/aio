@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/server/http";
 import { generateAioArticle } from "@/lib/server/article-generation";
-import { createArticleImagesForDraft } from "@/lib/server/article-images";
+import {
+  createArticleImagesForDraft,
+  type ArticleImageFailure,
+} from "@/lib/server/article-images";
 import { fetchUrlContent } from "@/lib/server/content";
 import { saveDraft } from "@/lib/server/drafts";
 import {
@@ -94,19 +97,17 @@ export async function runArticleGenerationJob(jobId: string) {
 
     await assertGenerationJobActive(jobId);
     await updateGenerationStep(jobId, "images", "running");
-    const imageFailures: string[] = [];
+    const imageFailures: ArticleImageFailure[] = [];
     const images = await createArticleImagesForDraft(article, freshJob.inputPayload, {
-      onImageFailure: (slot, error) => {
-        imageFailures.push(`${slot}: ${errorMessage(error)}`);
+      onImageFailure: (_slot, _error, failure) => {
+        imageFailures.push(failure);
       },
     });
     await updateGenerationStep(
       jobId,
       "images",
       "done",
-      imageFailures.length
-        ? `${images.length}枚を反映・${imageFailures.length}枚失敗（本文のみ続行）`
-        : `${images.length}枚を反映`,
+      summarizeImageGeneration(images, imageFailures),
     );
 
     await assertGenerationJobActive(jobId);
@@ -280,4 +281,20 @@ function escapeHtml(value: string) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "画像生成に失敗しました。";
+}
+
+function summarizeImageGeneration(images: ArticleImage[], failures: ArticleImageFailure[]) {
+  if (failures.length === 0) {
+    return `${images.length}枚を反映`;
+  }
+
+  const failureSummary = failures
+    .map((failure) => `${failure.slot}: ${errorMessage(failure.error)}`)
+    .join(" / ");
+
+  if (images.length === 0) {
+    return `画像生成は全て失敗しました（${failureSummary}）。画像プロンプトは保存済みのため、ドラフトの「画像のみ再作成」から再試行できます。`;
+  }
+
+  return `${images.length}枚を反映・${failures.length}枚失敗（${failureSummary}）。失敗分は「画像のみ再作成」から再試行できます。`;
 }

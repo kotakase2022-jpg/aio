@@ -1096,6 +1096,52 @@ test("image regeneration failure shows a recoverable error and resets progress",
   expect(errors()).toEqual([]);
 });
 
+test("drafts with failed initial image generation can regenerate from saved prompts", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [],
+    editedBodyHtml: completedJob.draft!.aiResult.body_html,
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text for missing initial image recovery.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await expect(page.getByTestId("missing-generated-images-recovery")).toContainText(
+    "画像プロンプトは残っている",
+  );
+  await expect(page.getByTestId("missing-generated-images-recovery")).toContainText("featured");
+  await expect(page.getByTestId("image-regenerate-all-button")).toBeEnabled();
+
+  await page.getByTestId("image-regenerate-all-button").click();
+  await page
+    .getByTestId("image-regeneration-instruction")
+    .fill("Recover the failed initial image with a concrete workflow visual.");
+  await page.getByTestId("image-regeneration-start").click();
+
+  expect(calls.generateImage).toBe(1);
+  expect(calls.generateImagePrompts[0]).toContain("Recover the failed initial image");
+  await expect(page.getByTestId("image-regeneration-progress")).toHaveAttribute(
+    "aria-valuenow",
+    "100",
+  );
+  await page.getByTestId("image-regeneration-close").click();
+  await expect(page.getByTestId("missing-generated-images-recovery")).toHaveCount(0);
+  await expect(page.locator('img[src*="regenerated-1.png"]').first()).toBeVisible();
+  await expect(page.locator('img[src*="regenerated-1.png"]')).toHaveCount(2);
+  expect(errors()).toEqual([]);
+});
+
 test("single image regeneration failure keeps the dialog recoverable", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/generate-image$/],

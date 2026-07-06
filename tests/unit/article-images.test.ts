@@ -76,6 +76,7 @@ describe("article image helpers", () => {
     const { generateImageBase64 } = await import("@/lib/server/openai");
     const { createArticleImagesForDraft } = await import("@/lib/server/article-images");
     const failures: string[] = [];
+    const failedPrompts: string[] = [];
     vi.mocked(generateImageBase64)
       .mockRejectedValueOnce(new Error("image timeout"))
       .mockResolvedValueOnce(Buffer.from("image").toString("base64"));
@@ -98,8 +99,9 @@ describe("article image helpers", () => {
         imageCount: 2,
       },
       {
-        onImageFailure: (slot, error) => {
+        onImageFailure: (slot, error, failure) => {
           failures.push(`${slot}:${error instanceof Error ? error.message : "unknown"}`);
+          failedPrompts.push(failure.prompt);
         },
       },
     );
@@ -107,5 +109,7 @@ describe("article image helpers", () => {
     expect(images).toHaveLength(1);
     expect(images[0].slot).toBe("inline-1");
     expect(failures).toEqual(["featured:image timeout"]);
+    expect(failedPrompts[0]).toContain("Article summary anchor");
+    expect(failedPrompts[0]).toContain(sampleArticleResult.article_summary);
   });
 });
