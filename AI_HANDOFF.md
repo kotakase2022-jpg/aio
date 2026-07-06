@@ -6,7 +6,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: Previous handoff had `Current owner: Claude Code`, `Next owner: Codex`, and `Loop: 3`; Claude Code returned the same uncommitted Loop 2 + Loop 3 worktree to Codex for the next development pass.
 - Phase: Autonomous Improvement / Handoff
-- Last updated: 2026-07-06 10:39 +09:00
+- Last updated: 2026-07-06 10:54 +09:00
 
 ## 1. Current Goal
 Current objective:
@@ -16,10 +16,10 @@ Current objective:
 
 ## 2. Current Branch / Commit
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest pushed code commit: `8e794e0 Fix resumed generation CTA state`
-- Last known good code commit: `8e794e0`, which passed local `npm run quality` before push.
+- Latest pushed code commit: `012d786 Address PR review reliability findings`
+- Last known good code commit: `012d786`, which passed local `npm run quality` before commit.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- Important: The branch has been pushed. A final handoff-only commit may follow this entry if this file is updated after the code fix.
+- Important: a final handoff-only commit follows `012d786` and should also be pushed to PR #1.
 
 ## 3. What Was Done
 Completed in this Codex pass:
@@ -52,6 +52,14 @@ Completed in this Codex pass:
 - Verified CodeRabbit replied with resolved configuration and "Review triggered"; CodeRabbit commit status remains pending at the time of this handoff.
 - Addressed the prior Cursor Bugbot finding "Resume job UI desync": the primary CTA is blocked until resume-state restoration is checked, and stored generation jobs set `activeGenerationJobId` before polling starts.
 - Added an E2E assertion that a reloaded active generation job shows `記事作成をストップ` before the completed draft opens.
+- Checked PR #1 comments through the GitHub connector after CodeRabbit installation. CodeRabbit is installed and responding on the PR, but no CodeRabbit inline findings were present yet. Additional Codex automated review P2 findings were present and were valid.
+- Fixed the remaining review reliability findings:
+  - Guarded the `prepare` lifecycle by replacing direct `husky` execution with `scripts/setup-husky.mjs`, so production/CI or missing/nonzero Husky setup no longer breaks installs.
+  - Updated branch-protection docs to require the actual GitHub Actions job check `Typecheck, lint, tests, E2E, build`, not just the workflow name `quality-gate`.
+  - Tightened HTML attachment noise filtering so article sections such as `market-share-analysis` and `revenue-share` are preserved while share widgets such as `share-buttons` are still removed.
+  - Fixed OpenAI retry delay handling so retryable responses without `Retry-After` use the configured/default backoff instead of a zero-delay retry loop.
+  - Fixed XLSX rich-text shared string parsing so each `<si>` entry remains one shared-string index and rich text runs are concatenated without corrupting later cell values.
+- Added regression tests for share-section preservation, XLSX rich text shared strings, and OpenAI retry backoff without `Retry-After`.
 
 Previously completed in the broader Loop 2 + Loop 3 uncommitted diff:
 - Shared source URL normalization in `src/lib/source-url.ts`.
@@ -77,6 +85,9 @@ Main files changed in this Codex pass:
 - `docs/quality-audit.md`
 - `src/components/aio/article-generator-app.tsx`
 - `tests/e2e/aio-workflow.spec.ts`
+- `scripts/setup-husky.mjs`
+- `src/lib/server/openai.ts`
+- `tests/unit/openai.test.ts`
 
 The worktree also still contains the larger existing Loop 2 + Loop 3 diff across:
 - `src/components/aio/article-generator-app.tsx`
@@ -98,7 +109,7 @@ The worktree also still contains the larger existing Loop 2 + Loop 3 diff across
 - untracked `tests/unit/source-url.test.ts`
 
 ## 5. Current Status
-- `npm run quality` passes locally after the latest Codex change, including the resume-job fix.
+- `npm run quality` passes locally after the latest Codex change, including the PR review reliability fixes.
 - A manual PC-browser smoke pass for the initial workflow passes with zero console errors.
 - A manual PC-browser smoke pass for an already generated draft passes with zero console errors.
 - The targeted core workflow E2E passes after adding the sticky-anchor and draft-only-nav regression assertions.
@@ -107,15 +118,15 @@ The worktree also still contains the larger existing Loop 2 + Loop 3 diff across
 - Live readiness is currently not ready. This is expected and safe: the readiness script stopped before live provider calls.
 - PR #1 is open against `main` and points at `codex/persistent-quality-gate-operations`.
 - CodeRabbit is installed/enabled for `kotakase2022-jpg/aio`; CodeRabbit configuration was confirmed on PR #1 and review was manually triggered.
-- CodeRabbit status is still pending for pushed head commit `8e794e0d30123f358cdb6937899e03f59bf9217f` at the time of this handoff.
-- GitHub Actions `Typecheck, lint, tests, E2E, build` was still in progress for `8e794e0d30123f358cdb6937899e03f59bf9217f` immediately after push.
+- CodeRabbit is installed and responding on PR #1. No CodeRabbit inline findings were present in the GitHub connector output during this pass; the visible actionable findings were Codex automated review P2 comments, now fixed in `012d786`.
+- `012d786` has been pushed to PR #1. Re-check PR #1 for CodeRabbit and GitHub Actions results on the latest pushed head after the final handoff-only commit is pushed.
 - No deploy, production DB write, production API mutation, force push, or secret output was performed.
 
 ## 6. Known Issues
 - Live OpenAI / Supabase / WordPress sandbox verification is still not completed. Existing E2E tests mock external services to avoid production data/API damage.
 - `npm run test:live:readiness` reports missing `AIO_LIVE_CONTRACT_TESTS`, Supabase live-test confirmation/write variables, and WordPress sandbox credentials. It also warns that the current Supabase host does not look like a sandbox/staging host.
 - Real generated-article quality review and live WordPress recovery remain manual/sandbox follow-up work.
-- CodeRabbit review is pending. If it remains pending for a long time, check the PR timeline and CodeRabbit dashboard/app status.
+- CodeRabbit review output should be checked again after pushing `012d786` and this handoff update.
 - The three high-level 100/100 targets are not yet fully proven because live sandbox/manual checks remain.
 
 ## 7. Bugbot Findings
@@ -123,9 +134,15 @@ Automated review findings and status:
 - CodeRabbit OSS is now the standard automated PR reviewer for this repository.
 - CodeRabbit GitHub App is installed and includes `kotakase2022-jpg/aio` in the selected repository list.
 - Cursor Bugbot is optional/backup only. Do not run Bugbot by default.
-- CodeRabbit PR review has been triggered on PR #1 and is currently pending.
+- CodeRabbit PR review has been triggered on PR #1. The GitHub connector confirmed CodeRabbit bot replied to `@coderabbitai review`, but no CodeRabbit inline findings were visible in the fetched PR comments during this pass.
 - CodeRabbit configuration comment succeeded and showed `.coderabbit.yaml` as the resolved repository config.
 - Prior Cursor Bugbot finding "Resume job UI desync" was verified against current code, reproduced as a valid risk, fixed, and covered by E2E.
+- Codex automated review P2 findings addressed in `012d786`:
+  - Guard the Husky prepare script.
+  - Require the actual Actions job check.
+  - Require widget context before dropping share sections.
+  - Apply backoff when `Retry-After` is absent.
+  - Preserve each XLSX shared string entry.
 - Do not run Bugbot again by default. Use Bugbot only if CodeRabbit is unavailable, a second opinion is materially useful, or the user explicitly asks for it.
 
 ## 8. Verification Results
@@ -152,6 +169,13 @@ npx playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep 
 npm run lint
 npm run typecheck
 npm run quality
+GitHub connector fetch of PR #1 comments
+npm run prepare
+npx vitest run tests/unit/file-extraction.test.ts tests/unit/openai.test.ts
+npm run lint
+npm run typecheck
+npm run quality
+git commit -m "Address PR review reliability findings"
 ```
 
 Results:
@@ -235,19 +259,34 @@ Results:
   - `npm run test:coverage`: passed, statements 84.5%, branches 70.69%, functions 90.74%, lines 84.97%.
   - `npm run test:e2e`: passed, 45 Chromium PC tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
+- GitHub connector PR comment fetch: confirmed CodeRabbit bot replied to `@coderabbitai review`; no CodeRabbit inline findings were present in fetched comments. Codex automated review P2 findings were present and addressed.
+- `npm run prepare` with `NODE_ENV=production`: passed, proving production/CI style installs skip Husky setup safely.
+- Initial normal `npm run prepare` failed because the local Husky command returned nonzero; `scripts/setup-husky.mjs` was adjusted to treat Husky setup failure as nonfatal for install safety.
+- Final normal `npm run prepare`: passed.
+- `npx vitest run tests/unit/file-extraction.test.ts tests/unit/openai.test.ts`: passed, 2 files / 18 tests.
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- Latest `npm run quality` after PR review reliability fixes: passed.
+  - `npm run typecheck`: passed.
+  - `npm run lint`: passed.
+  - `npm run test:integrity`: passed, 40 files checked.
+  - `npm run test`: passed, 36 files / 225 tests.
+  - `npm run test:contract`: passed, 3 files / 9 tests.
+  - `npm run test:coverage`: passed, statements 84.78%, branches 70.97%, functions 91%, lines 85.21%.
+  - `npm run test:e2e`: passed, 45 Chromium PC tests.
+  - `npm run build`: passed, Next.js 16.2.9 production build.
+- `git commit -m "Address PR review reliability findings"`: passed, created `012d786`.
 
 ## 9. Next Recommended Action
 Next first action for Claude Code:
-1. Confirm this follow-up handoff/resume-job fix commit was pushed to PR #1.
-2. Check PR #1 for CodeRabbit completion. Record findings here and fix Critical/High issues first.
-3. Confirm the old Cursor Bugbot "Resume job UI desync" thread is now resolved by the resume-state CTA block and E2E coverage.
-4. Review the CodeRabbit OSS migration docs/config added in this pass.
-5. Review the sticky-anchor and draft-only navigation changes in `src/components/aio/article-generator-app.tsx` and the E2E assertions in `tests/e2e/aio-workflow.spec.ts`.
-6. Review the generated-draft manual smoke notes in this handoff and `docs/quality-audit.md`.
-7. Review `docs/quality-audit.md` for accuracy against the actual app/test state.
-8. Prepare disposable `.env.live.local` settings if live sandbox verification is required, then rerun `npm run test:live:readiness`.
-9. Use Cursor Bugbot only as optional backup if CodeRabbit is unavailable, a second opinion is needed, or the user explicitly asks for it.
-10. If CodeRabbit and quality checks are clean, continue the PR review/merge preparation. Do not push to `main` directly.
+1. Confirm the final handoff-only commit after `012d786` is pushed to PR #1.
+2. Re-check PR #1 for CodeRabbit completion and GitHub Actions status on the new head. Record findings here and fix Critical/High issues first.
+3. Confirm the old Cursor Bugbot "Resume job UI desync" thread is resolved by the resume-state CTA block and E2E coverage.
+4. Review the PR review reliability fixes in `scripts/setup-husky.mjs`, `src/lib/server/file-extraction.ts`, `src/lib/server/openai.ts`, and related tests.
+5. Review `docs/quality-audit.md` for accuracy against the actual app/test state.
+6. Prepare disposable `.env.live.local` settings if live sandbox verification is required, then rerun `npm run test:live:readiness`.
+7. Use Cursor Bugbot only as optional backup if CodeRabbit is unavailable, a second opinion is needed, or the user explicitly asks for it.
+8. If CodeRabbit and quality checks are clean, continue the PR review/merge preparation. Do not push to `main` directly.
 
 ## 10. Suggested Review Scope for Claude Code
 Please focus review on:
@@ -259,6 +298,10 @@ Please focus review on:
 - Whether `.coderabbit.yaml` is appropriately conservative for this public OSS repository and does not create excessive review noise.
 - Whether `docs/quality-audit.md` accurately captures the feature inventory, proof gaps, and active self-scores.
 - Whether the `scroll-mt-[360px]` anchor clearance and disabled draft-only nav items are the right long-term UX.
+- Whether the Husky prepare guard is conservative enough for Vercel/production installs while still helpful locally.
+- Whether the HTML share-widget heuristic preserves enough legitimate article sections without leaving noisy social widgets.
+- Whether the OpenAI retry backoff behavior is appropriate for rate-limit recovery without making generation feel stuck.
+- Whether the XLSX rich-text shared string parsing covers the real files users attach.
 
 ## 11. Do Not Touch
 Avoid touching:
@@ -269,7 +312,7 @@ Avoid touching:
 - Unrelated UI redesigns or broad refactors.
 
 ## 12. Notes for Claude Code
-- This is still Loop 3 continuation. Move to Loop 4 only after this large uncommitted diff is reviewed, committed/PR'd, and handed back.
+- This is still Loop 3 continuation. Move to Loop 4 only after this PR is reviewed, fixed, and handed back.
 - The repository uses Next.js 16.2.9; read `node_modules/next/dist/docs/` before changing Next.js-specific APIs.
 - PR flow is required. Do not push directly to `main`.
 - Tests are intentionally strict about no `skip`/`only`/weakened checks.
