@@ -322,6 +322,19 @@ function isHtmlNoiseMarker(marker: string) {
   }
 
   const hasShareToken = tokens.some((token) => ["share", "shares", "sharing"].includes(token));
+  const hasShareWidget =
+    hasShareToken &&
+    tokens.some((token) =>
+      [
+        "button",
+        "buttons",
+        "link",
+        "links",
+        "social",
+        "widget",
+        "widgets",
+      ].includes(token),
+    );
   const hasSocialWidget =
     tokenSet.has("social") &&
     tokens.some((token) =>
@@ -354,7 +367,7 @@ function isHtmlNoiseMarker(marker: string) {
       ].includes(token),
     );
 
-  return hasShareToken || hasSocialWidget || hasAdBanner || hasSubscribeWidget;
+  return hasShareWidget || hasSocialWidget || hasAdBanner || hasSubscribeWidget;
 }
 
 function extractPdfTextFallback(buffer: Buffer) {
@@ -483,7 +496,7 @@ async function extractPptxText(buffer: Buffer) {
 async function extractXlsxText(buffer: Buffer) {
   const zip = await JSZip.loadAsync(buffer);
   const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("text");
-  const sharedStrings = sharedXml ? extractXmlTextNodes(sharedXml, ["t"]).split("\n") : [];
+  const sharedStrings = sharedXml ? extractSharedStrings(sharedXml) : [];
   const sheetFiles = Object.values(zip.files)
     .filter((file) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(file.name))
     .sort((a, b) => naturalCompare(a.name, b.name));
@@ -493,6 +506,21 @@ async function extractXlsxText(buffer: Buffer) {
     .map((xml) => extractWorksheetText(xml, sharedStrings))
     .filter(Boolean)
     .join("\n\n");
+}
+
+function extractSharedStrings(xml: string) {
+  const entries: string[] = [];
+  const sharedStringRegex = /<si\b[^>]*>([\s\S]*?)<\/si>/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = sharedStringRegex.exec(xml))) {
+    const body = match[1] ?? "";
+    const textRuns = extractXmlTextNodeValues(body, ["t"], { trim: false });
+    const value = textRuns.length > 0 ? textRuns.join("") : decodeXmlEntities(stripXmlTags(body));
+    entries.push(value.trim());
+  }
+
+  return entries;
 }
 
 function extractWorksheetText(xml: string, sharedStrings: string[]) {
@@ -519,24 +547,31 @@ function extractWorksheetText(xml: string, sharedStrings: string[]) {
 }
 
 function extractXmlTextNodes(xml: string, tags: string[]) {
+  const values = extractXmlTextNodeValues(xml, tags);
+  if (values.length > 0) {
+    return values.join("\n");
+  }
+
+  return decodeXmlEntities(stripXmlTags(xml));
+}
+
+function extractXmlTextNodeValues(xml: string, tags: string[], options: { trim?: boolean } = {}) {
   const values: string[] = [];
+  const shouldTrim = options.trim ?? true;
   for (const tag of tags) {
     const escaped = tag.replace(":", "\\:");
     const regex = new RegExp(`<${escaped}[^>]*>([\\s\\S]*?)<\\/${escaped}>`, "g");
     let match: RegExpExecArray | null;
     while ((match = regex.exec(xml))) {
-      const value = decodeXmlEntities(stripXmlTags(match[1] ?? "").trim());
+      const stripped = stripXmlTags(match[1] ?? "");
+      const value = decodeXmlEntities(shouldTrim ? stripped.trim() : stripped);
       if (value) {
         values.push(value);
       }
     }
   }
 
-  if (values.length > 0) {
-    return values.join("\n");
-  }
-
-  return decodeXmlEntities(stripXmlTags(xml));
+  return values;
 }
 
 function stripXmlTags(value: string) {

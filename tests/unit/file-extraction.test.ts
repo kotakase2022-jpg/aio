@@ -74,6 +74,8 @@ describe("extractAttachmentText", () => {
             <p>Useful article body text for AIO.</p>
             <section class="social-insurance"><p>Social insurance article evidence should stay.</p></section>
             <section class="subscription-pricing"><p>Subscription pricing article evidence should stay.</p></section>
+            <section class="market-share-analysis"><p>Market share analysis article evidence should stay.</p></section>
+            <section class="revenue-share"><p>Revenue share article evidence should stay.</p></section>
             <div class="share-buttons">Share this article</div>
             <div class="social-links">Follow us on social media</div>
             <div class="subscribe-box">Subscribe now</div>
@@ -96,6 +98,8 @@ describe("extractAttachmentText", () => {
     expect(text).toContain("Useful article body text for AIO.");
     expect(text).toContain("Social insurance article evidence should stay.");
     expect(text).toContain("Subscription pricing article evidence should stay.");
+    expect(text).toContain("Market share analysis article evidence should stay.");
+    expect(text).toContain("Revenue share article evidence should stay.");
     expect(text).not.toContain("secret");
     expect(text).not.toContain("Accept all cookies");
     expect(text).not.toContain("Home / Blog");
@@ -104,6 +108,49 @@ describe("extractAttachmentText", () => {
     expect(text).not.toContain("Subscribe now");
     expect(text).not.toContain("Join our newsletter");
     expect(text).not.toContain("Decorative hidden label");
+  });
+
+  test("keeps XLSX rich text shared string indexes aligned", async () => {
+    const zip = new JSZip();
+    zip.file(
+      "[Content_Types].xml",
+      `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+        <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+      </Types>`,
+    );
+    zip.file(
+      "xl/sharedStrings.xml",
+      `<?xml version="1.0" encoding="UTF-8"?>
+      <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="3" uniqueCount="3">
+        <si><r><t>First </t></r><r><t>rich</t></r></si>
+        <si><t>Second plain</t></si>
+        <si><r><t>Third </t></r><r><t>rich value</t></r></si>
+      </sst>`,
+    );
+    zip.file(
+      "xl/worksheets/sheet1.xml",
+      `<?xml version="1.0" encoding="UTF-8"?>
+      <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+        <sheetData>
+          <row r="1">
+            <c r="A1" t="s"><v>0</v></c>
+            <c r="A2" t="s"><v>1</v></c>
+            <c r="A3" t="s"><v>2</v></c>
+          </row>
+        </sheetData>
+      </worksheet>`,
+    );
+    const buffer = Buffer.from(await zip.generateAsync({ type: "uint8array" }));
+
+    const text = await extractAttachmentText({
+      buffer,
+      filename: "reference.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    expect(text).toBe("First rich Second plain Third rich value");
   });
 
   test("decodes mixed-case and numeric XML entities from Office documents", async () => {

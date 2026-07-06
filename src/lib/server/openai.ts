@@ -259,7 +259,8 @@ function getRetryCount() {
 }
 
 function getRetryDelayMs(attempt: number, retryAfterHeader?: string | null) {
-  const retryAfter = Number(cleanEnvValue(retryAfterHeader ?? undefined));
+  const retryAfterValue = cleanEnvValue(retryAfterHeader ?? undefined);
+  const retryAfter = retryAfterValue ? Number(retryAfterValue) : Number.NaN;
   if (Number.isFinite(retryAfter) && retryAfter >= 0) {
     return Math.min(retryAfter * 1000, 10_000);
   }

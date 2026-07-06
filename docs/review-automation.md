@@ -14,7 +14,7 @@ Use Cursor Bugbot only when:
 CodeRabbit and Bugbot are advisory review tools. They do not replace:
 
 - `npm run quality`
-- GitHub Actions `quality-gate`
+- GitHub Actions workflow job `Typecheck, lint, tests, E2E, build`
 - Claude Code review
 - human review for risky production, security, data, or external-integration changes
 
@@ -33,7 +33,7 @@ Repository maintainers should complete this once:
 3. Keep `.coderabbit.yaml` at the repository root.
 4. Open a small PR and confirm CodeRabbit posts a walkthrough/review.
 5. Comment `@coderabbitai configuration` on a PR to confirm CodeRabbit resolved the expected repository YAML.
-6. Keep GitHub Actions `quality-gate` as the mandatory branch-protection status check.
+6. Keep the GitHub Actions workflow job `Typecheck, lint, tests, E2E, build` from `quality-gate` as the mandatory branch-protection status check.
 7. If CodeRabbit exposes a stable status check in this repository, optionally add it to branch protection after confirming it behaves reliably.
 
 ## Per-PR Workflow
@@ -41,7 +41,7 @@ Repository maintainers should complete this once:
 1. Codex implements the scoped change.
 2. Codex updates `AI_HANDOFF.md`.
 3. Open or update the PR.
-4. GitHub Actions `quality-gate` runs.
+4. GitHub Actions workflow job `Typecheck, lint, tests, E2E, build` runs.
 5. CodeRabbit OSS reviews the PR automatically using `.coderabbit.yaml`.
 6. Claude Code reviews CodeRabbit findings, fixes valid issues, and updates `AI_HANDOFF.md`.
 7. Cursor Bugbot is skipped unless one of the backup conditions applies.

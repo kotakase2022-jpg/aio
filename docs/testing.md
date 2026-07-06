@@ -40,7 +40,7 @@ Manual setup checklist for maintainers:
 2. Confirm CodeRabbit still includes `kotakase2022-jpg/aio` under the selected repositories in GitHub App settings.
 3. Confirm `.coderabbit.yaml` is detected on the next PR.
 4. Open a small test PR and confirm CodeRabbit posts a walkthrough/review.
-5. Update branch protection/status-check policy only if CodeRabbit exposes a stable status check in this repository. Keep `quality-gate` as the mandatory merge check.
+5. Update branch protection/status-check policy only if CodeRabbit exposes a stable status check in this repository. Keep the workflow job `Typecheck, lint, tests, E2E, build` from `quality-gate` as the mandatory merge check.
 
 ## Local Commands
 
@@ -317,22 +317,22 @@ directly through GitHub permissions, apply these settings manually in GitHub:
 3. Set `Branch name pattern` to `main`.
 4. Enable `Require a pull request before merging`.
 5. Enable `Require status checks to pass before merging`.
-6. Select the `quality-gate` status check from `.github/workflows/quality-gate.yml`.
+6. Select the workflow job status check `Typecheck, lint, tests, E2E, build` from `.github/workflows/quality-gate.yml`. GitHub required status checks use job names, not the workflow file name.
 7. Enable `Require branches to be up to date before merging`.
 8. Restrict who can push to matching branches, or otherwise disallow direct pushes to `main`.
 9. Disable bypass permissions for administrators if the repository policy allows it.
 
 The intended policy is: no direct pushes to `main`, no merge without PR, and no merge unless
-`quality-gate` passes.
+the workflow job `Typecheck, lint, tests, E2E, build` passes.
 
 ## Vercel Production Deployments
 
 Production Vercel deployments must be based on `main` only. A production deployment assumes the
-change first passed the GitHub Actions `quality-gate` on its pull request and then entered `main`
-through the protected branch workflow.
+change first passed the GitHub Actions workflow job `Typecheck, lint, tests, E2E, build` on its
+pull request and then entered `main` through the protected branch workflow.
 
 Preview deployments from feature branches are acceptable, but they do not replace the required
-`quality-gate` result before merge.
+required workflow job result before merge.
 
 ## Adding Features
 

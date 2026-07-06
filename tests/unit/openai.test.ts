@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   createStructuredResponse,
   generateImageBase64,
@@ -13,6 +13,11 @@ describe("OpenAI server wrapper", () => {
     process.env.OPENAI_IMAGE_MODEL = "gpt-image-2";
     process.env.OPENAI_RETRY_BASE_DELAY_MS = "0";
     process.env.OPENAI_MAX_RETRIES = "2";
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   test("normalizes configured model names", () => {
@@ -102,6 +107,38 @@ describe("OpenAI server wrapper", () => {
       }),
     ).resolves.toEqual({ value: "recovered" });
     expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("uses configured backoff when retryable OpenAI errors omit Retry-After", async () => {
+    process.env.OPENAI_RETRY_BASE_DELAY_MS = "25";
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json(
+            { error: { message: "try again shortly", code: "rate_limit" } },
+            { status: 429 },
+          ),
+        )
+        .mockResolvedValueOnce(
+          Response.json({ output_text: JSON.stringify({ value: "recovered" }) }),
+        ),
+    );
+
+    const result = createStructuredResponse<{ value: string }>({
+      instructions: "Return JSON.",
+      input: "{}",
+      schemaName: "retry_schema",
+      schema: { type: "object" },
+    });
+
+    await vi.advanceTimersByTimeAsync(24);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toEqual({ value: "recovered" });
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   test("does not retry OpenAI insufficient quota errors", async () => {
