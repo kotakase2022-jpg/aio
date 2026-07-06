@@ -259,17 +259,21 @@ export function ArticleGeneratorApp() {
   useEffect(() => {
     void loadGenerationLogs();
 
-    const resumeTimer = window.setTimeout(() => {
-      const storedJobId = window.localStorage.getItem(activeGenerationJobStorageKey);
-      if (storedJobId) {
-        generationPollingRef.current = storedJobId;
-        setActiveGenerationJobId(storedJobId);
-        void pollGenerationJob(storedJobId);
-      }
-      setGenerationResumeChecked(true);
-    }, 0);
+    const storedJobId = window.localStorage.getItem(activeGenerationJobStorageKey);
+    if (storedJobId) {
+      void pollGenerationJob(storedJobId);
+    }
 
-    return () => window.clearTimeout(resumeTimer);
+    let canceled = false;
+    window.queueMicrotask(() => {
+      if (!canceled) {
+        setGenerationResumeChecked(true);
+      }
+    });
+
+    return () => {
+      canceled = true;
+    };
     // Run once on mount to resume a server-side job that may outlive the tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

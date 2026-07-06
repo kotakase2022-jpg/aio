@@ -2566,6 +2566,7 @@ test("active generation job is restored after a page reload and opens the comple
   };
   let shouldReturnCompleted = false;
   let pollCalls = 0;
+  let generationJobStarts = 0;
 
   await page.route("**/api/generation-logs", async (route) => {
     await route.fulfill({ json: { ok: true, logs: [] } });
@@ -2582,6 +2583,7 @@ test("active generation job is restored after a page reload and opens the comple
       return;
     }
 
+    generationJobStarts += 1;
     await route.fulfill({ json: { ok: true, job: runningJob } });
   });
 
@@ -2594,6 +2596,7 @@ test("active generation job is restored after a page reload and opens the comple
 
   await page.reload();
   await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
+  expect(generationJobStarts).toBe(1);
 
   shouldReturnCompleted = true;
   await expect(
