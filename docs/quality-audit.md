@@ -61,6 +61,12 @@ The latest pushed GitHub Actions run for this branch also passed after the revie
 - Run: `28764371615`
 - Result: success.
 
+The current PR branch head is documentation-only commit `3af134a`. The PR is open, non-draft, and
+mergeable according to the GitHub connector. The latest hosted Actions conclusion for `3af134a`
+could not be re-read during the 2026-07-06 11:57 +09:00 pass because unauthenticated GitHub REST
+requests were rate-limited. Use GitHub UI, authenticated `gh`, or a later connector/API check for
+that final hosted-CI proof.
+
 Current E2E coverage includes 45 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -116,10 +122,12 @@ These gaps prevent a true 100/100 completion claim:
   initial form, sticky CTA, generation logs, primary-information input, left-card anchor movement,
   generated draft preview/editing, fullscreen preview, copy recovery, HTML export messaging, and
   WordPress section visibility. A live WordPress recovery pass still remains for sandbox credentials.
-- CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. Codex automated
-  review surfaced additional P2 findings after commit `984decc`; pushed commit `3a43b96` addresses
-  the remaining newsletter, author portrait, and live-env findings. CodeRabbit's latest inline
-  findings should still be checked if a later CodeRabbit review appears.
+- CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It resolved
+  `.coderabbit.yaml`, accepted `@coderabbitai review`, posted a review-in-progress walkthrough, and
+  added a generated PR summary to the PR body. Codex automated review surfaced additional P2 findings
+  after commit `984decc`; pushed commit `3a43b96` addresses the remaining newsletter, author
+  portrait, and live-env findings. CodeRabbit's latest inline findings should still be checked if a
+  later CodeRabbit review appears.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. The current remaining
   review-finding fixes have also been pushed as `3a43b96`, and hosted CI confirmation is green
   through docs commit `0865661`.
@@ -137,9 +145,10 @@ recovery verification, and live generated-output quality review are not yet comp
 
 Highest-value next actions:
 
-1. Re-check PR #1 for CodeRabbit's latest review response after the `@coderabbitai review` request
-   on 2026-07-06 10:55 +09:00.
-2. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
-3. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
-4. Run sandbox live checks only after readiness passes and every target is confirmed non-production.
-5. Complete the remaining sandbox browser pass focused on real WordPress posting recovery.
+1. Re-check the latest hosted Actions result for branch head `3af134a` using GitHub UI,
+   authenticated `gh`, or a later connector/API call.
+2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
+3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
+4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
+5. Run sandbox live checks only after readiness passes and every target is confirmed non-production.
+6. Complete the remaining sandbox browser pass focused on real WordPress posting recovery.
