@@ -504,11 +504,17 @@ export function evaluateArticleQuality(
   const primaryInfoHitCount = primaryInfoTerms.filter((term) =>
     termAppearsInText(term, text),
   ).length;
+  const primaryInfoOpeningHitCount = primaryInfoTerms.filter((term) =>
+    termAppearsInText(term, openingText),
+  ).length;
   const primaryInfoTargetHits = Math.min(3, Math.max(1, primaryInfoTerms.length));
   const shouldCheckPrimaryInfo = primaryInfoTerms.length > 0;
   const hasPrimaryInfoReflection =
     !shouldCheckPrimaryInfo ||
     (primaryInfoHitCount >= primaryInfoTargetHits && firstPartyAttributionPattern.test(text));
+  const hasPrimaryInfoOpeningPlacement =
+    !shouldCheckPrimaryInfo ||
+    (primaryInfoOpeningHitCount >= 1 && firstPartyAttributionPattern.test(openingText));
   const hasPrimaryInfoVerbatimCopy =
     shouldCheckPrimaryInfo && includesLongVerbatimClause(context.primaryInfo, text);
   const ctaTerms = extractSignalTerms(context.closingText, ctaStopWords);
@@ -685,6 +691,14 @@ export function evaluateArticleQuality(
             detail: hasPrimaryInfoReflection
               ? "入力された一次情報の固有語彙が、本文内で自社経験として自然に反映されています。"
               : `一次情報の固有語彙（${primaryInfoTerms.slice(0, 5).join("、")}）を、当社の経験・相談傾向・現場観察として本文に戻すと独自性が上がります。`,
+          },
+          {
+            id: "primary-info-opening-placement",
+            label: "一次情報の冒頭反映",
+            passed: hasPrimaryInfoOpeningPlacement,
+            detail: hasPrimaryInfoOpeningPlacement
+              ? "一次情報が冒頭の結論・判断材料にも入り、記事の独自性が早い段階で伝わります。"
+              : `一次情報の固有語彙（${primaryInfoTerms.slice(0, 5).join("、")}）を、冒頭の結論や読者の判断材料にも戻してください。本文後半だけで触れると、AIが作った一般論に見えやすくなります。`,
           },
           {
             id: "primary-info-digestion",

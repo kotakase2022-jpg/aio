@@ -3581,6 +3581,10 @@ export function qualityCheckEditGuidance(checkId: string) {
     return "修正先: 本文HTML。一次情報を、当社の経験、相談傾向、現場観察、支援時の判断基準として本文に戻します。";
   }
 
+  if (checkId === "primary-info-opening-placement") {
+    return "修正先: 本文HTML。一次情報の固有語彙を、冒頭の結論・定義・読者の判断材料にも戻します。";
+  }
+
   if (checkId === "cta-reflection") {
     return "修正先: 本文HTML。入力された結び文章/CTAの意図を、記事末尾の自然な次アクションとして反映します。";
   }

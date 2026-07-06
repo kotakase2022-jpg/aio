@@ -32,7 +32,8 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed:
+The latest local full gate passed on 2026-07-06 11:24 +09:00 after adding the
+primary-information opening-placement quality check:
 
 - `npm run typecheck`
 - `npm run lint`
@@ -43,7 +44,7 @@ The latest local full gate passed:
 - `npm run test:e2e`
 - `npm run build`
 
-The latest pushed GitHub Actions run also passed:
+The latest previously verified pushed GitHub Actions run also passed:
 
 - Commit: `68599d8`
 - Workflow: `quality-gate`
@@ -52,10 +53,19 @@ The latest pushed GitHub Actions run also passed:
 - Result: success across setup, dependency install, typecheck, lint, test integrity, unit/integration
   tests, external contract tests, coverage, Playwright E2E, production build, and artifact upload.
 
+Note: the current local primary-information opening-placement change is not included in that
+previously verified pushed run yet. It passed the local full quality gate above and should be
+rechecked in GitHub Actions after the next push.
+
 Current E2E coverage includes 45 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
 input reuse.
+
+Article-quality coverage now also checks that supplied first-party/primary information appears in
+the opening decision frame, not only later in the body. This prevents drafts from passing quality
+checks when they read like generic AI copy until a late paragraph briefly mentions the user's own
+field evidence.
 
 Additional manual PC browser smoke on 2026-07-06:
 

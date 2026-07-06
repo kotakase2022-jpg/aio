@@ -164,7 +164,9 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByText("編集品質チェック")).toBeVisible();
   await expect(page.getByText("AI風の汎用表現")).toBeVisible();
   await expect(page.getByText("一次情報の反映")).toBeVisible();
-  await expect(page.getByText(/^一次情報の固有語彙/)).toBeVisible();
+  await expect(page.getByText(/^一次情報の固有語彙/).first()).toBeVisible();
+  await expect(page.getByText("一次情報の冒頭反映")).toBeVisible();
+  await expect(page.getByText(/冒頭の結論や読者の判断材料/)).toBeVisible();
   await expect(page.getByText("結び文章/CTAの反映")).toBeVisible();
   await expect(page.getByText(/結び文章\/CTAの固有語彙/)).toBeVisible();
   await page.getByTestId("quality-improve-regenerate-button").click();
@@ -178,6 +180,7 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /修正方針: 一次情報の固有語彙を、当社の経験、相談傾向、現場観察/,
   );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(/冒頭400字以内/);
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(/一人親方/);
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /結び文章\/CTAの固有語彙/,
@@ -192,6 +195,7 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   expect(calls.articleRegenerationInstruction).toContain(
     "修正方針: 一次情報の固有語彙を",
   );
+  expect(calls.articleRegenerationInstruction).toContain("冒頭400字以内");
   expect(calls.articleRegenerationInstruction).toContain("一人親方");
   expect(calls.articleRegenerationInstruction).toContain("結び文章/CTAの固有語彙");
   expect(calls.articleRegenerationInstruction).toContain("修正方針: 結び文章/CTAの固有語彙");

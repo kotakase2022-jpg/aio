@@ -90,6 +90,10 @@ export function qualityRegenerationAction(checkId: string) {
     return "一次情報の固有語彙を、当社の経験、相談傾向、現場観察として冒頭と各H2に戻す。";
   }
 
+  if (checkId === "primary-info-opening-placement") {
+    return "一次情報の固有語彙を、冒頭400字以内の結論、定義、読者の判断材料に戻し、後半だけで触れる一般論を避ける。";
+  }
+
   if (checkId === "primary-info-digestion") {
     return "一次情報を丸写しせず、固有語彙は残して読者向けの判断材料、例外、注意点に言い換える。";
   }

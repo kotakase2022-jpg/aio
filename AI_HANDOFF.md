@@ -6,7 +6,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: Previous handoff had `Current owner: Claude Code`, `Next owner: Codex`, and `Loop: 3`; Claude Code returned the same uncommitted Loop 2 + Loop 3 worktree to Codex for the next development pass.
 - Phase: Autonomous Improvement / Handoff
-- Last updated: 2026-07-06 11:05 +09:00
+- Last updated: 2026-07-06 11:24 +09:00
 
 ## 1. Current Goal
 Current objective:
@@ -16,11 +16,11 @@ Current objective:
 
 ## 2. Current Branch / Commit
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest pushed commit before this handoff update: `68599d8 Update audit with latest PR checks`
+- Latest pushed commit before this handoff update: `984decc Update handoff with latest CI status`
 - Latest pushed code commit: `012d786 Address PR review reliability findings`
-- Last known good code commit: `012d786`, which passed local `npm run quality` before commit. GitHub Actions also passed on handoff commits `1ab2dd4` and `68599d8`.
+- Last known good local state: this working tree after the primary-information opening-placement quality check passed local `npm run quality`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- Important: a final handoff-only commit may follow this entry and should be pushed to PR #1.
+- Important: a final commit containing this handoff and the latest quality-check change may follow this entry and should be pushed to PR #1.
 
 ## 3. What Was Done
 Completed in this Codex pass:
@@ -66,6 +66,13 @@ Completed in this Codex pass:
 - Updated `docs/quality-audit.md` to remove stale statements about a large uncommitted diff and to record the latest CI/CodeRabbit state.
 - Confirmed the next pushed GitHub Actions `quality-gate` run `28763096146` for commit `68599d8` also completed successfully.
 - Re-fetched PR #1 comments again after `68599d8`; the latest visible CodeRabbit bot response was still the earlier "Review triggered" reply, with no new CodeRabbit inline findings in the fetched timeline.
+- Continued Codex autonomous improvement on non-commodity article quality.
+- Added a new `primary-info-opening-placement` article-quality check so primary/first-party information must appear in the opening conclusion or reader-decision frame, not only later in the body.
+- Wired the new check into edit guidance and article-regeneration action guidance so the UI and regeneration prompt explain how to fix it.
+- Added unit coverage for drafts that mention first-party information only after a generic opening.
+- Updated the core PC E2E workflow to verify the new checklist row and that regeneration instructions include the opening-placement fix.
+- Updated `docs/quality-audit.md` with the new quality evidence and latest local full-gate result.
+- Ran targeted Vitest and Playwright checks plus full `npm run quality`; all passed after the E2E selector was tightened for the new duplicate primary-info wording.
 
 Previously completed in the broader Loop 2 + Loop 3 uncommitted diff:
 - Shared source URL normalization in `src/lib/source-url.ts`.
@@ -95,6 +102,11 @@ Main files changed in this Codex pass:
 - `src/lib/server/openai.ts`
 - `tests/unit/openai.test.ts`
 - `docs/quality-audit.md`
+- `src/lib/article-quality.ts`
+- `src/lib/quality-regeneration-action.ts`
+- `src/components/aio/article-generator-app.tsx`
+- `tests/unit/article-quality.test.ts`
+- `tests/e2e/aio-workflow.spec.ts`
 
 The worktree also still contains the larger existing Loop 2 + Loop 3 diff across:
 - `src/components/aio/article-generator-app.tsx`
@@ -128,6 +140,7 @@ The worktree also still contains the larger existing Loop 2 + Loop 3 diff across
 - CodeRabbit is installed and responding on PR #1. No CodeRabbit inline findings were present in the GitHub connector output during this pass; the visible actionable findings were Codex automated review P2 comments, fixed in `012d786`.
 - `68599d8` has been pushed to PR #1.
 - GitHub Actions `quality-gate` run `28763096146` for `68599d8` completed successfully. The job `Typecheck, lint, tests, E2E, build` passed all steps.
+- Local `npm run quality` passed at 2026-07-06 11:24 +09:00 after the latest primary-information opening-placement change.
 - No deploy, production DB write, production API mutation, force push, or secret output was performed.
 
 ## 6. Known Issues
@@ -300,6 +313,19 @@ Results:
   - Job `Typecheck, lint, tests, E2E, build`: success.
   - Steps through Playwright E2E, production build, Playwright report/traces/screenshots upload, and coverage upload all completed successfully.
 - Latest PR #1 comment fetch after `68599d8`: no new CodeRabbit reply to the 10:55 request and no inline CodeRabbit findings were visible.
+- `npx vitest run tests/unit/article-quality.test.ts`: passed, 62 tests.
+- `npx vitest run tests/unit/article-generation.test.ts`: passed, 18 tests.
+- `npx vitest run tests/unit/article-quality.test.ts tests/unit/quality-edit-guidance.test.ts tests/unit/quality-regeneration-action-coverage.test.ts`: passed, 70 tests.
+- `npx playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep "PC browser can complete"`: passed, 1 Chromium PC test.
+- Latest `npm run quality` after the primary-information opening-placement change: passed.
+  - `npm run typecheck`: passed.
+  - `npm run lint`: passed.
+  - `npm run test:integrity`: passed, 40 files checked.
+  - `npm run test`: passed, 36 files / 226 tests.
+  - `npm run test:contract`: passed, 3 files / 9 tests.
+  - `npm run test:coverage`: passed, statements 84.82%, branches 71.12%, functions 91.01%, lines 85.25%.
+  - `npm run test:e2e`: passed, 45 Chromium PC tests.
+  - `npm run build`: passed, Next.js 16.2.9 production build.
 
 ## 9. Next Recommended Action
 Next first action for Claude Code:
@@ -307,10 +333,11 @@ Next first action for Claude Code:
 2. Confirm the old Codex automated review P2 findings are considered resolved by `012d786`.
 3. Confirm the old Cursor Bugbot "Resume job UI desync" thread is resolved by the resume-state CTA block and E2E coverage.
 4. Review the PR review reliability fixes in `scripts/setup-husky.mjs`, `src/lib/server/file-extraction.ts`, `src/lib/server/openai.ts`, and related tests.
-5. Review `docs/quality-audit.md` for accuracy against the actual app/test state.
-6. Prepare disposable `.env.live.local` settings if live sandbox verification is required, then rerun `npm run test:live:readiness`.
-7. Use Cursor Bugbot only as optional backup if CodeRabbit is unavailable, a second opinion is needed, or the user explicitly asks for it.
-8. If CodeRabbit and quality checks are clean, continue the PR review/merge preparation. Do not push to `main` directly.
+5. Review the new `primary-info-opening-placement` check for whether it is strict enough to prevent commodity content but not so strict that it blocks legitimate article structures.
+6. Review `docs/quality-audit.md` for accuracy against the actual app/test state.
+7. Prepare disposable `.env.live.local` settings if live sandbox verification is required, then rerun `npm run test:live:readiness`.
+8. Use Cursor Bugbot only as optional backup if CodeRabbit is unavailable, a second opinion is needed, or the user explicitly asks for it.
+9. If CodeRabbit and quality checks are clean, continue the PR review/merge preparation. Do not push to `main` directly.
 
 ## 10. Suggested Review Scope for Claude Code
 Please focus review on:
@@ -326,6 +353,7 @@ Please focus review on:
 - Whether the HTML share-widget heuristic preserves enough legitimate article sections without leaving noisy social widgets.
 - Whether the OpenAI retry backoff behavior is appropriate for rate-limit recovery without making generation feel stuck.
 - Whether the XLSX rich-text shared string parsing covers the real files users attach.
+- Whether the new primary-information opening-placement check improves non-commodity output without creating false positives for articles that intentionally delay field evidence.
 
 ## 11. Do Not Touch
 Avoid touching:

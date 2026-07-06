@@ -62,6 +62,34 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
+  test("flags first-party information that is only mentioned after a generic opening", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article operations require source notes and approval owners</h2>
+        <p>The opening should give readers a concrete decision point before background context. Editors compare source status, owner, timing, and caveats before publication.</p>
+        <p>${"Before approval, editors separate confirmed source claims, publication caveats, owner names, review timing, and visible source notes so readers can verify the final recommendation. ".repeat(4)}</p>
+        <table><tr><th>Decision point</th><td>Owner, timing, source check, and publication caveat are compared before the draft is approved.</td></tr></table>
+        <ul><li>Failure pattern: unsupported claims are published without a source note.</li><li>Review note: keep the source URL visible near the claim.</li></ul>
+        <h2>Field notes from the support team change the article angle</h2>
+        <p>Our support team observed one-person contractors using LINE for back-office approvals, with forms missing at review time.</p>
+        <p>Source: https://example.com/reference</p>
+      `,
+      {
+        primaryInfo:
+          "Our support team often sees one-person contractors manage back-office work through LINE, leaving forms missing.",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-reflection", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-opening-placement", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("一次情報の固有語彙");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("flags article bodies that ignore provided first-party information", () => {
     const result = evaluateArticleQuality(
       `
