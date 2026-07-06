@@ -18,11 +18,12 @@ Before changing code, read:
 - `README.md`
 - `package.json`
 - the latest Codex diff
-- any Cursor Bugbot findings
+- CodeRabbit review findings
+- optional Cursor Bugbot findings, only when Bugbot was explicitly run as a backup review
 
 ## Collaboration Rules
 
-- Prioritize Codex's latest diff, `AI_HANDOFF.md`, and Bugbot findings.
+- Prioritize Codex's latest diff, `AI_HANDOFF.md`, CodeRabbit findings, and any optional Bugbot findings.
 - Respect Codex's implementation intent and avoid unnecessary rewrites.
 - If a specification is unclear, prefer the existing implementation, README, tests, and observed screen behavior.
 - Keep work scoped to the current task.
@@ -53,5 +54,6 @@ At minimum, keep `AI_HANDOFF.md` current with:
 - changed files
 - verification results
 - unresolved issues
-- Bugbot findings and response status
+- CodeRabbit findings and response status
+- optional Cursor Bugbot findings and response status when Bugbot was run
 - next recommended action for Codex

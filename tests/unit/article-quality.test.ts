@@ -195,6 +195,64 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("passes target length alignment when the body is close to the selected word count", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、参照情報と現場判断をAI検索で引用しやすく整理する記事を指します</h2>
+        <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。${"現場の判断基準と失敗例を参照情報にもとづいて確認し、担当者、費用、期間、注意点を読者が比較できる形にします。".repeat(28)}</p>
+        <table><tr><th>判断基準</th><td>担当者、費用、期間、出典確認を比較します。</td></tr></table>
+        <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、参照元にない情報を条件なしで書かないことです。</li></ul>
+        <h2>公開前に担当者と出典確認を分ける理由</h2>
+        <p>FAQとして、本文HTMLに貼る前に、判断基準、注意点、比較軸へ言い換えたかを確認します。出典: https://example.com/reference</p>
+      `,
+      { targetWordCount: 2000 },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "target-length-alignment", passed: true }),
+    );
+  });
+
+  test("flags bodies that are far shorter than the selected word count", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、参照情報を整理する記事を指します</h2>
+        <p>結論として、公開前には出典と一次情報を確認します。</p>
+        <table><tr><th>判断基準</th><td>担当者を確認します。</td></tr></table>
+        <ul><li>失敗例を確認します。</li><li>注意点を整理します。</li></ul>
+        <h2>出典確認の進め方</h2>
+        <p>FAQとして、参照元を確認します。出典: https://example.com/reference</p>
+      `,
+      { targetWordCount: 3000 },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "target-length-alignment", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("指定された3,000字");
+    expect(result.score).toBeLessThan(100);
+  });
+
+  test("flags bodies that are far longer than the selected word count", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+        <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。${"現場の判断基準、失敗例、担当者、費用、期間、注意点、比較軸を確認し、読者が公開前に迷わないよう整理します。".repeat(38)}</p>
+        <table><tr><th>判断基準</th><td>担当者、費用、期間、出典確認を比較します。</td></tr></table>
+        <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、参照元にない情報を条件なしで書かないことです。</li></ul>
+        <h2>公開前に担当者と出典確認を分ける理由</h2>
+        <p>FAQとして、本文HTMLに貼る前に、判断基準、注意点、比較軸へ言い換えたかを確認します。出典: https://example.com/reference</p>
+      `,
+      { targetWordCount: 1000 },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "target-length-alignment", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("指定された1,000字");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("passes reference information reflection when source-specific terms return in the body", () => {
     const result = evaluateArticleQuality(
       `
@@ -217,6 +275,326 @@ describe("evaluateArticleQuality", () => {
       expect.objectContaining({ id: "reference-info-reflection", passed: true }),
     );
     expect(result.score).toBeGreaterThanOrEqual(90);
+  });
+
+  test("flags source-aware bodies that omit the actual source URL", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、参照元の判断材料まで引用しやすく整理する記事を指します</h2>
+        <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。当社の支援現場では12件の相談で、承認担当と出典確認の手順が曖昧でした。</p>
+        <table><tr><th>判断基準</th><td>担当者、費用、期間、出典確認を比較します。</td></tr></table>
+        <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+        <h2>公開前に担当者と出典確認を分ける理由</h2>
+        <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。</p>
+      `,
+      { sourceUrls: ["https://example.com/reference"] },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("参照元URL");
+    expect(result.score).toBeLessThan(100);
+  });
+
+  test("recognizes source URLs that are kept as article links", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、参照元の判断材料まで引用しやすく整理する記事を指します</h2>
+        <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。当社の支援現場では12件の相談で、承認担当と出典確認の手順が曖昧でした。</p>
+        <table><tr><th>判断基準</th><td>担当者、費用、期間、出典確認を比較します。</td></tr></table>
+        <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+        <h2>公開前に担当者と出典確認を分ける理由</h2>
+        <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。</p>
+        <p>出典: <a href="https://example.com/reference">Reference page</a></p>
+      `,
+      { sourceUrls: ["https://example.com/reference/"] },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: true }),
+    );
+  });
+
+  test("recognizes source URLs when the article drops a leading www prefix", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article draft source handling</h2>
+        <p>Before publication, the editor confirms source conditions and keeps the reference visible for readers.</p>
+        <table><tr><th>Decision point</th><td>Compare owner, timing, source check, and practical follow-up.</td></tr></table>
+        <ul><li>Failure pattern: teams quote claims without keeping a visible source URL.</li><li>Review note: keep the source URL beside the supporting claim.</li></ul>
+        <h2>Source notes readers can verify</h2>
+        <p>Use the source note for facts that influence the final recommendation.</p>
+        <p>Source: <a href="https://example.com/reference">Reference page</a></p>
+      `,
+      { sourceUrls: ["https://www.example.com/reference/"] },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: true }),
+    );
+  });
+
+  test("requires each main source URL to remain visible when multiple references are provided", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、参照元の判断材料まで引用しやすく整理する記事を指します</h2>
+        <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。当社の支援現場では12件の相談で、承認担当と出典確認の手順が曖昧でした。</p>
+        <table><tr><th>判断基準</th><td>担当者、費用、期間、出典確認を比較します。</td></tr></table>
+        <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+        <h2>公開前に担当者と出典確認を分ける理由</h2>
+        <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。</p>
+        <p>出典: https://example.com/reference-a</p>
+      `,
+      {
+        sourceUrls: [
+          "https://example.com/reference-a",
+          "https://example.com/reference-b",
+          "https://example.com/reference-c",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("https://example.com/reference-b");
+    expect(result.improvements.join(" ")).toContain("https://example.com/reference-c");
+  });
+
+  test("deduplicates www variants before choosing the main source URLs to verify", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article draft source handling</h2>
+        <p>Before publication, the editor confirms source conditions and keeps the primary reference visible for readers.</p>
+        <table><tr><th>Decision point</th><td>Compare owner, timing, source check, and practical follow-up.</td></tr></table>
+        <ul><li>Failure pattern: duplicate source variants can hide a missing second source.</li><li>Review note: keep each distinct source URL beside the supporting claim.</li></ul>
+        <h2>Source notes readers can verify</h2>
+        <p>Use the source note for facts that influence the final recommendation.</p>
+        <p>Source: <a href="https://example.com/reference">Reference page</a></p>
+      `,
+      {
+        sourceUrls: [
+          "https://www.example.com/reference/",
+          "https://example.com/reference",
+          "https://www.example.com/reference",
+          "https://example.com/second-source",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("https://example.com/second-source");
+  });
+
+  test("deduplicates http and https source variants before checking distinct sources", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article draft source handling</h2>
+        <p>Before publication, the editor confirms source conditions and keeps the primary reference visible for readers.</p>
+        <table><tr><th>Decision point</th><td>Compare owner, timing, source check, and practical follow-up.</td></tr></table>
+        <ul><li>Failure pattern: protocol variants can hide a missing second source.</li><li>Review note: keep each distinct source URL beside the supporting claim.</li></ul>
+        <h2>Source notes readers can verify</h2>
+        <p>Use the source note for facts that influence the final recommendation.</p>
+        <p>Source: <a href="https://example.com/reference">Reference page</a></p>
+      `,
+      {
+        sourceUrls: [
+          "http://example.com/reference/",
+          "https://example.com/reference",
+          "https://example.com/second-source",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("https://example.com/second-source");
+  });
+
+  test("deduplicates tracking query variants without hiding a distinct source URL", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article draft source handling</h2>
+        <p>Before publication, the editor confirms source conditions and keeps the primary reference visible for readers.</p>
+        <table><tr><th>Decision point</th><td>Compare owner, timing, source check, and practical follow-up.</td></tr></table>
+        <ul><li>Failure pattern: tracking query variants can hide a missing second source.</li><li>Review note: keep each distinct source URL beside the supporting claim.</li></ul>
+        <h2>Source notes readers can verify</h2>
+        <p>Use the source note for facts that influence the final recommendation.</p>
+        <p>Source: <a href="https://example.com/reference">Reference page</a></p>
+      `,
+      {
+        sourceUrls: [
+          "https://example.com/reference?utm_source=newsletter&utm_campaign=aio",
+          "https://example.com/reference?fbclid=tracking-value",
+          "https://example.com/second-source",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("https://example.com/second-source");
+  });
+
+  test("keeps meaningful query parameters distinct when checking source URLs", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article draft source handling</h2>
+        <p>Before publication, the editor confirms source conditions and keeps the primary reference visible for readers.</p>
+        <table><tr><th>Decision point</th><td>Compare owner, timing, source check, and practical follow-up.</td></tr></table>
+        <ul><li>Failure pattern: meaningful query parameters can point to different source records.</li><li>Review note: keep each distinct source URL beside the supporting claim.</li></ul>
+        <h2>Source notes readers can verify</h2>
+        <p>Use the source note for facts that influence the final recommendation.</p>
+        <p>Source: <a href="https://example.com/reference?id=primary">Primary reference</a></p>
+      `,
+      {
+        sourceUrls: [
+          "https://example.com/reference?id=primary&utm_source=newsletter",
+          "https://example.com/reference?id=secondary&utm_source=newsletter",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("https://example.com/reference?id=secondary");
+  });
+
+  test("recognizes a source URL when only tracking query parameters are omitted in the article", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article draft source handling</h2>
+        <p>Before publication, the editor confirms source conditions and keeps the primary reference visible for readers.</p>
+        <table><tr><th>Decision point</th><td>Compare owner, timing, source check, and practical follow-up.</td></tr></table>
+        <ul><li>Failure pattern: tracking query parameters should not force noisy source notes.</li><li>Review note: keep the meaningful source identifier beside the supporting claim.</li></ul>
+        <h2>Source notes readers can verify</h2>
+        <p>Use the source note for facts that influence the final recommendation.</p>
+        <p>Source: <a href="https://example.com/reference?id=primary">Primary reference</a></p>
+      `,
+      {
+        sourceUrls: ["https://example.com/reference?id=primary&utm_source=newsletter"],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: true }),
+    );
+  });
+
+  test("recognizes visible source URLs when meaningful query parameters appear in a different order", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article draft source handling</h2>
+        <p>Before publication, the editor confirms source conditions and keeps the primary reference visible for readers.</p>
+        <table><tr><th>Decision point</th><td>Compare owner, timing, source check, and practical follow-up.</td></tr></table>
+        <ul><li>Failure pattern: query parameter ordering should not create duplicate source requirements.</li><li>Review note: keep the meaningful source identifier beside the supporting claim.</li></ul>
+        <h2>Source notes readers can verify</h2>
+        <p>Use the source note for facts that influence the final recommendation.</p>
+        <p>Source: <a href="https://example.com/reference?page=1&id=primary">Primary reference</a></p>
+      `,
+      {
+        sourceUrls: ["https://example.com/reference?id=primary&page=1&utm_source=newsletter"],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: true }),
+    );
+  });
+
+  test("recognizes escaped source URLs with uppercase HTML ampersand entities", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article draft source handling</h2>
+        <p>Before publication, the editor confirms source conditions and keeps the primary reference visible for readers.</p>
+        <table><tr><th>Decision point</th><td>Compare owner, timing, source check, and practical follow-up.</td></tr></table>
+        <ul><li>Failure pattern: escaped source links can otherwise look missing to the quality checker.</li><li>Review note: keep the meaningful source identifier beside the supporting claim.</li></ul>
+        <h2>Source notes readers can verify</h2>
+        <p>Use the source note for facts that influence the final recommendation.</p>
+        <p>Source: <a href="https://example.com/reference?page=1&AMP;id=primary">Primary reference</a></p>
+      `,
+      {
+        sourceUrls: ["https://example.com/reference?id=primary&page=1&utm_source=newsletter"],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: true }),
+    );
+  });
+
+  test("recognizes escaped source URLs with numeric HTML ampersand entities", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article draft source handling</h2>
+        <p>Before publication, the editor confirms source conditions and keeps the primary reference visible for readers.</p>
+        <table><tr><th>Decision point</th><td>Compare owner, timing, source check, and practical follow-up.</td></tr></table>
+        <ul><li>Failure pattern: CMS-exported numeric entities can otherwise make visible source links look missing.</li><li>Review note: keep the meaningful source identifier beside the supporting claim.</li></ul>
+        <h2>Source notes readers can verify</h2>
+        <p>Use the source note for facts that influence the final recommendation.</p>
+        <p>Source: <a href="https://example.com/reference?page=1&#038;id=primary">Primary reference</a></p>
+      `,
+      {
+        sourceUrls: ["https://example.com/reference?id=primary&page=1&utm_source=newsletter"],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: true }),
+    );
+  });
+
+  test("recognizes source URLs from fully escaped anchor attributes in quality checks", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article draft source handling</h2>
+        <p>Before publication, the editor confirms source conditions and keeps the primary reference visible for readers.</p>
+        <table><tr><th>Decision point</th><td>Compare owner, timing, source check, and practical follow-up.</td></tr></table>
+        <ul><li>Failure pattern: escaped anchor markup can otherwise make visible source links look missing.</li><li>Review note: keep the meaningful source identifier beside the supporting claim.</li></ul>
+        <h2>Source notes readers can verify</h2>
+        <p>Use the source note for facts that influence the final recommendation.</p>
+        <p>Source: &lt;a href=&quot;https://example.com/reference?page=1&amp;id=primary&quot;&gt;Primary reference&lt;/a&gt;</p>
+      `,
+      {
+        sourceUrls: ["https://example.com/reference?id=primary&page=1&utm_source=newsletter"],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: true }),
+    );
+  });
+
+  test("passes when all main source URLs are kept in a compact source note", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、参照元の判断材料まで引用しやすく整理する記事を指します</h2>
+        <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。当社の支援現場では12件の相談で、承認担当と出典確認の手順が曖昧でした。</p>
+        <table><tr><th>判断基準</th><td>担当者、費用、期間、出典確認を比較します。</td></tr></table>
+        <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+        <h2>公開前に担当者と出典確認を分ける理由</h2>
+        <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。</p>
+        <p>出典: https://example.com/reference-a / https://example.com/reference-b / https://example.com/reference-c</p>
+      `,
+      {
+        sourceUrls: [
+          "https://example.com/reference-a",
+          "https://example.com/reference-b",
+          "https://example.com/reference-c",
+          "https://example.com/reference-d",
+        ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "source-url-presence", passed: true }),
+    );
   });
 
   test("flags article bodies that ignore provided reference information", () => {
@@ -429,6 +807,82 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
+  test("flags boilerplate opening frames even when the article has some concrete details", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>本記事では、AIO記事の作成方法について解説します。当社の支援現場では、12件の相談で承認担当と出典確認の手順が曖昧でした。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、参照元にない数字を条件なしで書かないことです。</li></ul>
+      <h2>公開前に確認すべき3つの編集判断</h2>
+      <p>FAQとして、どこまでを自社経験として書けるかを確認します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-opening-frame", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("テンプレ表現");
+    expect(result.score).toBeLessThan(100);
+  });
+
+  test("flags repeated explain-and-introduce boilerplate beyond the opening", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。当社の支援現場では、12件の相談で承認担当と出典確認の手順が曖昧でした。参照URL、一次情報、競合差分、WordPress承認状態を分けると、公開直前の差し戻し理由を説明しやすくなります。特に一人親方支援の現場では、LINEで相談が進み、帳票や確認履歴が残らないまま原稿化されるケースがあります。この前提を先に示すと、読者はどの情報を根拠として扱い、どの情報を自社経験として読むべきか判断できます。公開前レビューでは、担当者、期限、出典、未確認情報の扱いを同じ表で見比べると、修正責任の所在が曖昧になりにくくなります。</p>
+      <p>レビュー担当者は、引用可能な制度情報と、支援現場で観察した相談傾向を別々に確認します。競合記事が一般論だけで構成されている場合は、自社で見た失敗例、確認手順、問い合わせ前に準備する情報を本文へ戻します。こうした編集手順があると、AI検索に引用されても根拠と経験の境界が読者に伝わります。</p>
+      <p>公開前チェックをわかりやすく解説します。次に、競合比較の見方を詳しく解説します。最後に、WordPress投稿前の確認軸を紹介します。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、公開前に承認担当と修正責任を決めることです。</li></ul>
+      <h2>公開前に確認する判断基準</h2>
+      <p>FAQとして、未確認情報は断定せず、参照元と自社の観察を分けて書きます。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-phrases", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-opening-frame", passed: true }),
+    );
+    expect(result.improvements.join(" ")).toContain("凡庸表現");
+  });
+
+  test("flags softened generic claims that still make the opening sound AI-written", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前の確認体制が重要になります。記事作成では、参照元の整理が求められます。競合との差分を確認することも欠かせません。</p>
+      <p>当社の支援現場では、12件の相談で承認担当と出典確認の手順が曖昧でした。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、公開前に承認担当と修正責任を決めることです。</li></ul>
+      <h2>公開前に確認する判断基準</h2>
+      <p>FAQとして、未確認情報は断定せず、参照元と自社の観察を分けて書きます。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-phrases", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-opening-frame", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("凡庸表現");
+  });
+
+  test("flags generic ending frames that make the article close like commodity AI copy", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用されやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認する必要があります。当社の支援現場では12件の相談で、承認担当と出典確認の手順が曖昧なまま公開前に差し戻されました。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>公開前に承認担当を決めます。</li><li>未確認の数字は条件付きで書きます。</li></ul>
+      <h2>公開前に確認すべき編集判断</h2>
+      <p>FAQでは、どの情報を本文に残し、どの情報を未確認として扱うかを明確にします。出典: https://example.com/reference</p>
+      <p>いかがでしたでしょうか。ぜひ参考にしてください。</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-ending-frame", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("定型表現");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("flags repetitive connector patterns that make copy sound machine-written", () => {
     const result = evaluateArticleQuality(`
       <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
@@ -465,6 +919,28 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("flags English commodity AI phrases in bilingual generated copy", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO article quality means source-aware editorial judgment for AI search</h2>
+      <p>In this article, we explain how to utilize AI content in order to create various useful drafts. It is important to align sources before publishing. AIO can help teams improve efficiency, follow best practices, streamline reviews, enhance productivity, and leverage automation, but our support team observed 12 review cases where approval owners and source checks were unclear.</p>
+      <table><tr><th>Decision point</th><td>Owner, timing, source URL, caveat, and WordPress approval status are compared before publication.</td></tr></table>
+      <ul><li>Failure pattern: editors mix source claims and first-party observations without attribution.</li><li>Review note: keep source notes and conditions close to the claim.</li></ul>
+      <h2>Where approval owners cause last-minute editorial rework</h2>
+      <p>FAQ: teams should separate source evidence, field observations, and unsupported information before approval. Source: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-phrases", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-opening-frame", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "verbose-ai-phrasing", passed: false }),
+    );
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("flags repeated formulaic sentence frames that make copy feel templated", () => {
     const result = evaluateArticleQuality(`
       <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
@@ -497,6 +973,41 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(85);
     expect(result.checks).toContainEqual(
       expect.objectContaining({ id: "editorial-evidence", passed: false }),
+    );
+  });
+
+  test("flags thin placeholder tables that do not help decision making", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元、社内経験、競合との差分を分けて確認する必要があります。当社の支援現場では12件の相談で、承認担当と出典確認の手順が曖昧なまま公開直前に差し戻されました。</p>
+      <table><tr><th>項目</th><td>内容</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件や参照元を書くことです。</li></ul>
+      <h2>公開前に確認すべき編集判断</h2>
+      <p>編集者は担当、期間、費用、未確認情報の扱いを分けます。参照元: https://example.com/reference</p>
+      <h2>FAQ</h2>
+      <p>よくある質問では、参照元にない数字をどう扱うべきかを条件付きで回答します。</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "comparison-table", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("表はありますが");
+  });
+
+  test("passes useful decision tables with concrete comparison axes", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元、社内経験、競合との差分を分けて確認する必要があります。当社の支援現場では12件の相談で、承認担当と出典確認の手順が曖昧なまま公開直前に差し戻されました。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件や参照元を書くことです。</li></ul>
+      <h2>公開前に確認すべき編集判断</h2>
+      <p>編集者は担当、期間、費用、未確認情報の扱いを分けます。参照元: https://example.com/reference</p>
+      <h2>FAQ</h2>
+      <p>よくある質問では、参照元にない数字をどう扱うべきかを条件付きで回答します。</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "comparison-table", passed: true }),
     );
   });
 
@@ -577,6 +1088,94 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("flags mechanical sequence headings that make the article feel templated", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。当社の支援現場では、12件の相談で承認担当と出典確認の手順が曖昧でした。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+      <h2>まず準備すること</h2>
+      <p>担当者と期限を決め、参照元と自社の観察を照合します。</p>
+      <h2>次に確認すること</h2>
+      <p>費用、期間、体制、公開後の修正リスクを比較します。</p>
+      <h2>最後に公開すること</h2>
+      <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "heading-storyline", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("連番・手順型の見出し");
+    expect(result.score).toBeLessThan(100);
+  });
+
+  test("allows numbered-looking headings when they state a concrete editorial angle", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。当社の支援現場では12件の相談で承認担当と出典確認の手順が曖昧でした。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+      <h2>編集者が公開前に見るべき3つの確認軸</h2>
+      <p>1つ目は参照元との照合、2つ目は現場例の出どころ、3つ目はWordPress投稿前の承認状態です。担当者と期限を決めると、公開後の修正リスクを下げられます。</p>
+      <h2>承認担当が決まらない記事で起きる公開直前の手戻り</h2>
+      <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "heading-storyline", passed: true }),
+    );
+    expect(result.score).toBeGreaterThanOrEqual(90);
+  });
+
+  test("flags overly long sentences that hurt readability", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元と自社経験を分けて確認します。当社の支援現場では12件の相談で、承認担当が決まらないまま参照元の制度説明と自社の観察と競合記事の比較軸と問い合わせ時の失敗例と費用や期間の条件と公開後の修正責任を一文に詰め込んでしまうと、読者がどこを判断すべきか追えなくなり、社内確認でも論点が戻りやすくなります。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、条件と例外を短い文に分けることです。</li></ul>
+      <h2>承認担当が決まらない記事で起きる公開直前の手戻り</h2>
+      <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "sentence-length", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("130字を超える長い一文");
+    expect(result.score).toBeLessThan(100);
+  });
+
+  test("allows concise sentences that split conditions and examples", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元と自社経験を分けて確認します。当社の支援現場では、承認担当が決まらない相談が12件ありました。制度説明、現場観察、競合比較は別文で示します。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、条件と例外を短い文に分けることです。</li></ul>
+      <h2>承認担当が決まらない記事で起きる公開直前の手戻り</h2>
+      <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "sentence-length", passed: true }),
+    );
+    expect(result.score).toBeGreaterThanOrEqual(90);
+  });
+
+  test("ignores long source URLs when checking sentence readability", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元と自社経験を分けて確認します。当社の支援現場では、承認担当が決まらない相談が12件ありました。</p>
+      <p>出典: https://example.com/articles/very-long-reference-path-for-aio-editorial-review-source-note-with-query-string-and-tracking-code-2026-07-05?utm_source=article&utm_medium=reference&utm_campaign=aio-quality-check</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、条件と例外を短い文に分けることです。</li></ul>
+      <h2>承認担当が決まらない記事で起きる公開直前の手戻り</h2>
+      <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "sentence-length", passed: true }),
+    );
+  });
+
   test("flags strong claims that need conditions or evidence", () => {
     const result = evaluateArticleQuality(`
       <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
@@ -593,5 +1192,103 @@ describe("evaluateArticleQuality", () => {
       expect.objectContaining({ id: "unsupported-claims", passed: false }),
     );
     expect(result.improvements.join(" ")).toContain("強い断定候補");
+  });
+
+  test("flags numeric performance claims that lack nearby source or conditions", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+      <p>結論として、公開前には参照元と自社経験を分けて確認します。記事を改善すると問い合わせが300%増え、運用費用は50万円削減できます。</p>
+      <p>当社の支援現場では、承認担当と出典確認の手順が曖昧な相談があります。未確認情報は断定せず、参照元の情報と照合します。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+      <h2>公開前に確認すべき編集判断</h2>
+      <p>FAQとして、どこまでを自社経験として書けるかを確認します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "numeric-claim-support", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("数字や実績らしい表現");
+    expect(result.improvements.join(" ")).toContain("300%");
+  });
+
+  test("allows numeric claims when an immediate follow-up sentence provides the source note", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+      <p>結論として、公開前には参照元と自社経験を分けて確認します。公開後30日で問い合わせが12件増えました。出典: 2026年6月時点の自社支援記録。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+      <h2>公開前に確認すべき編集判断</h2>
+      <p>FAQとして、どこまでを自社経験として書けるかを確認します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "numeric-claim-support", passed: true }),
+    );
+  });
+
+  test("allows numeric claims when nearby text provides first-party context or caveats", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
+      <p>結論として、公開前には参照元と自社経験を分けて確認します。当社の支援現場では12件の相談で承認担当と出典確認の手順が曖昧でした。</p>
+      <p>費用は条件により50万円前後が目安で、参照資料の時点と自社の観察を分けて書く必要があります。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+      <h2>公開前に確認すべき編集判断</h2>
+      <p>FAQとして、どこまでを自社経験として書けるかを確認します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "numeric-claim-support", passed: true }),
+    );
+    expect(result.score).toBeGreaterThanOrEqual(90);
+  });
+
+  test("flags article bodies that ignore the generated target reader", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、参照情報をAI検索で引用しやすく整理する記事を指します</h2>
+        <p>結論として、公開前には参照元と自社経験を分けて確認します。当社の支援現場では12件の相談で、承認担当と出典確認の手順が曖昧でした。</p>
+        <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+        <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+        <h2>公開前に確認すべき編集判断</h2>
+        <p>FAQとして、どこまでを自社経験として書けるかを確認します。出典: https://example.com/reference</p>
+      `,
+      {
+        targetReaderText:
+          "BtoBマーケティング担当者とコンテンツ運用チーム、WordPress公開を担当する編集者",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "target-reader-reflection", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("想定読者");
+    expect(result.improvements.join(" ")).toContain("BtoBマーケティング");
+  });
+
+  test("passes when target reader and search intent are reflected in editorial examples", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、BtoBマーケティング担当者がAI検索で引用されやすい根拠を整理する記事を指します</h2>
+        <p>結論として、コンテンツ運用チームはWordPress公開前に、参照元、一次情報、競合差分を分けて確認します。当社の支援現場では12件の相談で、承認担当と出典確認の手順が曖昧でした。</p>
+        <table><tr><th>判断基準</th><td>担当者、費用、期間、出典確認、AI検索で引用される定義文を比較します。</td></tr></table>
+        <ul><li>失敗例として、編集者が出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、AI検索に強い記事テーマを決める前に検索意図と比較軸を確認することです。</li></ul>
+        <h2>WordPress公開担当者が確認すべき検索意図と比較軸</h2>
+        <p>FAQとして、どの根拠を本文に残し、どの情報を未確認として扱うかを確認します。出典: https://example.com/reference</p>
+      `,
+      {
+        targetReaderText:
+          "BtoBマーケティング担当者とコンテンツ運用チーム、WordPress公開を担当する編集者",
+        searchIntentText: "AI検索に強い記事テーマを決め、比較軸と次の公開作業を知りたい",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "target-reader-reflection", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "search-intent-reflection", passed: true }),
+    );
   });
 });

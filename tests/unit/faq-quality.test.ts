@@ -52,6 +52,72 @@ describe("evaluateFaqQuality", () => {
     expect(result.improvements.join(" ")).toContain("一般論寄り");
   });
 
+  test("flags short English FAQ questions that sound like commodity AI copy", () => {
+    const result = evaluateFaqQuality({
+      faqItems: [
+        {
+          question: "What is AIO?",
+          answer:
+            "AIO article operations should separate source evidence, field observations, and unsupported claims before approval.",
+        },
+        {
+          question: "What are the benefits of AIO?",
+          answer:
+            "Teams need a review timeline, approval owner, source checklist, and risk notes so the draft can be checked before publication.",
+        },
+        {
+          question: "How does it work?",
+          answer:
+            "The practical workflow is to collect reference inputs, compare competitor gaps, add primary field notes, then verify the final FAQ and CTA.",
+        },
+      ],
+      themeText: "AIO workflow for editorial review and AI search optimization",
+      primaryInfo:
+        "Our support team sees one-person contractors using LINE for approvals while forms are often missing.",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "faq-question-specificity", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "faq-answer-specificity", passed: true }),
+    );
+    expect(result.score).toBeLessThan(90);
+  });
+
+  test("flags long English FAQ answers that still rely on generic business filler", () => {
+    const result = evaluateFaqQuality({
+      faqItems: [
+        {
+          question: "Which approval evidence should the editor keep before publishing?",
+          answer:
+            "AIO can help teams improve efficiency by organizing source evidence, review timelines, and team notes before publication.",
+        },
+        {
+          question: "How should the team decide whether a claim is safe to publish?",
+          answer:
+            "Teams should consider source notes and client context because this recommended approach helps improve the overall workflow.",
+        },
+        {
+          question: "Where should field observations appear in the final draft?",
+          answer:
+            "Primary field notes can help teams follow best practices, streamline reviews, enhance productivity, and leverage useful examples, but the answer still needs a condition, caveat, and source boundary.",
+        },
+      ],
+      themeText: "AIO workflow for editorial review and AI search optimization",
+      primaryInfo:
+        "Our support team sees one-person contractors using LINE for approvals while forms are often missing.",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "faq-question-specificity", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "faq-answer-specificity", passed: false }),
+    );
+    expect(result.score).toBeLessThan(90);
+  });
+
   test("flags FAQ items that ignore the provided input signals", () => {
     const result = evaluateFaqQuality({
       faqItems: [

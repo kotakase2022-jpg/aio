@@ -57,9 +57,25 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   );
   await page.getByTestId("generation-logs-toggle").click();
   await expect(page.getByTestId("generation-logs-content")).toBeHidden();
+  await expect(page.getByTestId("step-nav-disabled-approval")).toBeVisible();
+  await expect(page.getByTestId("step-nav-disabled-wordpress")).toBeVisible();
+  await expect(page.locator('a[href="#approval"]')).toHaveCount(0);
+  await expect(page.locator('a[href="#wordpress"]')).toHaveCount(0);
 
   await page.locator('a[href="#theme"]').click();
   await expect(page).toHaveURL(/#theme/);
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const themeCard = document.querySelector("#theme");
+        const stickyNav = document.querySelector('aside [class*="sticky"]');
+        const themeTop = themeCard?.getBoundingClientRect().top ?? 0;
+        const stickyBottom = stickyNav?.getBoundingClientRect().bottom ?? 0;
+
+        return Math.round(themeTop - stickyBottom);
+      }),
+    )
+    .toBeGreaterThanOrEqual(8);
 
   await page.getByTestId("reference-url-0").fill("https://example.com/reference");
   await page
@@ -105,9 +121,12 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
 
   await page.getByTestId("theme-candidates-button").click();
   expect(calls.themeCandidateCompetitorSummary).toBe("Edited competitor summary for E2E");
-  await expect(page.getByText("AIO Content Operations Guide")).toBeVisible();
+  await expect(page.getByTestId("theme-candidate-card-0")).toContainText(
+    "AIO Content Operations Guide",
+  );
   await page.getByTestId("theme-candidate-apply-0").click();
-  await expect(page.getByText("反映しました")).toBeVisible();
+  await expect(page.getByTestId("theme-candidate-card-0")).toContainText("反映しました");
+  await expect(page.getByTestId("theme-candidate-card-1")).not.toContainText("反映しました");
   await expect(page.getByTestId("theme-textarea")).toHaveValue(/AIO Content Operations Guide/);
   await page
     .getByTestId("closing-textarea")
@@ -124,6 +143,24 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
   ).toBeVisible();
+  await expect(page.getByTestId("step-nav-disabled-approval")).toHaveCount(0);
+  await expect(page.getByTestId("step-nav-disabled-wordpress")).toHaveCount(0);
+  await expect(page.locator('a[href="#approval"]')).toHaveCount(1);
+  await expect(page.locator('a[href="#wordpress"]')).toHaveCount(1);
+  await page.locator('a[href="#approval"]').click();
+  await expect(page).toHaveURL(/#approval/);
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const approvalCard = document.querySelector("#approval");
+        const stickyNav = document.querySelector('aside [class*="sticky"]');
+        const approvalTop = approvalCard?.getBoundingClientRect().top ?? 0;
+        const stickyBottom = stickyNav?.getBoundingClientRect().bottom ?? 0;
+
+        return Math.round(approvalTop - stickyBottom);
+      }),
+    )
+    .toBeGreaterThanOrEqual(8);
   await expect(page.getByText("編集品質チェック")).toBeVisible();
   await expect(page.getByText("AI風の汎用表現")).toBeVisible();
   await expect(page.getByText("一次情報の反映")).toBeVisible();
@@ -138,16 +175,26 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /一次情報の固有語彙/,
   );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /修正方針: 一次情報の固有語彙を、当社の経験、相談傾向、現場観察/,
+  );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(/一人親方/);
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /結び文章\/CTAの固有語彙/,
+  );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /修正方針: 結び文章\/CTAの固有語彙を、本文末尾の自然な誘導文/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(/無料相談/);
   await page.getByTestId("article-regeneration-start").click();
   expect(calls.articleGenerationJobs).toBe(2);
   expect(calls.articleRegenerationInstruction).toContain("一次情報の固有語彙");
+  expect(calls.articleRegenerationInstruction).toContain(
+    "修正方針: 一次情報の固有語彙を",
+  );
   expect(calls.articleRegenerationInstruction).toContain("一人親方");
   expect(calls.articleRegenerationInstruction).toContain("結び文章/CTAの固有語彙");
+  expect(calls.articleRegenerationInstruction).toContain("修正方針: 結び文章/CTAの固有語彙");
   expect(calls.articleRegenerationInstruction).toContain("無料相談");
   await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeHidden();
   await expect(
@@ -166,11 +213,13 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByTestId("copy-export-status")).toContainText(
     "タイトルをコピーしました。",
   );
+  await expect(page.getByTestId("copy-export-status")).toHaveAttribute("data-status", "success");
 
   await page.getByTestId("copy-handoff-button").click();
   await expect(page.getByTestId("copy-export-status")).toContainText(
     "入稿セットをコピーしました。",
   );
+  await expect(page.getByTestId("copy-export-status")).toHaveAttribute("data-status", "success");
   const handoffText = await page.evaluate(
     () => window.localStorage.getItem("aio-e2e-last-copy") ?? "",
   );
@@ -197,6 +246,7 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByTestId("copy-export-status")).toContainText(
     "HTMLファイルを書き出しました。",
   );
+  await expect(page.getByTestId("copy-export-status")).toHaveAttribute("data-status", "success");
 
   await page.getByTestId("image-regenerate-all-button").click();
   await page
@@ -209,7 +259,7 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   );
   await expect(page.locator('img[alt="AIO workflow hero image"]').first()).toHaveAttribute(
     "src",
-    /cmVnZW4tMQ==/,
+    /\/mock-images\/regenerated-1\.png/,
   );
   await page.getByTestId("image-regeneration-close").click();
 
@@ -224,9 +274,16 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     "100",
   );
   await page.getByTestId("single-image-regeneration-close").click();
+  await expect(page.locator('img[alt="AIO workflow hero image"]').first()).toHaveAttribute(
+    "src",
+    /\/mock-images\/regenerated-2\.png/,
+  );
   expect(calls.generateImage).toBe(2);
   expect(calls.generateImagePrompts[0]).toContain("brighter white background");
+  expect(calls.generateImagePrompts[0]).toContain("Article summary anchor");
+  expect(calls.generateImagePrompts[0]).toContain("Key takeaways to preserve");
   expect(calls.generateImagePrompts[1]).toContain("more executive");
+  expect(calls.generateImagePrompts[1]).toContain("Relevant headings");
 
   await page.getByTestId("draft-title-input").fill("Human Edited AIO Guide");
   await page.getByTestId("draft-slug-input").fill("human-edited-aio-guide");
@@ -304,6 +361,18 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
       (item) => item.question === "Do humans still edit?",
     ),
   ).toBe(false);
+  const savedImages = calls.lastSavedDraft?.images as
+    | Array<{ url?: string; prompt?: string; path?: string }>
+    | undefined;
+  expect(savedImages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        url: "/mock-images/regenerated-2.png",
+        path: "generated/regenerated-2.png",
+        prompt: expect.stringContaining("more executive"),
+      }),
+    ]),
+  );
   expect(String(calls.lastSavedDraft?.editedBodyHtml)).toContain("Human-edited body");
   await expect(page.getByTestId("draft-action-message")).toContainText(
     "編集内容を保存しました。",
@@ -354,6 +423,18 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
       (item) => item.question === "Do humans still edit?",
     ),
   ).toBe(false);
+  const wordpressImages = calls.lastWordpressDraft?.images as
+    | Array<{ url?: string; prompt?: string; path?: string }>
+    | undefined;
+  expect(wordpressImages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        url: "/mock-images/regenerated-2.png",
+        path: "generated/regenerated-2.png",
+        prompt: expect.stringContaining("more executive"),
+      }),
+    ]),
+  );
   expect(String(calls.lastWordpressDraft?.editedBodyHtml)).toContain("Human-edited body");
   await expect(page.getByTestId("wordpress-post-message")).toContainText(
     "WordPressへ下書き投稿しました。",
@@ -397,7 +478,9 @@ test("editing the title to a generic label updates the quality checklist", async
   await page.getByTestId("draft-faq-remove-1").click();
   await page
     .getByTestId("draft-body-html-textarea")
-    .fill("<h2>重要なポイント</h2><p>近年、多くの企業で注目されています。重要です。</p>");
+    .fill(
+      "<h2>重要なポイント</h2><p>近年、多くの企業で注目されています。重要です。問い合わせが300%増え、費用は50万円削減できます。当社の支援現場で出てきた参照元の制度説明と自社の観察と競合記事の比較軸と問い合わせ時の失敗例と費用や期間の条件と公開後の修正責任と承認担当の確認漏れと問い合わせ前後の読者の不安を一文に詰め込むと、読者がどこを判断すべきか追えなくなり、社内確認でも論点が戻りやすくなります。</p><p>また、参照元を確認します。また、一次情報を分けます。また、競合差分を見ます。また、公開前に見直します。具体的には、担当を確認します。具体的には、期限を確認します。具体的には、出典を確認します。</p><table><tr><th>項目</th><td>内容</td></tr></table><h2>まず準備すること</h2><p>確認します。</p><h2>次に確認すること</h2><p>整理します。</p><h2>最後に公開すること</h2><p>進めます。</p><p>いかがでしたでしょうか。ぜひ参考にしてください。</p>",
+    );
   await page.getByTestId("draft-preview-tab").click();
 
   await expect(page.getByText("タイトルの具体性")).toBeVisible();
@@ -450,8 +533,99 @@ test("editing the title to a generic label updates the quality checklist", async
   await expect(page.getByTestId("draft-faq-answer-0")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
   await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "冒頭のAI風フレーム" }),
+  ).toContainText("修正先: 本文HTML。冒頭をテンプレ導入ではなく");
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "冒頭のAI風フレーム" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "締めのAI風フレーム" }),
+  ).toContainText("修正先: 本文HTML。末尾の定型句を削り");
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "締めのAI風フレーム" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "数字・実績の根拠づけ" }),
+  ).toContainText("修正先: 本文HTML。数字の近くに出典");
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "数字・実績の根拠づけ" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await expect(page.getByRole("heading", { name: "参照元" })).toBeVisible();
+  await expect(page.getByLabel("参照元").getByRole("link", { name: "Reference page" })).toHaveAttribute(
+    "href",
+    "https://example.com/reference",
+  );
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "見出しの企画性" }),
+  ).toContainText("修正先: 本文HTML。まず/次に型の見出し");
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "見出しの企画性" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "一文の読みやすさ" }),
+  ).toContainText("修正先: 本文HTML。長い一文を");
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "一文の読みやすさ" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "接続表現の単調さ" }),
+  ).toContainText("修正先: 本文HTML。「また」「さらに」「そのため」の連続を減らし");
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "定型的な文の入り方" }),
+  ).toContainText("修正先: 本文HTML。「結論として」「具体的には」型の文頭を減らし");
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "接続表現の単調さ" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "比較・整理のしやすさ" }),
+  ).toContainText("表はありますが");
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "比較・整理のしやすさ" }),
+  ).toContainText("修正先: 本文HTML。表に判断基準、比較軸、条件");
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "比較・整理のしやすさ" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await expect(
     page.getByTestId("quality-check-failed").filter({ hasText: "AI風の汎用表現" }),
-  ).toContainText("修正先: 本文HTML");
+  ).toContainText("修正先: 本文HTML。「近年」「重要です」「わかりやすく解説」などの汎用表現を削り");
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "AI風の汎用表現" }),
+  ).toContainText("参照元の事実、一次情報、判断基準、現場例へ置き換えます");
   await page
     .getByTestId("quality-check-failed")
     .filter({ hasText: "AI風の汎用表現" })
@@ -460,12 +634,39 @@ test("editing the title to a generic label updates the quality checklist", async
   await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
   await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "冒頭の結論明示" }),
+  ).toContainText("冒頭420字以内に、結論、定義、読者が最初に判断すべきこと");
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "引用しやすい定義" }),
+  ).toContainText("冒頭付近に「〇〇とは...」型の短い定義文");
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "編集意図のある見出し" }),
+  ).toContainText("判断軸、失敗例、比較観点");
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "各セクションの濃さ" }),
+  ).toContainText("数字、現場例、判断基準、失敗例、費用、期間、出典");
   await page.getByTestId("quality-improve-regenerate-button").click();
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /タイトルが汎用的です/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /FAQ回答が一般論寄りです/,
+  );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /修正方針: 冒頭400字以内で、結論、定義、読者が最初に判断すべきこと/,
+  );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /修正方針: 近年、重要です、注目されています、わかりやすく解説等の汎用句を削り/,
+  );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /参照元の事実、一次情報、固有名詞、現場例、判断基準/,
+  );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /修正方針: 数字の近くに、出典、条件、時点、目安、現場観察/,
+  );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /修正方針: 表を項目\/内容だけで終えず、判断基準、比較軸、条件/,
   );
   expect(errors()).toEqual([]);
 });
@@ -548,6 +749,91 @@ test("source digestion quality checks explain how to edit pasted inputs", async 
     .click();
   await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
   await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await page.getByTestId("quality-improve-regenerate-button").click();
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /修正方針: 一次情報を丸写しせず、固有語彙は残して読者向けの判断材料/,
+  );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /修正方針: 参照情報を丸写しせず、事実関係は保って出典注記/,
+  );
+  await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
+    /修正方針: 競合文を写さず、競合の主張を比較材料/,
+  );
+  expect(errors()).toEqual([]);
+});
+
+test("target word count quality check catches short generated drafts", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text for checking whether generated article length matches the selected word count.");
+  await page.locator("#word-count select").selectOption("6000");
+  await page.getByTestId("article-primary-button").click();
+
+  await expect(page.getByText("指定文字数との整合")).toBeVisible();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "指定文字数との整合" }),
+  ).toContainText("指定された6,000字");
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "指定文字数との整合" }),
+  ).toContainText("修正先: 本文HTML。指定文字数に合わせて");
+
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "指定文字数との整合" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+
+  expect(errors()).toEqual([]);
+});
+
+test("target word count quality check catches overly long generated drafts", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  const longBodyHtml = `
+    <h2>AIO記事では、参照情報と一次情報を分けて整理する</h2>
+    <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。${"現場の判断基準、失敗例、担当者、費用、期間、注意点、比較軸を確認し、読者が公開前に迷わないよう整理します。".repeat(38)}</p>
+    <table><tr><th>判断基準</th><td>担当者、費用、期間、出典確認を比較します。</td></tr></table>
+    <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、参照元にない情報を条件なしで書かないことです。</li></ul>
+    <h2>公開前に担当者と出典確認を分ける理由</h2>
+    <p>FAQとして、本文HTMLに貼る前に、判断基準、注意点、比較軸へ言い換えたかを確認します。出典: https://example.com/reference</p>
+  `;
+  completedJob.draft = {
+    ...completedJob.draft!,
+    editedBodyHtml: longBodyHtml,
+  };
+  await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text for checking whether overly long generated article length is detected.");
+  await page.locator("#word-count select").selectOption("1000");
+  await page.getByTestId("article-primary-button").click();
+
+  await expect(page.getByText("指定文字数との整合")).toBeVisible();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "指定文字数との整合" }),
+  ).toContainText("指定された1,000字");
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "指定文字数との整合" }),
+  ).toContainText("目安は700〜1,350字");
+
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "指定文字数との整合" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
+
   expect(errors()).toEqual([]);
 });
 
@@ -563,6 +849,37 @@ test("API failure is shown in the UI without console errors or crashes", async (
   await page.getByTestId("theme-candidates-button").click();
 
   await expect(page.getByTestId("theme-candidates-error")).toContainText("theme candidate failed");
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
+  expect(errors()).toEqual([]);
+});
+
+test("theme candidate failure can be retried and then applied", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/theme-candidates$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    themeCandidatesFailOnce: true,
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for theme retry handling.");
+  await page.getByTestId("theme-candidates-button").click();
+
+  expect(calls.themeCandidates).toBe(1);
+  await expect(page.getByTestId("theme-candidates-error")).toContainText("theme candidate failed");
+  await expect(page.getByTestId("theme-candidates-button")).toBeEnabled();
+
+  await page.getByTestId("theme-candidates-button").click();
+
+  expect(calls.themeCandidates).toBe(2);
+  await expect(page.getByTestId("theme-candidates-error")).toHaveCount(0);
+  await expect(page.getByTestId("theme-candidate-card-0")).toContainText(
+    "AIO Content Operations Guide",
+  );
+  await page.getByTestId("theme-candidate-apply-0").click();
+  await expect(page.getByTestId("theme-candidate-card-0")).toContainText("反映しました。");
+  await expect(page.getByTestId("theme-textarea")).toHaveValue(/AIO Content Operations Guide/);
   await expect(page.getByTestId("article-primary-button")).toBeEnabled();
   expect(errors()).toEqual([]);
 });
@@ -652,7 +969,7 @@ test("image count zero creates a text-only draft from the PC form", async ({ pag
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
   ).toBeVisible();
-  await expect(page.getByRole("article").locator("img")).toHaveCount(0);
+  await expect(page.getByRole("article").locator("figure[data-image-slot]")).toHaveCount(0);
   expect(errors()).toEqual([]);
 });
 
@@ -678,6 +995,55 @@ test("competitor research failure resets progress and remains recoverable", asyn
   await expect(page.getByText("競合情報調査に失敗しました。")).toBeVisible();
   await expect(page.getByTestId("competitor-research-button")).toBeEnabled();
   await expect(page.getByTestId("competitor-research-progress")).toBeHidden();
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
+  expect(errors()).toEqual([]);
+});
+
+test("competitor research failure can be retried and edited", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/competitor-research$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    competitorResearchFailOnce: true,
+  });
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for competitor retry flow.");
+  await page
+    .getByTestId("competitor-text-0")
+    .fill("Competitor memo for one failed research attempt followed by a retry.");
+  await page.getByTestId("competitor-research-button").click();
+
+  expect(calls.competitorResearch).toBe(1);
+  await expect(page.getByTestId("active-error")).toBeVisible();
+  await expect(page.getByTestId("competitor-research-button")).toBeEnabled();
+  await expect(page.getByTestId("competitor-research-progress")).toBeHidden();
+
+  await page.getByTestId("competitor-research-button").click();
+
+  expect(calls.competitorResearch).toBe(2);
+  await expect(page.getByTestId("active-error")).toHaveCount(0);
+  await expect(page.getByTestId("competitor-research-progress")).toHaveAttribute(
+    "aria-valuenow",
+    "100",
+  );
+  await expect(page.getByTestId("competitor-research-json")).toHaveValue(
+    /Generic automation LP/,
+  );
+  await page.getByTestId("competitor-research-json").fill(
+    JSON.stringify(
+      {
+        ...competitorResearchFixture,
+        summary: "Edited competitor retry summary for E2E",
+      },
+      null,
+      2,
+    ),
+  );
+  await expect(page.getByTestId("competitor-research-json")).toHaveValue(
+    /Edited competitor retry summary for E2E/,
+  );
   await expect(page.getByTestId("article-primary-button")).toBeEnabled();
   expect(errors()).toEqual([]);
 });
@@ -723,6 +1089,55 @@ test("image regeneration failure shows a recoverable error and resets progress",
   );
   await expect(page.getByTestId("image-regeneration-start")).toBeEnabled();
   await expect(page.getByRole("dialog", { name: "画像のみ再作成" })).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
+test("single image regeneration failure keeps the dialog recoverable", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generate-image$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    generateImageShouldFail: true,
+  });
+
+  await login(page);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text for single image regeneration failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("draft-edit-tab").click();
+  await page.getByTestId("image-regenerate-single-featured").click();
+  await page
+    .getByTestId("single-image-regeneration-instruction")
+    .fill("Make the featured image more concrete and less abstract.");
+  await page.getByTestId("single-image-regeneration-start").click();
+
+  expect(calls.generateImage).toBe(1);
+  await expect(page.getByTestId("active-error")).toBeVisible();
+  await expect(page.getByTestId("single-image-regeneration-progress")).toHaveAttribute(
+    "aria-valuenow",
+    "0",
+  );
+  await expect(page.getByTestId("single-image-regeneration-start")).toBeEnabled();
+  await expect(
+    page.locator('[role="dialog"]').filter({
+      has: page.getByTestId("single-image-regeneration-progress"),
+    }),
+  ).toBeVisible();
   expect(errors()).toEqual([]);
 });
 
@@ -1045,7 +1460,7 @@ test("reference URL fetch failure is visible while manual fallback still generat
     .fill("Manual fallback reference text for blocked URL.");
   await page.getByTestId("article-primary-button").click();
 
-  await expect(page.getByText(failedUrl)).toBeVisible();
+  await expect(page.locator("#references").getByText(failedUrl, { exact: true })).toBeVisible();
   await expect(page.getByText("十分な本文を抽出できませんでした。")).toBeVisible();
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
@@ -1114,7 +1529,7 @@ test("competitor URL fetch failure is visible while manual competitor notes stil
     .fill("Manual competitor note about pricing-first messaging and weak approval workflow.");
   await page.getByTestId("article-primary-button").click();
 
-  await expect(page.getByText(failedUrl)).toBeVisible();
+  await expect(page.locator("#competitors").getByText(failedUrl, { exact: true })).toBeVisible();
   await expect(page.getByText("十分な本文を抽出できませんでした。")).toBeVisible();
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
@@ -1259,6 +1674,11 @@ test("generation logs show previous output and can reopen a saved draft", async 
   await expect(
     page.getByRole("article").getByRole("heading", { name: "Recovered Log Article" }),
   ).toBeVisible();
+  await expect(page.getByText("投稿済み").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "投稿URL" })).toHaveAttribute(
+    "href",
+    "https://wordpress.example.com/recovered-log-article",
+  );
   await expect(page.getByTestId("download-html-button")).toBeVisible();
   expect(errors()).toEqual([]);
 });
@@ -1733,15 +2153,207 @@ test("copy failure shows manual recovery guidance without breaking the draft pre
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
   ).toBeVisible();
 
-  await page.getByTestId("copy-body-html-button").click();
+  await page.getByTestId("copy-title-button").click();
+  await expect(page.getByTestId("copy-export-status")).toContainText(
+    "タイトルをコピーできませんでした。",
+  );
+  await expect(page.getByTestId("copy-export-status")).toHaveAttribute("data-status", "error");
+  await expect(page.getByTestId("copy-export-status")).toContainText(
+    "タイトル欄から手動でコピーしてください。",
+  );
 
-  await expect(page.getByTestId("copy-export-status")).toContainText("コピーできませんでした。");
+  await page.getByTestId("copy-body-html-button").click();
+  await expect(page.getByTestId("copy-export-status")).toContainText(
+    "本文HTMLをコピーできませんでした。",
+  );
+  await expect(page.getByTestId("copy-export-status")).toHaveAttribute("data-status", "error");
   await expect(page.getByTestId("copy-export-status")).toContainText(
     "本文HTML欄から手動でコピーしてください。",
   );
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
   ).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
+test("copy fallback failure cleans up the temporary textarea", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: () => Promise.reject(new Error("clipboard denied")),
+      },
+    });
+    document.execCommand = () => {
+      throw new Error("copy command denied");
+    };
+  });
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for clipboard cleanup.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("copy-body-html-button").click();
+
+  await expect(page.getByTestId("copy-export-status")).toContainText(
+    "本文HTMLをコピーできませんでした。",
+  );
+  await expect(page.getByTestId("copy-export-status")).toHaveAttribute("data-status", "error");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          Array.from(document.querySelectorAll("textarea")).filter(
+            (textarea) => textarea.style.left === "-9999px",
+          ).length,
+      ),
+    )
+    .toBe(0);
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
+test("HTML export failure shows manual recovery guidance without breaking the draft preview", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    URL.createObjectURL = () => {
+      throw new Error("download denied");
+    };
+  });
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for HTML export failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("download-html-button").click();
+
+  await expect(page.getByTestId("copy-export-status")).toContainText("HTML出力に失敗しました。");
+  await expect(page.getByTestId("copy-export-status")).toHaveAttribute("data-status", "error");
+  await expect(page.getByTestId("copy-export-status")).toContainText(
+    "本文HTMLをコピーして手動で保存してください。",
+  );
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
+test("HTML export click failure cleans up the temporary download link", async ({ page }) => {
+  await page.addInitScript(() => {
+    URL.revokeObjectURL = (url: string) => {
+      window.localStorage.setItem("aio-e2e-revoked-url", url);
+    };
+    const originalAppendChild = Node.prototype.appendChild;
+    Node.prototype.appendChild = function appendChildWithFailingDownload<T extends Node>(
+      child: T,
+    ): T {
+      const appended = originalAppendChild.call(this, child) as T;
+      if (
+        child instanceof HTMLAnchorElement &&
+        child.download === "aio-content-operations-guide.html"
+      ) {
+        child.click = () => {
+          throw new Error("download click denied");
+        };
+      }
+      return appended;
+    };
+  });
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference text for HTML cleanup failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("download-html-button").click();
+
+  await expect(page.getByTestId("copy-export-status")).toContainText("HTML出力に失敗しました。");
+  await expect(page.getByTestId("copy-export-status")).toHaveAttribute("data-status", "error");
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        links: document.querySelectorAll('a[download="aio-content-operations-guide.html"]').length,
+        revokedUrl: window.localStorage.getItem("aio-e2e-revoked-url") ?? "",
+      })),
+    )
+    .toEqual({ links: 0, revokedUrl: expect.stringMatching(/^blob:/) });
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
+test("demo login rejects a wrong code and then preserves the requested return path", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/demo-auth$/],
+  });
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+
+  await page.goto("/demo-login?next=%2F%3Ftab%3Dpreview");
+  await page.getByTestId("demo-access-code").fill("wrong");
+  await page.getByTestId("demo-login-submit").click();
+
+  await expect(page).toHaveURL(/\/demo-login\?next=%2F%3Ftab%3Dpreview/);
+  await expect(page.getByTestId("demo-login-error")).toBeVisible();
+  await expect(page.getByTestId("demo-login-submit")).toBeEnabled();
+
+  await page.getByTestId("demo-access-code").fill("202607");
+  await page.getByTestId("demo-login-submit").click();
+
+  await page.waitForURL("**/?tab=preview");
+  await expect(page.getByTestId("article-primary-button")).toBeVisible();
   expect(errors()).toEqual([]);
 });
 
@@ -2246,7 +2858,9 @@ async function mockCommonApiRoutes(
   completedJob: ReturnType<typeof createCompletedGenerationJob>,
   options: {
     themeCandidatesShouldFail?: boolean;
+    themeCandidatesFailOnce?: boolean;
     competitorResearchShouldFail?: boolean;
+    competitorResearchFailOnce?: boolean;
     generateImageShouldFail?: boolean;
     generationJobFailureCall?: number;
     wordpressPostShouldFail?: boolean;
@@ -2263,6 +2877,7 @@ async function mockCommonApiRoutes(
     generateImagePrompts: [] as string[],
     competitorResearch: 0,
     extractFile: 0,
+    themeCandidates: 0,
     themeCandidateCompetitorSummary: "",
     articleGenerationJobs: 0,
     articlePrimaryInfo: "",
@@ -2279,6 +2894,16 @@ async function mockCommonApiRoutes(
 
   await page.route("**/api/generation-logs", async (route) => {
     await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+
+  await page.route("**/mock-images/**", async (route) => {
+    await route.fulfill({
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
   });
 
   await page.route("**/api/extract-file-content", async (route) => {
@@ -2302,7 +2927,10 @@ async function mockCommonApiRoutes(
 
   await page.route("**/api/competitor-research", async (route) => {
     calls.competitorResearch += 1;
-    if (options.competitorResearchShouldFail) {
+    if (
+      options.competitorResearchShouldFail ||
+      (options.competitorResearchFailOnce && calls.competitorResearch === 1)
+    ) {
       await route.fulfill({
         status: 500,
         json: { ok: false, error: "競合情報調査に失敗しました。" },
@@ -2314,7 +2942,11 @@ async function mockCommonApiRoutes(
   });
 
   await page.route("**/api/theme-candidates", async (route) => {
-    if (options.themeCandidatesShouldFail) {
+    calls.themeCandidates += 1;
+    if (
+      options.themeCandidatesShouldFail ||
+      (options.themeCandidatesFailOnce && calls.themeCandidates === 1)
+    ) {
       await route.fulfill({
         status: 500,
         json: { ok: false, error: "theme candidate failed" },
@@ -2326,7 +2958,17 @@ async function mockCommonApiRoutes(
       competitorResearch?: { summary?: string };
     };
     calls.themeCandidateCompetitorSummary = body.competitorResearch?.summary ?? "";
-    await route.fulfill({ json: themeCandidates });
+    await route.fulfill({
+      json: {
+        ...themeCandidates,
+        result: {
+          ...themeCandidates.result,
+          candidates: themeCandidates.result.candidates.map((candidate, index) =>
+            index === 1 ? { ...candidate, title: themeCandidates.result.candidates[0].title } : candidate,
+          ),
+        },
+      },
+    });
   });
 
   await page.route("**/api/generation-jobs", async (route) => {
@@ -2388,7 +3030,7 @@ async function mockCommonApiRoutes(
         image: {
           id: `regenerated-${calls.generateImage}`,
           slot: body.slot ?? "featured",
-          url: `data:image/png;base64,${Buffer.from(`regen-${calls.generateImage}`).toString("base64")}`,
+          url: `/mock-images/regenerated-${calls.generateImage}.png`,
           path: `generated/regenerated-${calls.generateImage}.png`,
           prompt: body.prompt,
           altText: body.altText ?? "Regenerated image",

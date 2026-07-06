@@ -1,16 +1,16 @@
-## 変更内容の概要
+## Summary
 
 -
 
-## 影響範囲
+## Scope / Impact
 
 -
 
-## 追加・更新したテスト
+## Tests Added Or Updated
 
 -
 
-## 実行したコマンド
+## Commands Run
 
 - [ ] `npm run typecheck`
 - [ ] `npm run lint`
@@ -21,20 +21,32 @@
 - [ ] `npm run build`
 - [ ] `npm run quality`
 
-## E2Eで確認した主要フロー
+## E2E Flows Checked
 
 -
 
-## 品質・安全確認
+## Review Automation
 
-- [ ] `npm run quality` が成功している
-- [ ] 既存テストを削除・skip・todo・only・コメントアウト・過度に緩和していない
-- [ ] 失敗している機能をmockで成功扱いにしていない
-- [ ] console error / pageerror / unhandled rejection / unexpected network error を放置していない
-- [ ] 本番DB・本番API・本番ユーザーデータに影響しない
-- [ ] CSV / PDF / 画像 / ファイルアップロード変更がある場合、fixtureを追加・更新している
-- [ ] Supabaseのテーブル・RLS・保存処理変更がある場合、データ整合性テストを追加している
+- [ ] CodeRabbit OSS review was requested or expected on this PR
+- [ ] CodeRabbit findings were reviewed and addressed, or intentionally deferred with rationale
+- [ ] Cursor Bugbot was not used
+- [ ] If Cursor Bugbot was used as backup, the reason and findings are documented below
 
-## 補足・リスク
+Bugbot backup reason/findings, if used:
+
+-
+
+## Quality / Safety Checklist
+
+- [ ] `npm run quality` passes locally or any failure is documented
+- [ ] Existing tests were not deleted, skipped, marked todo/only, commented out, or weakened
+- [ ] Failing functionality was not mocked as successful
+- [ ] Console errors, page errors, unhandled rejections, and unexpected network errors were not ignored
+- [ ] Production DB, production API, and production user data are not affected
+- [ ] Secrets, API keys, passwords, and `.env` values are not included
+- [ ] CSV / PDF / image / file-upload changes include fixture updates where relevant
+- [ ] Supabase table/RLS/persistence changes include data-consistency tests where relevant
+
+## Notes / Risks
 
 -

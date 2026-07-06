@@ -48,6 +48,7 @@ describe("article image helpers", () => {
   });
 
   test("generates and stores requested image prompts", async () => {
+    const { generateImageBase64 } = await import("@/lib/server/openai");
     const { storeAsset } = await import("@/lib/server/storage");
     const { createArticleImagesForDraft } = await import("@/lib/server/article-images");
 
@@ -59,6 +60,16 @@ describe("article image helpers", () => {
     expect(images).toHaveLength(1);
     expect(images[0].url).toBe("https://assets.example.com/featured.png");
     expect(storeAsset).toHaveBeenCalledWith(expect.objectContaining({ filename: "featured.png" }));
+    expect(generateImageBase64).toHaveBeenCalledWith(
+      expect.stringContaining("Article summary anchor"),
+    );
+    expect(generateImageBase64).toHaveBeenCalledWith(
+      expect.stringContaining(sampleArticleResult.article_summary),
+    );
+    expect(generateImageBase64).toHaveBeenCalledWith(
+      expect.stringContaining("Key takeaways to visualize"),
+    );
+    expect(generateImageBase64).toHaveBeenCalledWith(expect.stringContaining("Relevant headings"));
   });
 
   test("keeps the article draft usable when one generated image fails", async () => {

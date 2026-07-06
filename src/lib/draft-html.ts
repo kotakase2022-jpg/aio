@@ -1,4 +1,11 @@
-import type { ArticleDraft, ArticleImage, FaqItem } from "@/types/aio";
+import type { ArticleDraft, ArticleImage, AuthorInput, FaqItem } from "@/types/aio";
+import {
+  articleContainsCanonicalSourceUrl,
+  canonicalSourceUrlKey,
+  decodeHtmlAmpersands,
+  normalizeSourceUrl,
+  sourceUrlCandidates,
+} from "@/lib/source-url";
 
 type BuildDraftArticleHtmlOptions = {
   imageUrlResolver?: (url: string) => string;
@@ -9,7 +16,9 @@ export function buildDraftArticleHtml(
   options: BuildDraftArticleHtmlOptions = {},
 ) {
   const withImages = replaceDraftImageReferences(draft.editedBodyHtml, draft.images, options);
-  return appendFaqBlockWhenNeeded(withImages, draft.faqItems);
+  const withFaq = appendFaqBlockWhenNeeded(withImages, draft.faqItems);
+  const withAuthor = appendAuthorBlockWhenNeeded(withFaq, draft.author, options);
+  return appendSourceBlockWhenNeeded(withAuthor, draft);
 }
 
 export function replaceDraftImageReferences(
@@ -58,6 +67,69 @@ export function appendFaqBlockWhenNeeded(html: string, faqItems: FaqItem[]) {
   return `${withoutManagedFaq}\n${buildFaqBlockHtml(items)}`;
 }
 
+export function appendSourceBlockWhenNeeded(html: string, draft: ArticleDraft) {
+  const sources = collectRenderableSources(draft);
+  const withoutManagedSources = removeManagedSourceBlock(html);
+  if (sources.length === 0) {
+    return withoutManagedSources;
+  }
+
+  const bodyForUrlChecks = decodeHtmlAmpersands(withoutManagedSources);
+  const missingSources = sources.filter((source) => !sourceUrlAlreadyVisible(source.url, bodyForUrlChecks));
+  if (missingSources.length === 0) {
+    return withoutManagedSources;
+  }
+
+  return `${withoutManagedSources}\n${buildSourceBlockHtml(missingSources)}`;
+}
+
+export function appendAuthorBlockWhenNeeded(
+  html: string,
+  author: AuthorInput,
+  options: BuildDraftArticleHtmlOptions = {},
+) {
+  const normalizedAuthor = {
+    name: author.name?.trim() ?? "",
+    title: author.title?.trim() ?? "",
+    bio: author.bio?.trim() ?? "",
+    imageUrl: author.imageUrl?.trim() ?? "",
+  };
+  const hasAuthor =
+    normalizedAuthor.name ||
+    normalizedAuthor.title ||
+    normalizedAuthor.bio ||
+    normalizedAuthor.imageUrl;
+  const withoutManagedAuthor = removeManagedAuthorBlock(html);
+
+  if (!hasAuthor) {
+    return withoutManagedAuthor;
+  }
+
+  const text = normalizeText(stripHtmlText(withoutManagedAuthor));
+  if (hasExistingAuthorSection(text, normalizedAuthor)) {
+    return withoutManagedAuthor;
+  }
+
+  return `${withoutManagedAuthor}\n${buildAuthorBlockHtml(normalizedAuthor, options)}`;
+}
+
+function hasExistingAuthorSection(
+  normalizedBodyText: string,
+  author: Required<Pick<AuthorInput, "name" | "title" | "bio" | "imageUrl">>,
+) {
+  const headingAlreadyVisible = normalizedBodyText.includes(normalizeText("この記事の執筆者"));
+  if (headingAlreadyVisible) {
+    return true;
+  }
+
+  const nameAlreadyVisible = author.name && normalizedBodyText.includes(normalizeText(author.name));
+  const titleAlreadyVisible =
+    author.title && normalizedBodyText.includes(normalizeText(author.title));
+  const bioAlreadyVisible = author.bio && normalizedBodyText.includes(normalizeText(author.bio));
+
+  return Boolean(nameAlreadyVisible && (titleAlreadyVisible || bioAlreadyVisible));
+}
+
 function buildFaqBlockHtml(items: Array<{ question: string; answer: string }>) {
   const body = items
     .map((item) => {
@@ -72,6 +144,43 @@ function buildFaqBlockHtml(items: Array<{ question: string; answer: string }>) {
   return `<section class="aio-faq-block" aria-label="FAQ"><h2>FAQ</h2>\n${body}\n</section>`;
 }
 
+function buildSourceBlockHtml(sources: Array<{ url: string; title: string; usageNotes: string }>) {
+  const items = sources
+    .map((source) => {
+      const title = source.title || source.url;
+      const note = source.usageNotes ? ` <span>${escapeHtml(source.usageNotes)}</span>` : "";
+      return `<li><a href="${escapeHtmlAttribute(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
+        title,
+      )}</a>${note}</li>`;
+    })
+    .join("\n");
+
+  return `<section class="aio-source-block" aria-label="参照元"><h2>参照元</h2>\n<ul>\n${items}\n</ul>\n</section>`;
+}
+
+function buildAuthorBlockHtml(
+  author: Required<Pick<AuthorInput, "name" | "title" | "bio" | "imageUrl">>,
+  options: BuildDraftArticleHtmlOptions,
+) {
+  const imageUrl = author.imageUrl
+    ? options.imageUrlResolver
+      ? options.imageUrlResolver(author.imageUrl)
+      : author.imageUrl
+    : "";
+  const image = imageUrl
+    ? `<img src="${escapeHtmlAttribute(imageUrl)}" alt="${escapeHtmlAttribute(
+        author.name || "この記事の執筆者",
+      )}" />`
+    : "";
+  const title = author.title ? `<p class="aio-author-title">${escapeHtml(author.title)}</p>` : "";
+  const bio = author.bio ? `<p class="aio-author-bio">${escapeHtml(author.bio)}</p>` : "";
+  const name = author.name || "執筆者";
+
+  return `<section class="aio-author-block" aria-label="この記事の執筆者"><h2>この記事の執筆者</h2>\n<div class="aio-author-profile">${image}<div><h3>${escapeHtml(
+    name,
+  )}</h3>${title}${bio}</div></div>\n</section>`;
+}
+
 function removeManagedFaqBlock(html: string) {
   return html
     .replace(
@@ -79,6 +188,79 @@ function removeManagedFaqBlock(html: string) {
       "",
     )
     .trim();
+}
+
+function removeManagedSourceBlock(html: string) {
+  return html
+    .replace(
+      /<section\b[^>]*class=(["'])[^"']*\baio-source-block\b[^"']*\1[^>]*>[\s\S]*?<\/section>/gi,
+      "",
+    )
+    .trim();
+}
+
+function removeManagedAuthorBlock(html: string) {
+  return html
+    .replace(
+      /<section\b[^>]*class=(["'])[^"']*\baio-author-block\b[^"']*\1[^>]*>[\s\S]*?<\/section>/gi,
+      "",
+    )
+    .trim();
+}
+
+function collectRenderableSources(draft: ArticleDraft) {
+  const seen = new Set<string>();
+  return [
+    ...draft.aiResult.sources.map((source) => ({
+      url: normalizeSourceUrl(source.url),
+      title: source.title.trim(),
+      usageNotes: source.usage_notes.trim(),
+    })),
+    ...draft.fetchedReferences.map((source) => ({
+      url: normalizeSourceUrl(source.url),
+      title: source.title?.trim() || source.url.trim(),
+      usageNotes: source.ok ? "参照URLから本文を取得しました。" : source.reason?.trim() || "",
+    })),
+    ...draft.inputPayload.references.map((source) => ({
+      url: normalizeSourceUrl(source.url ?? ""),
+      title: source.url?.trim() || "",
+      usageNotes: source.text?.trim() ? "入力フォームの参照情報です。" : "",
+    })),
+    ...draft.fetchedCompetitors.map((source) => ({
+      url: normalizeSourceUrl(source.url),
+      title: source.title?.trim() || source.url.trim(),
+      usageNotes: source.ok ? "競合URLから本文を取得しました。" : source.reason?.trim() || "",
+    })),
+    ...draft.inputPayload.competitors.map((source) => ({
+      url: normalizeSourceUrl(source.url ?? ""),
+      title: source.url?.trim() || "",
+      usageNotes: source.text?.trim() ? "入力フォームの競合情報です。" : "",
+    })),
+    ...(draft.competitorResearch?.insights ?? []).map((source) => ({
+      url: normalizeSourceUrl(source.url),
+      title: source.title.trim() || source.url.trim(),
+      usageNotes: "AI競合調査で参照した競合情報です。",
+    })),
+  ]
+    .filter((source) => {
+      const sourceKey = canonicalSourceUrlKey(source.url);
+      if (!source.url || seen.has(sourceKey)) {
+        return false;
+      }
+      seen.add(sourceKey);
+      return true;
+    })
+    .slice(0, 8);
+}
+
+function sourceUrlAlreadyVisible(url: string, html: string) {
+  const normalizedHtml = decodeHtmlAmpersands(html);
+  const candidates = sourceUrlCandidates(url);
+  if (candidates.some((candidate) => normalizedHtml.includes(candidate))) {
+    return true;
+  }
+
+  return articleContainsCanonicalSourceUrl(url, normalizedHtml);
 }
 
 function replaceImageSrc(html: string, from: string, to: string) {

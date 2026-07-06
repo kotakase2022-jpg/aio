@@ -62,7 +62,7 @@ export async function createArticleImagesForDraft(
     form.visualTone.mode === "custom" ? form.visualTone.custom : form.visualTone.preset;
   const prompts = article.image_prompts.slice(0, imageCount).map((prompt) => ({
     ...prompt,
-    prompt: buildArticleImagePrompt(prompt.prompt, toneText),
+    prompt: buildArticleImagePrompt(prompt.prompt, toneText, article),
   }));
 
   const results = await Promise.allSettled(
@@ -107,15 +107,28 @@ export function buildProductionImagePrompt(
   ].join("\n");
 }
 
-function buildArticleImagePrompt(basePrompt: string, toneText?: string) {
+function buildArticleImagePrompt(
+  basePrompt: string,
+  toneText: string | undefined,
+  article: Pick<ArticleGenerationResult, "article_summary" | "headings" | "key_takeaways">,
+) {
   return [
     basePrompt,
     "",
     `Visual tone from user: ${toneText || "clean Japanese B2B whitepaper editorial style"}`,
+    `Article summary anchor: ${truncatePromptLine(article.article_summary, 220)}`,
+    `Key takeaways to visualize: ${article.key_takeaways.slice(0, 3).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
+    `Relevant headings: ${article.headings.slice(0, 4).map((heading) => truncatePromptLine(heading.text, 80)).join(" / ")}`,
     "Create a premium 3:2 landscape editorial visual for a Japanese B2B article.",
     "Use a refined whitepaper/SaaS/consulting composition with clean geometry, subtle depth, balanced margins, and a clear focal concept.",
+    "Make the visual article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
     "Avoid text-heavy layouts, readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, unnecessary people, and cheap stock-photo aesthetics.",
   ].join("\n");
+}
+
+function truncatePromptLine(value: string, maxLength: number) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
 }
 
 function normalizeImageCount(value: unknown) {

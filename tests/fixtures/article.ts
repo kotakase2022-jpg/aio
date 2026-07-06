@@ -5,6 +5,9 @@ import type {
   GenerationJob,
 } from "@/types/aio";
 
+export const transparentPixelDataUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
 export const sampleFormPayload: ArticleFormPayload = {
   references: [
     {
@@ -24,7 +27,7 @@ export const sampleFormPayload: ArticleFormPayload = {
     name: "Test Author",
     title: "Content Strategist",
     bio: "Writes practical B2B content operations guides.",
-    imageUrl: "https://example.com/author.png",
+    imageUrl: transparentPixelDataUrl,
   },
   visualTone: {
     mode: "preset",
@@ -111,7 +114,7 @@ export function createSampleDraft(overrides: Partial<ArticleDraft> = {}): Articl
       {
         id: "img-1",
         slot: "featured",
-        url: "https://example.com/featured.png",
+        url: transparentPixelDataUrl,
         path: "generated/featured.png",
         prompt: "Clean B2B editorial visual",
         altText: "AIO workflow hero image",

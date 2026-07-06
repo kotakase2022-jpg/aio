@@ -19,9 +19,15 @@ const genericQuestionPatterns = [
   /^注意点は何ですか[？?]?$/,
   /^どう始めればよいですか[？?]?$/,
   /^what is (it|this)\??$/i,
+  /^what is [a-z0-9_-]{2,12}\??$/i,
   /^what are the benefits\??$/i,
+  /^what are the benefits of [a-z0-9 _-]{2,40}\??$/i,
   /^what are the disadvantages\??$/i,
+  /^what are the disadvantages of [a-z0-9 _-]{2,40}\??$/i,
+  /^why is [a-z0-9_-]{2,12} important\??$/i,
   /^how do i start\??$/i,
+  /^how does (it|this|that) work\??$/i,
+  /^how does [a-z0-9_-]{2,12} work\??$/i,
   /^is it important\??$/i,
 ];
 
@@ -37,6 +43,15 @@ const genericAnswerPhrases = [
   "it depends",
   "various",
   "many companies",
+  "can help",
+  "helps improve",
+  "improve efficiency",
+  "should consider",
+  "recommended to",
+  "best practices",
+  "streamline",
+  "enhance productivity",
+  "leverage",
 ];
 
 const stopWords = new Set([

@@ -30,6 +30,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "Create original article drafts from the provided reference and competitor material.",
       "Do not copy source phrasing. Do not state uncertain facts as facts.",
       "The article must be useful for AI answer engines: clear definitions, concise sentences, structured headings, lists, tables, FAQ, and source notes.",
+      "When using tables, make them useful decision tables. Avoid thin tables with only 項目/内容 or 概要/説明; include comparison axes, conditions, costs, timing, owner/team, caveats, source notes, or field observations.",
       "Treat payload.form.theme as the editorial brief. Reflect its topic, keywords, target reader, search intent, and article goal in the title, opening answer, headings, examples, FAQ, tags, and categories.",
       "When competitor material or competitorResearch is provided, use it to identify comparison axes, missing perspectives, objections, and differentiation points. Do not merely summarize competitors.",
       "Do not paste long reference or competitor passages verbatim. Keep source meaning and facts, then rewrite them as definitions, decision criteria, caveats, comparison axes, or source notes.",
@@ -37,19 +38,24 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "When primaryInfo is provided, weave it naturally into the introduction, examples, body sections, and key takeaways. Do not overstate it as universal fact; attribute it as company experience or observed tendency when appropriate.",
       "Do not paste primaryInfo verbatim as article copy. Preserve its concrete nouns and meaning, then rewrite it into reader-facing editorial observations, decision criteria, caveats, or examples.",
       "Make the first 400 Japanese characters answer-first: state the conclusion, definition, or most important editorial judgment before background explanation.",
-      "Avoid commodity content and generic AI-like filler. Do not lean on vague phrases such as 近年, 重要です, 注目されています, と言えるでしょう, いかがでしょうか, or 本記事では unless they are genuinely necessary and supported by the material.",
-      "Avoid verbose AI-like predicates such as することができます, することが可能です, 可能となります, or することが重要です. Prefer shorter, more concrete verbs such as 確認します, 分けます, 判断します, 減らせます, or できます when accurate.",
+      "Do not open with boilerplate framing such as 本記事では, この記事では, 近年, について解説します, を紹介します, in this article, or this article explains. Start with a concrete conclusion, definition, reader decision, field observation, condition, or caveat.",
+      "Avoid commodity content and generic AI-like filler. Do not lean on vague phrases such as 近年, 重要です, 重要になります, 注目されています, 求められます, 欠かせません, と言えるでしょう, いかがでしょうか, 本記事では, わかりやすく解説, 詳しく解説, を紹介します, in this article, this article explains, it is important to, various, many companies, can help, improve efficiency, should consider, recommended to, best practices, streamline, enhance productivity, or leverage unless they are genuinely necessary and supported by the material.",
+      "Avoid verbose AI-like predicates such as することができます, することが可能です, 可能となります, することが重要です, it is important to, in order to, or utilize. Prefer shorter, more concrete verbs such as 確認します, 分けます, 判断します, 減らせます, or できます when accurate.",
       "Avoid unsupported strong claims such as 必ず, 絶対に, 完全に, 誰でも, 唯一, すべて解決, or 確実に unless the source material proves them and the sentence includes conditions or caveats.",
+      "When using numbers, percentages, costs, timing, counts, or performance-like claims, attach a source, condition, date, caveat, estimate, or first-party observation near the number. Do not present unsupported figures as facts.",
+      "When reference URLs or source URLs are available, keep the actual URLs visible in body_html as source notes or links so the WordPress draft remains independently checkable after publishing.",
       "Write as a human editor who has interviewed the business: each major section should include at least one concrete decision criterion, field example, operational caveat, failure pattern, or source-backed detail.",
       "Avoid thin H2/H3 sections. Every H2/H3 body should include at least two concrete signals such as a number, field observation, decision criterion, failure/risk note, team/cost/timing detail, or source/caveat note.",
       "Across the full article, include at least three different types of editorial evidence: field observations, decision criteria, failure/risk notes, team/cost/timing details, and source/caveat notes.",
       "Make headings editorial and useful, not mechanical keyword strings. Vary sentence rhythm and endings so the body does not read like a template.",
-      "Make title candidates specific and editorial. Avoid generic titles such as 重要なポイント, メリット, デメリット, まとめ, 概要, 基本, 活用方法, 注意点, 完全ガイド, or 徹底解説 unless paired with a concrete reader decision, first-party insight, or comparison axis from the inputs.",
-      "Make faq_items specific enough for publication. Avoid generic questions such as よくある質問, メリットは何ですか, 注意点は何ですか, or What are the benefits? Each answer should include a condition, decision criterion, field example, caveat, source note, cost/timing/team detail, or competitor comparison when available.",
+      "Make title candidates specific and editorial. Avoid generic titles such as 重要なポイント, メリット, デメリット, まとめ, 概要, 基本, 活用方法, 注意点, 完全ガイド, 徹底解説, Best Practices, Strategy, Checklist, or Tips unless paired with a concrete reader decision, first-party insight, or comparison axis from the inputs.",
+      "Make faq_items specific enough for publication. Avoid generic questions such as よくある質問, メリットは何ですか, 注意点は何ですか, What is AIO?, Why is AIO important?, How does it work?, What are the benefits?, or What are the benefits of AIO? Avoid generic FAQ answer filler such as can help, helps improve, improve efficiency, should consider, recommended to, best practices, streamline, enhance productivity, or leverage unless the sentence includes a concrete condition, source boundary, field example, or decision criterion. Each answer should include a condition, decision criterion, field example, caveat, source note, cost/timing/team detail, or competitor comparison when available.",
+      "Keep sentences short enough to read comfortably. Avoid single Japanese sentences over roughly 130 visible characters; split long sentences into conclusion, condition, exception, and example sentences.",
       "Do not start many consecutive sentences with the same connector such as また, さらに, そのため, 一方で, or このように. Mix short direct sentences, examples, conditions, and caveats instead.",
       "Do not overuse formulaic sentence openings such as 結論として, 具体的には, たとえば, 重要なのは, ポイントは, or 注意点は. Use direct editorial judgments, field observations, conditions, exceptions, and comparisons to vary paragraph openings.",
       "Avoid generic H2/H3 labels such as 重要なポイント, メリット, デメリット, まとめ, 概要, 基本, 活用方法, or 注意点. Make each heading convey a concrete reader decision, failure pattern, comparison axis, or field-specific insight.",
       "Do not use vague heading patterns such as 導入について, 注意点について, 活用方法, or メリットについて. Replace them with headings that reveal the editorial angle, such as which decision, failure, comparison, or field observation the section explains.",
+      "Avoid mechanical heading sequences such as まず, 次に, 最後に, STEP1, STEP2, or generic '3つのポイント' unless the heading also states a concrete reader decision, failure pattern, comparison axis, or field observation.",
       "In aio_score_self_evaluation, explicitly judge concreteness, use of first-party information, source fidelity, and absence of AI-like generic phrasing.",
       "Respect payload.form.wordCount as the target Japanese character count. Natural variance is acceptable, but stay close to the requested scale.",
       "Respect payload.form.imageCount when creating image_prompts. Return zero image_prompts when imageCount is 0, otherwise return exactly that many prompts up to 3.",
@@ -76,12 +82,23 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
         : undefined,
     themeText:
       typeof compactPayload.form.theme === "string" ? compactPayload.form.theme : undefined,
+    targetReaderText: result.target_reader,
+    searchIntentText: result.search_intent,
     referenceTexts: collectReferenceTexts(compactPayload.form, compactPayload.fetchedReferences),
+    sourceUrls: collectSourceUrls(
+      compactPayload.form,
+      compactPayload.fetchedReferences,
+      compactPayload.fetchedCompetitors,
+      compactPayload.competitorResearch,
+      result.sources,
+    ),
     competitorTexts: collectCompetitorTexts(
       compactPayload.form,
       compactPayload.fetchedCompetitors,
       compactPayload.competitorResearch,
     ),
+    targetWordCount:
+      typeof compactPayload.form.wordCount === "number" ? compactPayload.form.wordCount : undefined,
   });
   const titleEvaluation = evaluateTitleQuality({
     selectedTitle: result.selected_title,
@@ -257,6 +274,9 @@ function normalizeImagePrompts(result: ArticleGenerationResult, form: Record<str
       purpose,
       prompt: buildPremiumImagePrompt({
         basePrompt,
+        articleSummary: result.article_summary,
+        headings: result.headings.map((heading) => heading.text),
+        keyTakeaways: result.key_takeaways,
         purpose,
         selectedTitle: result.selected_title,
         slot,
@@ -286,12 +306,18 @@ function getVisualToneText(form: Record<string, unknown>) {
 
 function buildPremiumImagePrompt({
   basePrompt,
+  articleSummary,
+  headings,
+  keyTakeaways,
   purpose,
   selectedTitle,
   slot,
   visualTone,
 }: {
   basePrompt: string;
+  articleSummary: string;
+  headings: string[];
+  keyTakeaways: string[];
   purpose: string;
   selectedTitle: string;
   slot: "featured" | "inline-1" | "inline-2";
@@ -308,12 +334,21 @@ function buildPremiumImagePrompt({
     `Article title: ${selectedTitle}`,
     `Image purpose: ${purpose}`,
     `Requested visual tone: ${visualTone}`,
+    `Article summary anchor: ${truncatePromptLine(articleSummary, 220)}`,
+    `Key takeaways to visualize: ${keyTakeaways.slice(0, 3).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
+    `Relevant headings: ${headings.slice(0, 4).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
     slotBrief,
     "Style direction: premium Japanese B2B SaaS / consulting / financial whitepaper, clean editorial art direction, refined composition, crisp geometry, subtle depth, high-end corporate polish.",
     "Composition: 3:2 landscape, generous whitespace, one clear focal idea, balanced margins, light background, restrained accent colors, scalable at thumbnail size.",
-    "Content: use abstract dashboards, process cards, geometric diagrams, data-flow shapes, or symbolic business/AI elements as appropriate.",
+    "Content: turn the article-specific anchors above into an original diagram-like editorial visual, not a generic AI/business background.",
+    "Use abstract dashboards, process cards, geometric diagrams, data-flow shapes, source/checklist cards, or symbolic business/AI elements as appropriate.",
     "Avoid: readable text, random letters, logos, watermarks, fake brand marks, cluttered dashboards, distorted hands, unnecessary people, clip-art, cheap stock-photo look, dark blurry neon backgrounds.",
   ].join("\n");
+}
+
+function truncatePromptLine(value: string, maxLength: number) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
 }
 
 function normalizeImageCount(value: unknown) {
@@ -334,6 +369,23 @@ function collectReferenceTexts(
     ...fetchedReferences.map(readTextField),
     ...readTextFieldList(form.references),
     ...readTextFieldList(form.referenceFiles),
+  ]);
+}
+
+function collectSourceUrls(
+  form: Record<string, unknown>,
+  fetchedReferences: Array<Record<string, unknown>>,
+  fetchedCompetitors: Array<Record<string, unknown>>,
+  competitorResearch: unknown,
+  sources: Array<{ url?: string }>,
+) {
+  return uniqueItems([
+    ...fetchedReferences.map(readUrlField),
+    ...readUrlFieldList(form.references),
+    ...fetchedCompetitors.map(readUrlField),
+    ...readUrlFieldList(form.competitors),
+    ...readCompetitorResearchUrls(competitorResearch),
+    ...sources.map((source) => source.url ?? ""),
   ]);
 }
 
@@ -363,6 +415,15 @@ function readCompetitorResearchTexts(value: unknown): string[] {
   ];
 }
 
+function readCompetitorResearchUrls(value: unknown): string[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const insights = Array.isArray(value.insights) ? value.insights : [];
+  return insights.map((insight) => (isRecord(insight) && typeof insight.url === "string" ? insight.url : ""));
+}
+
 function readCompetitorInsightTexts(value: unknown): string[] {
   if (!isRecord(value)) {
     return [];
@@ -388,8 +449,20 @@ function readTextFieldList(value: unknown) {
   return value.map(readTextField);
 }
 
+function readUrlFieldList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map(readUrlField);
+}
+
 function readTextField(value: unknown) {
   return isRecord(value) && typeof value.text === "string" ? value.text : "";
+}
+
+function readUrlField(value: unknown) {
+  return isRecord(value) && typeof value.url === "string" ? value.url : "";
 }
 
 function uniqueItems(items: string[]) {

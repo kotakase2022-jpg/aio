@@ -229,12 +229,35 @@ function ensurePdfJsDomMatrix() {
 }
 
 function decodeText(buffer: Buffer) {
-  return buffer.toString("utf8").replace(/^\uFEFF/, "");
+  const utf8Text = stripUtf8Bom(buffer.toString("utf8"));
+
+  if (!shouldTryShiftJisFallback(utf8Text)) {
+    return utf8Text;
+  }
+
+  const shiftJisText = decodeShiftJis(buffer);
+
+  if (!shiftJisText) {
+    return utf8Text;
+  }
+
+  return textDecodeScore(shiftJisText) > textDecodeScore(utf8Text) ? shiftJisText : utf8Text;
 }
 
 function extractHtmlText(html: string) {
   const $ = cheerio.load(html);
   $("script, style, noscript, svg, nav, footer, header, form, aside").remove();
+  $("[hidden], [aria-hidden='true']").remove();
+  $("[class], [id], [role]").each((_, element) => {
+    const marker = [$(element).attr("id"), $(element).attr("class"), $(element).attr("role")]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    if (isHtmlNoiseMarker(marker)) {
+      $(element).remove();
+    }
+  });
   const title = cleanText($("title").first().text());
   const description = cleanText(
     $("meta[name='description']").attr("content") ??
@@ -243,6 +266,95 @@ function extractHtmlText(html: string) {
   );
   const body = cleanText($("article").text() || $("main").text() || $("body").text());
   return [title, description, body].filter(Boolean).join("\n\n");
+}
+
+function stripUtf8Bom(value: string) {
+  return value.replace(/^\uFEFF/, "");
+}
+
+function shouldTryShiftJisFallback(value: string) {
+  return replacementCharacterCount(value) >= 2;
+}
+
+function replacementCharacterCount(value: string) {
+  return (value.match(/\uFFFD/g) ?? []).length;
+}
+
+function decodeShiftJis(buffer: Buffer) {
+  try {
+    return new TextDecoder("shift_jis").decode(buffer);
+  } catch {
+    return "";
+  }
+}
+
+function textDecodeScore(value: string) {
+  const sample = value.slice(0, 4000);
+  const replacementPenalty = (sample.match(/\uFFFD/g) ?? []).length * 8;
+  const readableCount = Array.from(sample).filter((char) =>
+    /[\p{L}\p{N}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\s.,;:!?()[\]{}'"。「」、・ー\-]/u.test(
+      char,
+    ),
+  ).length;
+
+  return readableCount - replacementPenalty;
+}
+
+function isHtmlNoiseMarker(marker: string) {
+  const tokens = marker.split(/[^a-z0-9]+/).filter(Boolean);
+  const tokenSet = new Set(tokens);
+  const exactNoiseTokens = new Set([
+    "cookie",
+    "consent",
+    "breadcrumb",
+    "breadcrumbs",
+    "pagination",
+    "newsletter",
+    "popup",
+    "modal",
+    "advert",
+    "advertisement",
+    "ads",
+  ]);
+
+  if (tokens.some((token) => exactNoiseTokens.has(token))) {
+    return true;
+  }
+
+  const hasShareToken = tokens.some((token) => ["share", "shares", "sharing"].includes(token));
+  const hasSocialWidget =
+    tokenSet.has("social") &&
+    tokens.some((token) =>
+      ["button", "buttons", "link", "links", "widget", "widgets", "share", "sharing"].includes(
+        token,
+      ),
+    );
+  const hasAdBanner =
+    (tokenSet.has("ad") || tokenSet.has("ads")) &&
+    (tokenSet.has("banner") || tokenSet.has("banners"));
+  const hasSubscribeWidget =
+    (tokenSet.has("subscribe") || tokenSet.has("subscription")) &&
+    tokens.some((token) =>
+      [
+        "banner",
+        "banners",
+        "box",
+        "boxes",
+        "button",
+        "buttons",
+        "cta",
+        "email",
+        "form",
+        "forms",
+        "mail",
+        "modal",
+        "popup",
+        "widget",
+        "widgets",
+      ].includes(token),
+    );
+
+  return hasShareToken || hasSocialWidget || hasAdBanner || hasSubscribeWidget;
 }
 
 function extractPdfTextFallback(buffer: Buffer) {
@@ -433,11 +545,16 @@ function stripXmlTags(value: string) {
 
 function decodeXmlEntities(value: string) {
   return value
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&");
+    .replace(/&(?:lt|#0*60|#x0*3c);/gi, "<")
+    .replace(/&(?:gt|#0*62|#x0*3e);/gi, ">")
+    .replace(/&(?:quot|#0*34|#x0*22);/gi, '"')
+    .replace(/&(?:apos|#0*39|#x0*27);/gi, "'")
+    .replace(/&(?:nbsp|#0*160|#x0*a0);/gi, " ")
+    .replace(/&(?:ldquo|rdquo|#0*8220|#0*8221|#x0*201c|#x0*201d);/gi, '"')
+    .replace(/&(?:lsquo|rsquo|#0*8216|#0*8217|#x0*2018|#x0*2019);/gi, "'")
+    .replace(/&(?:ndash|#0*8211|#x0*2013);/gi, "-")
+    .replace(/&(?:mdash|#0*8212|#x0*2014);/gi, "-")
+    .replace(/&(?:amp|#0*38|#x0*26);/gi, "&");
 }
 
 function cleanText(value: string) {

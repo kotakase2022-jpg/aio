@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { createSampleDraft } from "../fixtures/article";
+import { createSampleDraft, transparentPixelDataUrl } from "../fixtures/article";
 
 vi.mock("@/lib/server/supabase", () => ({
   getSupabaseAdmin: vi.fn(),
@@ -48,7 +48,7 @@ describe("draft persistence with Supabase", () => {
         id: "draft-supabase-save",
         input_payload: draft.inputPayload,
         edited_title: draft.editedTitle,
-        generated_image_urls: ["https://example.com/featured.png"],
+        generated_image_urls: [transparentPixelDataUrl],
         status: "draft",
       }),
     );
@@ -57,7 +57,7 @@ describe("draft persistence with Supabase", () => {
       expect.objectContaining({
         draft_id: "draft-supabase-save",
         slot: "featured",
-        image_url: "https://example.com/featured.png",
+        image_url: transparentPixelDataUrl,
         storage_path: "generated/featured.png",
         source: "generated",
       }),

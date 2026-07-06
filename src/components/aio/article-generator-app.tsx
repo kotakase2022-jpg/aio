@@ -41,6 +41,7 @@ import {
 import { formatJaDateTime } from "@/lib/date";
 import { buildDraftArticleHtml } from "@/lib/draft-html";
 import { evaluateFaqQuality } from "@/lib/faq-quality";
+import { qualityRegenerationAction } from "@/lib/quality-regeneration-action";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import { cn, joinCsv, splitCsv } from "@/lib/utils";
 import type {
@@ -127,7 +128,7 @@ export function ArticleGeneratorApp() {
   const [themeCandidates, setThemeCandidates] = useState<ThemeCandidateResult | null>(null);
   const [themeCandidateError, setThemeCandidateError] = useState("");
   const [themeCandidateApplyMessage, setThemeCandidateApplyMessage] = useState("");
-  const [themeCandidateAppliedTitle, setThemeCandidateAppliedTitle] = useState("");
+  const [themeCandidateAppliedIndex, setThemeCandidateAppliedIndex] = useState<number | null>(null);
   const [referenceFileUploading, setReferenceFileUploading] = useState(false);
   const [competitorFileUploading, setCompetitorFileUploading] = useState(false);
   const [steps, setSteps] = useState<GenerationStep[]>(generationSteps);
@@ -344,7 +345,7 @@ export function ArticleGeneratorApp() {
     setThemeCandidateLoading(true);
     setThemeCandidateError("");
     setThemeCandidateApplyMessage("");
-    setThemeCandidateAppliedTitle("");
+    setThemeCandidateAppliedIndex(null);
     setActiveError("");
     try {
       const editableResearch = parseCompetitorResearch();
@@ -631,8 +632,9 @@ export function ArticleGeneratorApp() {
     setFetchedReferences(job.fetchedReferences ?? []);
     setFetchedCompetitors(job.fetchedCompetitors ?? []);
 
-    if (job.draft) {
-      setDraft(job.draft);
+    const hydratedDraft = hydrateDraftFromGenerationJob(job);
+    if (hydratedDraft) {
+      setDraft(hydratedDraft);
     }
   }
 
@@ -661,8 +663,7 @@ export function ArticleGeneratorApp() {
     try {
       const result = await apiGet<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}`);
       applyGenerationJob(result.job);
-      if (result.job.draft) {
-        setDraft(result.job.draft);
+      if (hydrateDraftFromGenerationJob(result.job)) {
         setTab("preview");
       }
     } catch (error) {
@@ -880,7 +881,7 @@ export function ArticleGeneratorApp() {
     setFileState((current) => current.filter((file) => file.id !== id));
   }
 
-  function applyThemeCandidate(candidate: ThemeCandidate) {
+  function applyThemeCandidate(candidate: ThemeCandidate, index: number) {
     setTheme(
       [
         `テーマ: ${candidate.title}`,
@@ -891,13 +892,13 @@ export function ArticleGeneratorApp() {
       ].join("\n"),
     );
     setThemeCandidateApplyMessage("反映しました。");
-    setThemeCandidateAppliedTitle(candidate.title);
+    setThemeCandidateAppliedIndex(index);
     if (themeCandidateApplyTimerRef.current) {
       window.clearTimeout(themeCandidateApplyTimerRef.current);
     }
     themeCandidateApplyTimerRef.current = window.setTimeout(() => {
       setThemeCandidateApplyMessage("");
-      setThemeCandidateAppliedTitle("");
+      setThemeCandidateAppliedIndex(null);
       themeCandidateApplyTimerRef.current = null;
     }, 2200);
   }
@@ -956,7 +957,7 @@ export function ArticleGeneratorApp() {
     if (!draft) return;
 
     const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-      prompt: buildImageRegenerationPrompt(image.prompt, instruction.trim()),
+      prompt: buildImageRegenerationPrompt(image.prompt, instruction.trim(), draft.aiResult),
       slot: image.slot,
       altText: image.altText,
     });
@@ -1018,7 +1019,7 @@ export function ArticleGeneratorApp() {
 
       for (const image of generatedImages) {
         const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-          prompt: buildImageRegenerationPrompt(image.prompt, rewriteInstruction),
+          prompt: buildImageRegenerationPrompt(image.prompt, rewriteInstruction, draft.aiResult),
           slot: image.slot,
           altText: image.altText,
         });
@@ -1250,7 +1251,7 @@ export function ArticleGeneratorApp() {
     const toneText = visualTone.mode === "custom" ? visualTone.custom : visualTone.preset;
     const prompts = article.image_prompts.slice(0, imageCount).map((prompt) => ({
       ...prompt,
-      prompt: buildArticleImagePrompt(prompt.prompt, toneText),
+      prompt: buildArticleImagePrompt(prompt.prompt, toneText, article),
     }));
 
     return Promise.all(
@@ -1314,28 +1315,40 @@ export function ArticleGeneratorApp() {
             <CardContent className="p-4">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 {[
-                  ["参照", "#references"],
-                  ["競合", "#competitors"],
-                  ["テーマ", "#theme"],
-                  ["一次情報", "#primary-info"],
-                  ["画像", "#visual-tone"],
-                  ["文字数", "#word-count"],
-                  ["承認", "#approval"],
-                  ["WordPress", "#wordpress"],
-                ].map(([label, href]) => (
-                  <a
-                    key={href}
-                    href={href}
-                    className="rounded-md border border-slate-200 px-3 py-2 text-center text-slate-700 transition hover:border-sky-200 hover:bg-sky-50"
-                  >
-                    {label}
-                  </a>
-                ))}
+                  { label: "参照", href: "#references" },
+                  { label: "競合", href: "#competitors" },
+                  { label: "テーマ", href: "#theme" },
+                  { label: "一次情報", href: "#primary-info" },
+                  { label: "画像", href: "#visual-tone" },
+                  { label: "文字数", href: "#word-count" },
+                  { label: "承認", href: "#approval", requiresDraft: true },
+                  { label: "WordPress", href: "#wordpress", requiresDraft: true },
+                ].map(({ label, href, requiresDraft }) =>
+                  requiresDraft && !draft ? (
+                    <span
+                      key={href}
+                      aria-disabled="true"
+                      data-testid={`step-nav-disabled-${href.slice(1)}`}
+                      title="記事生成後に利用できます。"
+                      className="cursor-not-allowed rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-center text-slate-400"
+                    >
+                      {label}
+                    </span>
+                  ) : (
+                    <a
+                      key={href}
+                      href={href}
+                      className="rounded-md border border-slate-200 px-3 py-2 text-center text-slate-700 transition hover:border-sky-200 hover:bg-sky-50"
+                    >
+                      {label}
+                    </a>
+                  ),
+                )}
               </div>
             </CardContent>
           </Card>
 
-          <Card id="references" className="scroll-mt-[280px]">
+          <Card id="references" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1365,7 +1378,7 @@ export function ArticleGeneratorApp() {
             </CardContent>
           </Card>
 
-          <Card id="competitors" className="scroll-mt-[280px]">
+          <Card id="competitors" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1451,7 +1464,7 @@ export function ArticleGeneratorApp() {
             </CardContent>
           </Card>
 
-          <Card id="theme" className="scroll-mt-[280px]">
+          <Card id="theme" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1502,7 +1515,7 @@ export function ArticleGeneratorApp() {
                   <ThemeCandidateList
                     result={themeCandidates}
                     onApply={applyThemeCandidate}
-                    appliedTitle={themeCandidateAppliedTitle}
+                    appliedIndex={themeCandidateAppliedIndex}
                     applyMessage={themeCandidateApplyMessage}
                   />
                 ) : null}
@@ -1587,7 +1600,7 @@ export function ArticleGeneratorApp() {
             </CardContent>
           </Card>
 
-          <Card id="primary-info" className="scroll-mt-[280px]">
+          <Card id="primary-info" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1610,7 +1623,7 @@ export function ArticleGeneratorApp() {
             </CardContent>
           </Card>
 
-          <Card id="visual-tone" className="scroll-mt-[280px]">
+          <Card id="visual-tone" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1718,7 +1731,7 @@ export function ArticleGeneratorApp() {
             </CardContent>
           </Card>
 
-          <Card id="word-count" className="scroll-mt-[280px]">
+          <Card id="word-count" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1749,7 +1762,10 @@ export function ArticleGeneratorApp() {
 
         <section className="space-y-4">
           {activeError ? (
-            <div className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <div
+              data-testid="active-error"
+              className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"
+            >
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
               <div>{activeError}</div>
             </div>
@@ -1855,7 +1871,7 @@ export function ArticleGeneratorApp() {
                 </CardContent>
               </Card>
 
-              <Card id="approval" className="scroll-mt-[280px]">
+              <Card id="approval" className="scroll-mt-[360px]">
                 <CardHeader>
                   <CardTitle>保存・承認</CardTitle>
                 </CardHeader>
@@ -1906,7 +1922,7 @@ export function ArticleGeneratorApp() {
                 </CardContent>
               </Card>
 
-              <Card id="wordpress" className="scroll-mt-[280px]">
+              <Card id="wordpress" className="scroll-mt-[360px]">
                 <CardHeader>
                   <CardTitle>WordPress投稿</CardTitle>
                   <CardDescription>
@@ -2229,12 +2245,12 @@ function AttachmentUploadPanel({
 function ThemeCandidateList({
   result,
   onApply,
-  appliedTitle,
+  appliedIndex,
   applyMessage,
 }: {
   result: ThemeCandidateResult;
-  onApply: (candidate: ThemeCandidate) => void;
-  appliedTitle: string;
+  onApply: (candidate: ThemeCandidate, index: number) => void;
+  appliedIndex: number | null;
   applyMessage: string;
 }) {
   return (
@@ -2242,7 +2258,11 @@ function ThemeCandidateList({
       <p className="text-xs leading-5 text-sky-900">{result.summary}</p>
       <div className="space-y-2">
         {result.candidates.map((candidate, index) => (
-          <div key={candidate.title} className="rounded-md border border-sky-100 bg-white p-3">
+          <div
+            key={`${candidate.title}-${index}`}
+            data-testid={`theme-candidate-card-${index}`}
+            className="rounded-md border border-sky-100 bg-white p-3"
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-medium text-slate-900">{candidate.title}</div>
@@ -2262,11 +2282,11 @@ function ThemeCandidateList({
                   data-testid={`theme-candidate-apply-${index}`}
                   type="button"
                   size="sm"
-                  onClick={() => onApply(candidate)}
+                  onClick={() => onApply(candidate, index)}
                 >
                 反映
                 </Button>
-                {appliedTitle === candidate.title && applyMessage ? (
+                {appliedIndex === index && applyMessage ? (
                   <div
                     className="absolute right-0 top-full z-20 mt-2 whitespace-nowrap rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 shadow-lg"
                     aria-live="polite"
@@ -2504,10 +2524,14 @@ function ArticlePreview({
     () =>
       evaluateArticleQuality(renderArticleHtml(draft), {
         themeText: draft.inputPayload.theme,
+        targetReaderText: draft.aiResult.target_reader,
+        searchIntentText: draft.aiResult.search_intent,
         primaryInfo: draft.inputPayload.primaryInfo,
         closingText: draft.inputPayload.closingText,
         referenceTexts: collectDraftReferenceTexts(draft),
+        sourceUrls: collectDraftSourceUrls(draft),
         competitorTexts: collectDraftCompetitorTexts(draft),
+        targetWordCount: draft.inputPayload.wordCount,
       }),
     [draft],
   );
@@ -2553,7 +2577,10 @@ function ArticlePreview({
     () => [...failedQualityChecks, ...passedQualityChecks],
     [failedQualityChecks, passedQualityChecks],
   );
-  const [copyStatus, setCopyStatus] = useState("");
+  const [copyStatus, setCopyStatus] = useState<{
+    message: string;
+    tone: "success" | "error";
+  } | null>(null);
   const copyStatusTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -2564,13 +2591,13 @@ function ArticlePreview({
     };
   }, []);
 
-  function showCopyStatus(message: string) {
-    setCopyStatus(message);
+  function showCopyStatus(message: string, tone: "success" | "error" = "success") {
+    setCopyStatus({ message, tone });
     if (copyStatusTimerRef.current) {
       window.clearTimeout(copyStatusTimerRef.current);
     }
     copyStatusTimerRef.current = window.setTimeout(() => {
-      setCopyStatus("");
+      setCopyStatus(null);
     }, 2600);
   }
 
@@ -2579,13 +2606,20 @@ function ArticlePreview({
       await copyTextToClipboard(value);
       showCopyStatus(`${label}をコピーしました。`);
     } catch {
-      showCopyStatus("コピーできませんでした。本文HTML欄から手動でコピーしてください。");
+      showCopyStatus(`${label}をコピーできませんでした。${copyManualRecoveryText(label)}`, "error");
     }
   }
 
   function handleDownload() {
-    downloadArticleHtml(draft);
-    showCopyStatus("HTMLファイルを書き出しました。");
+    try {
+      downloadArticleHtml(draft);
+      showCopyStatus("HTMLファイルを書き出しました。");
+    } catch {
+      showCopyStatus(
+        "HTML出力に失敗しました。本文HTMLをコピーして手動で保存してください。",
+        "error",
+      );
+    }
   }
 
   return (
@@ -2653,11 +2687,21 @@ function ArticlePreview({
           {copyStatus ? (
             <div
               data-testid="copy-export-status"
-              className="mt-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700"
+              data-status={copyStatus.tone}
+              className={cn(
+                "mt-3 flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium",
+                copyStatus.tone === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-rose-200 bg-rose-50 text-rose-700",
+              )}
               aria-live="polite"
             >
-              <Check className="size-4" />
-              {copyStatus}
+              {copyStatus.tone === "success" ? (
+                <Check className="size-4" />
+              ) : (
+                <AlertCircle className="size-4" />
+              )}
+              {copyStatus.message}
             </div>
           ) : null}
         </InfoPanel>
@@ -3258,27 +3302,49 @@ function imageFigure(image: ArticleImage) {
   )}" /><figcaption>${escapeHtml(image.altText)}</figcaption></figure>`;
 }
 
-function buildImageRegenerationPrompt(basePrompt: string, instruction: string) {
+function buildImageRegenerationPrompt(
+  basePrompt: string,
+  instruction: string,
+  article: Pick<ArticleGenerationResult, "article_summary" | "headings" | "key_takeaways">,
+) {
   return [
     basePrompt,
+    "",
+    `Article summary anchor: ${truncatePromptLine(article.article_summary, 220)}`,
+    `Key takeaways to preserve: ${article.key_takeaways.slice(0, 3).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
+    `Relevant headings: ${article.headings.slice(0, 4).map((heading) => truncatePromptLine(heading.text, 80)).join(" / ")}`,
     "",
     instruction ? "Regeneration direction from the user:" : "Regeneration direction from the user: improve the image quality while preserving the article intent.",
     instruction || "Make it more polished, premium, coherent, and suitable for a Japanese B2B article.",
     "",
     "Quality bar: premium Japanese B2B SaaS / consulting / financial whitepaper visual, crisp layout, coherent perspective, refined lighting, generous whitespace, high-end corporate polish.",
+    "Keep the regenerated image article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
     "Avoid readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, distorted hands, unnecessary people, clip-art, cheap stock-photo look, and dark blurry AI-art backgrounds.",
   ].join("\n");
 }
 
-function buildArticleImagePrompt(basePrompt: string, toneText?: string) {
+function buildArticleImagePrompt(
+  basePrompt: string,
+  toneText: string | undefined,
+  article: Pick<ArticleGenerationResult, "article_summary" | "headings" | "key_takeaways">,
+) {
   return [
     basePrompt,
     "",
     `Visual tone from user: ${toneText || "clean Japanese B2B whitepaper editorial style"}`,
+    `Article summary anchor: ${truncatePromptLine(article.article_summary, 220)}`,
+    `Key takeaways to visualize: ${article.key_takeaways.slice(0, 3).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
+    `Relevant headings: ${article.headings.slice(0, 4).map((heading) => truncatePromptLine(heading.text, 80)).join(" / ")}`,
     "Create a premium 3:2 landscape editorial visual for a Japanese B2B article.",
     "Use a refined whitepaper/SaaS/consulting composition with clean geometry, subtle depth, balanced margins, and a clear focal concept.",
+    "Make the visual article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
     "Avoid text-heavy layouts, readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, unnecessary people, and cheap stock-photo aesthetics.",
   ].join("\n");
+}
+
+function truncatePromptLine(value: string, maxLength: number) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
 }
 
 function imageSrcForHtml(image: ArticleImage) {
@@ -3293,6 +3359,22 @@ function renderArticleHtml(draft: ArticleDraft) {
   return buildDraftArticleHtml(draft);
 }
 
+function hydrateDraftFromGenerationJob(job: GenerationJob) {
+  if (!job.draft) {
+    return null;
+  }
+
+  if (!job.wordpressPostUrl && !job.wordpressPostStatus) {
+    return job.draft;
+  }
+
+  return {
+    ...job.draft,
+    status: "posted" as const,
+    wordpressPostUrl: job.wordpressPostUrl || job.draft.wordpressPostUrl,
+  };
+}
+
 function collectDraftReferenceTexts(draft: ArticleDraft) {
   return Array.from(
     new Set([
@@ -3301,6 +3383,19 @@ function collectDraftReferenceTexts(draft: ArticleDraft) {
       ...(draft.inputPayload.referenceFiles ?? []).map((item) => item.text ?? ""),
     ]),
   ).filter((text) => text.trim());
+}
+
+function collectDraftSourceUrls(draft: ArticleDraft) {
+  return Array.from(
+    new Set([
+      ...draft.fetchedReferences.map((item) => item.url),
+      ...draft.inputPayload.references.map((item) => item.url ?? ""),
+      ...draft.fetchedCompetitors.map((item) => item.url),
+      ...draft.inputPayload.competitors.map((item) => item.url ?? ""),
+      ...(draft.competitorResearch?.insights ?? []).map((item) => item.url),
+      ...draft.aiResult.sources.map((item) => item.url),
+    ]),
+  ).filter((url) => url.trim());
 }
 
 function collectDraftCompetitorTexts(draft: ArticleDraft) {
@@ -3329,7 +3424,12 @@ function collectCompetitorResearchTexts(research: NonNullable<ArticleDraft["comp
 function buildQualityRegenerationInstruction(evaluation: ArticleQualityEvaluation) {
   const improvements = evaluation.checks
     .filter((check) => !check.passed)
-    .map((check) => `- ${check.label}: ${check.detail}`);
+    .map((check) => {
+      const action = qualityRegenerationAction(check.id);
+      return `- ${check.label}: ${check.detail}${
+        action ? `\n  修正方針: ${action}` : ""
+      }`;
+    });
 
   return [
     "編集品質チェックの結果を踏まえて、記事全体を再作成してください。",
@@ -3383,7 +3483,7 @@ function draftEditorTargetTestId(checkId: string) {
   return "draft-body-html-textarea";
 }
 
-function qualityCheckEditGuidance(checkId: string) {
+export function qualityCheckEditGuidance(checkId: string) {
   if (checkId.startsWith("title-")) {
     return "修正先: タイトル。テーマ、一次情報、読者の判断軸が伝わる表現にします。";
   }
@@ -3408,6 +3508,14 @@ function qualityCheckEditGuidance(checkId: string) {
     return "修正先: 本文HTML。参照元の事実は保ち、定義、条件、注意点、出典注記として再構成します。";
   }
 
+  if (checkId === "target-reader-reflection") {
+    return "修正先: 本文HTML。想定読者の課題、立場、判断基準が分かる表現を冒頭、見出し、具体例、FAQに戻します。";
+  }
+
+  if (checkId === "search-intent-reflection") {
+    return "修正先: 本文HTML。検索意図に含まれる疑問、比較軸、次の行動を結論、本文、FAQで明確に答えます。";
+  }
+
   if (checkId === "competitor-insight-digestion") {
     return "修正先: 本文HTML。競合文を写さず、比較軸、不足論点、差別化ポイントへ再構成します。";
   }
@@ -3418,6 +3526,106 @@ function qualityCheckEditGuidance(checkId: string) {
 
   if (checkId.includes("competitor")) {
     return "修正先: 本文HTML。競合情報を比較軸、不足論点、差別化ポイントとして整理します。";
+  }
+
+  if (checkId === "target-length-alignment") {
+    return "修正先: 本文HTML。指定文字数に合わせて、具体例、判断基準、注意点、不要な重複表現を増減します。";
+  }
+
+  if (checkId === "answer-first") {
+    return "修正先: 本文HTML。冒頭420字以内に、結論、定義、読者が最初に判断すべきことを先に置きます。";
+  }
+
+  if (checkId === "definition") {
+    return "修正先: 本文HTML。冒頭付近に「〇〇とは...」型の短い定義文を追加し、AIが引用しやすい一文にします。";
+  }
+
+  if (checkId === "editorial-headings") {
+    return "修正先: 本文HTML。「重要なポイント」「メリット」「まとめ」型の見出しを、判断軸、失敗例、比較観点が伝わる表現に変えます。";
+  }
+
+  if (checkId === "section-specificity") {
+    return "修正先: 本文HTML。薄いH2/H3に、数字、現場例、判断基準、失敗例、費用、期間、出典のうち2つ以上を足します。";
+  }
+
+  if (checkId === "concrete-detail") {
+    return "修正先: 本文HTML。抽象説明だけで終わらせず、数字、現場例、判断基準、失敗例を少なくとも2種類追加します。";
+  }
+
+  if (checkId === "editorial-evidence") {
+    return "修正先: 本文HTML。現場例、判断基準、注意点、体制、費用感、参照元の扱いを複数入れ、編集者が確認した記事に近づけます。";
+  }
+
+  if (checkId === "structured-elements") {
+    return "修正先: 本文HTML。読者が比較・確認しやすいように、箇条書きとFAQの両方を本文内に追加します。";
+  }
+
+  if (checkId === "unsupported-claims") {
+    return "修正先: 本文HTML。『必ず』『圧倒的』『最適』などの強い断定を、出典、条件、対象範囲、確認時点つきの表現に直します。";
+  }
+
+  if (checkId === "source-awareness") {
+    return "修正先: 本文HTML。参照元で確認できる事実と未確認の解釈を分け、出典URLや確認条件を読者が追える形で残します。";
+  }
+
+  if (checkId === "theme-keyword-reflection") {
+    return "修正先: 本文HTML。入力テーマ・キーワードの固有語彙を、タイトル、冒頭、見出し、FAQのいずれかに自然に戻します。";
+  }
+
+  if (checkId === "primary-info-reflection") {
+    return "修正先: 本文HTML。一次情報を、当社の経験、相談傾向、現場観察、支援時の判断基準として本文に戻します。";
+  }
+
+  if (checkId === "cta-reflection") {
+    return "修正先: 本文HTML。入力された結び文章/CTAの意図を、記事末尾の自然な次アクションとして反映します。";
+  }
+
+  if (checkId === "generic-opening-frame") {
+    return "修正先: 本文HTML。冒頭をテンプレ導入ではなく、結論、定義、現場観察、条件から書き出します。";
+  }
+
+  if (checkId === "generic-ending-frame") {
+    return "修正先: 本文HTML。末尾の定型句を削り、記事固有の判断基準、次に確認する情報、問い合わせ前の準備事項に置き換えます。";
+  }
+
+  if (checkId === "generic-phrases") {
+    return "修正先: 本文HTML。「近年」「重要です」「わかりやすく解説」などの汎用表現を削り、参照元の事実、一次情報、判断基準、現場例へ置き換えます。";
+  }
+
+  if (checkId === "verbose-ai-phrasing") {
+    return "修正先: 本文HTML。「することができます」型の冗長な述語を、「確認します」「分けます」「できます」など短く具体的な動詞に置き換えます。";
+  }
+
+  if (checkId === "numeric-claim-support") {
+    return "修正先: 本文HTML。数字の近くに出典、条件、時点、目安、現場観察を補います。";
+  }
+
+  if (checkId === "source-url-presence") {
+    return "修正先: 本文HTML。本文末尾または該当箇所に、読者が確認できる出典URLを残します。";
+  }
+
+  if (checkId === "heading-storyline") {
+    return "修正先: 本文HTML。まず/次に型の見出しを、判断、失敗、比較、現場差分が伝わる見出しへ変えます。";
+  }
+
+  if (checkId === "sentence-length") {
+    return "修正先: 本文HTML。長い一文を、結論、条件、例外、具体例に分けて短くします。";
+  }
+
+  if (checkId === "sentence-variety") {
+    return "修正先: 本文HTML。同じ語尾が続く段落を分け、断定、条件、例外、問い、短い具体例を混ぜて抑揚を出します。";
+  }
+
+  if (checkId === "connector-variety") {
+    return "修正先: 本文HTML。「また」「さらに」「そのため」の連続を減らし、接続語なしの短文、現場例、条件文で段落を始めます。";
+  }
+
+  if (checkId === "sentence-frame-variety") {
+    return "修正先: 本文HTML。「結論として」「具体的には」型の文頭を減らし、現場観察、比較、失敗例、例外から自然に書き出します。";
+  }
+
+  if (checkId === "comparison-table") {
+    return "修正先: 本文HTML。表に判断基準、比較軸、条件、費用、期間、担当、注意点を入れます。";
   }
 
   return "修正先: 本文HTML。一般論を減らし、具体例、判断基準、注意点、出典への意識を足します。";
@@ -3444,13 +3652,37 @@ async function copyTextToClipboard(value: string) {
   textarea.style.left = "-9999px";
   textarea.style.top = "0";
   document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  document.body.removeChild(textarea);
+  let copied = false;
+  try {
+    textarea.select();
+    copied = document.execCommand("copy");
+  } finally {
+    textarea.remove();
+  }
 
   if (!copied) {
     throw new Error("Clipboard copy failed.");
   }
+}
+
+function copyManualRecoveryText(label: string) {
+  if (label === "タイトル") {
+    return "タイトル欄から手動でコピーしてください。";
+  }
+
+  if (label === "メタ") {
+    return "メタディスクリプション欄から手動でコピーしてください。";
+  }
+
+  if (label === "本文HTML") {
+    return "本文HTML欄から手動でコピーしてください。";
+  }
+
+  if (label === "入稿セット") {
+    return "タイトル、メタ、本文HTML、タグ、カテゴリを各編集欄から手動でコピーしてください。";
+  }
+
+  return "該当する編集欄から手動でコピーしてください。";
 }
 
 function downloadArticleHtml(draft: ArticleDraft) {
@@ -3460,10 +3692,13 @@ function downloadArticleHtml(draft: ArticleDraft) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `${safeDownloadName(draft.editedSlug || draft.editedTitle || "aio-article")}.html`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  try {
+    document.body.appendChild(anchor);
+    anchor.click();
+  } finally {
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 }
 
 function buildExportArticleHtml(draft: ArticleDraft) {

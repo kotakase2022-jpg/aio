@@ -5,7 +5,7 @@ local `quality` command and the GitHub Actions `quality-gate` workflow pass.
 
 ## Mandatory Workflow
 
-All future feature work, bug fixes, and refactors by Codex, Cursor, or humans must follow this
+All future feature work, bug fixes, and refactors by Codex, Claude Code, Cursor, or humans must follow this
 workflow:
 
 1. Create a feature/fix branch from `main`.
@@ -13,10 +13,34 @@ workflow:
 3. Fill in `.github/pull_request_template.md`.
 4. Run `npm run quality` locally when practical.
 5. Wait for the GitHub Actions `quality-gate` workflow to pass.
-6. Merge only after the PR review and required checks pass.
+6. Wait for the standard CodeRabbit OSS PR review.
+7. Merge only after the PR review and required checks pass.
 
 No change is considered done if it bypasses the quality gate, even when the code appears to work
 manually.
+
+## Automated PR Review
+
+CodeRabbit OSS is the standard automated PR reviewer for this public repository. Cursor Bugbot has
+been demoted to optional backup review to control costs.
+
+Required operating rules:
+
+- CodeRabbit is installed for `https://github.com/kotakase2022-jpg/aio` as part of the selected-repository GitHub App installation.
+- CodeRabbit repository configuration is versioned in `.coderabbit.yaml`.
+- Every PR should receive a CodeRabbit review before merge unless CodeRabbit is temporarily unavailable.
+- Security, auth, data integrity, runtime, external integration, and test findings from CodeRabbit are high priority.
+- Cursor Bugbot is optional/backup only. Run it only when CodeRabbit is unavailable, a second opinion is materially useful, or the user explicitly asks for it.
+- If Cursor Bugbot is used, record why it was used and how findings were handled in `AI_HANDOFF.md` or the PR.
+- CodeRabbit and Bugbot findings do not replace `npm run quality` or the GitHub Actions `quality-gate`.
+
+Manual setup checklist for maintainers:
+
+1. Confirm the repository is public so it qualifies for CodeRabbit OSS.
+2. Confirm CodeRabbit still includes `kotakase2022-jpg/aio` under the selected repositories in GitHub App settings.
+3. Confirm `.coderabbit.yaml` is detected on the next PR.
+4. Open a small test PR and confirm CodeRabbit posts a walkthrough/review.
+5. Update branch protection/status-check policy only if CodeRabbit exposes a stable status check in this repository. Keep `quality-gate` as the mandatory merge check.
 
 ## Local Commands
 

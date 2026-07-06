@@ -93,9 +93,49 @@ function isGenericTitle(title: string) {
     "basics",
     "completeguide",
     "ultimateguide",
+    "bestpractices",
+    "strategy",
+    "checklist",
+    "tips",
   ];
 
   if (genericTitles.includes(normalized)) {
+    return true;
+  }
+
+  const genericSuffixTitles = [
+    "完全ガイド",
+    "徹底解説",
+    "導入方法",
+    "選び方",
+    "活用方法",
+    "注意点",
+    "メリット",
+    "デメリット",
+    "まとめ",
+    "概要",
+    "基本",
+    "completeguide",
+    "ultimateguide",
+    "benefits",
+    "basics",
+    "overview",
+    "summary",
+    "bestpractices",
+    "strategy",
+    "checklist",
+    "tips",
+  ];
+  if (
+    genericSuffixTitles.some((suffix) => {
+      if (!normalized.endsWith(suffix)) {
+        return false;
+      }
+
+      const prefix = normalized.slice(0, -suffix.length);
+      return prefix.length > 0 && prefix.length <= 12;
+    })
+  ) {
     return true;
   }
 

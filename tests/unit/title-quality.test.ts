@@ -38,4 +38,67 @@ describe("evaluateTitleQuality", () => {
     expect(result.improvements.join(" ")).toContain("タイトルが汎用的です");
     expect(result.improvements.join(" ")).toContain("入力テーマ/一次情報の固有語彙");
   });
+
+  test("flags short topic plus generic SEO title suffixes", () => {
+    const result = evaluateTitleQuality({
+      selectedTitle: "AIO Complete Guide",
+      titleCandidates: ["AIO Complete Guide", "AIO Ultimate Guide", "AIO Basics"],
+      themeText: "AIO workflow for editorial review and AI search optimization",
+      primaryInfo:
+        "Our support team sees one-person contractors using LINE for approvals while forms are often missing.",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-specificity", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-candidate-count", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-input-signal", passed: true }),
+    );
+    expect(result.score).toBeLessThan(90);
+  });
+
+  test("flags short topic plus generic English BtoB title suffixes", () => {
+    const result = evaluateTitleQuality({
+      selectedTitle: "AIO Best Practices",
+      titleCandidates: ["AIO Best Practices", "AIO Strategy", "AIO Checklist"],
+      themeText: "AIO workflow for editorial review and AI search optimization",
+      primaryInfo:
+        "Our support team sees one-person contractors using LINE for approvals while forms are often missing.",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-specificity", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-candidate-count", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-input-signal", passed: true }),
+    );
+    expect(result.score).toBeLessThan(90);
+  });
+
+  test("flags short Japanese topic plus generic SEO title suffixes", () => {
+    const result = evaluateTitleQuality({
+      selectedTitle: "AIO完全ガイド",
+      titleCandidates: ["AIO完全ガイド", "AIO徹底解説", "AIO導入方法"],
+      themeText: "AIO workflow for editorial review and AI search optimization",
+      primaryInfo:
+        "Our support team sees one-person contractors using LINE for approvals while forms are often missing.",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-specificity", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-candidate-count", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-input-signal", passed: true }),
+    );
+    expect(result.score).toBeLessThan(90);
+  });
 });

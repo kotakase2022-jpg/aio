@@ -6,7 +6,9 @@ This repository is developed by alternating between Codex and Claude Code.
 
 - Codex is the primary owner for implementation, feature work, and direct bug fixes.
 - Claude Code is the primary owner for review, quality improvement, bug fixes, tests, and specification-gap checks.
-- Cursor Bugbot review should run between handoffs when practical. Treat security, auth, runtime, data integrity, and test findings as high priority.
+- CodeRabbit OSS is the standard automated pull request reviewer for this public repository.
+- Cursor Bugbot is optional/backup only. Use it when CodeRabbit is unavailable, when a second opinion is useful, or when the user explicitly asks for it.
+- Treat CodeRabbit findings about security, auth, runtime, data integrity, external integrations, and tests as high priority.
 
 ## Required Reading Before Work
 
@@ -62,7 +64,7 @@ The handoff must clearly state:
 - what changed
 - what was verified
 - what failed or remains risky
-- whether Cursor Bugbot was run
+- CodeRabbit review status and any optional Cursor Bugbot findings
 - what Claude Code should read or do first
 
 <!-- BEGIN:nextjs-agent-rules -->

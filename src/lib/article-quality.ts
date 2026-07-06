@@ -1,3 +1,10 @@
+import {
+  articleContainsCanonicalSourceUrl,
+  decodeHtmlAmpersands,
+  normalizeSourceUrls,
+  sourceUrlCandidates,
+} from "@/lib/source-url";
+
 export type ArticleQualityCheck = {
   id: string;
   label: string;
@@ -14,10 +21,14 @@ export type ArticleQualityEvaluation = {
 
 export type ArticleQualityContext = {
   themeText?: string;
+  targetReaderText?: string;
+  searchIntentText?: string;
   primaryInfo?: string;
   closingText?: string;
   referenceTexts?: string[];
+  sourceUrls?: string[];
   competitorTexts?: string[];
+  targetWordCount?: number;
 };
 
 const genericPhrases = [
@@ -34,7 +45,51 @@ const genericPhrases = [
   "大切です",
   "ポイントです",
   "効果的です",
+  "重要になります",
+  "求められます",
+  "欠かせません",
   "理解しておきましょう",
+  "わかりやすく解説",
+  "詳しく解説",
+  "を紹介します",
+  "in this article",
+  "this article explains",
+  "it is important to",
+  "various",
+  "many companies",
+  "can help",
+  "helps improve",
+  "improve efficiency",
+  "should consider",
+  "recommended to",
+  "best practices",
+  "streamline",
+  "enhance productivity",
+  "leverage",
+];
+
+const genericOpeningPatterns = [
+  { label: "本記事では", pattern: /本記事では/ },
+  { label: "この記事では", pattern: /この記事では/ },
+  { label: "近年", pattern: /近年/ },
+  { label: "について解説します", pattern: /について(?:わかりやすく|詳しく)?解説します/ },
+  { label: "を解説します", pattern: /を(?:わかりやすく|詳しく)?解説します/ },
+  { label: "を紹介します", pattern: /を(?:わかりやすく|詳しく)?紹介します/ },
+  { label: "重要です", pattern: /重要です/ },
+  { label: "重要になります", pattern: /重要になります/ },
+  { label: "注目されています", pattern: /注目されています/ },
+  { label: "求められます", pattern: /求められます/ },
+  { label: "欠かせません", pattern: /欠かせません/ },
+  { label: "in this article", pattern: /\bin this article\b/i },
+  { label: "this article explains", pattern: /\bthis article explains\b/i },
+];
+
+const genericEndingPatterns = [
+  { label: "いかがでしたでしょうか", pattern: /いかがでしたでしょうか/ },
+  { label: "ぜひ参考にしてください", pattern: /ぜひ参考にしてください/ },
+  { label: "最後までお読みいただき", pattern: /最後までお読みいただき/ },
+  { label: "本記事を参考に", pattern: /本記事を参考に/ },
+  { label: "参考になれば幸いです", pattern: /参考になれば幸いです/ },
 ];
 
 const verboseAiPhrases = [
@@ -45,6 +100,9 @@ const verboseAiPhrases = [
   "可能となります",
   "有効です",
   "役立ちます",
+  "it is important to",
+  "in order to",
+  "utilize",
 ];
 
 const unsupportedStrongClaims = [
@@ -56,6 +114,17 @@ const unsupportedStrongClaims = [
   "すべて解決",
   "確実に",
 ];
+
+const numericClaimPattern =
+  /[0-9０-９][0-9０-９,，.．]*(?:\s*(?:%|％|割|倍|件|社|人|名|円|万円|時間|日|週間|か月|ヶ月|年|ページ|本|個|回|文字)|(?:以上|以下|未満|以内|超|前後|程度|ほど))/g;
+
+const numericClaimSupportPattern =
+  /(出典|参照|参考|source|sources|調査|公表|資料|データ|統計|アンケート|ヒアリング|当社|弊社|自社|支援現場|現場|相談|観察|経験|推定|目安|約|およそ|条件|場合|時点|未確認|断定しない|可能性|傾向|根拠|照合)/i;
+
+const adjacentNumericSupportPattern =
+  /^(出典|参照|参考|source|sources|調査|公表|資料|データ|統計|アンケート|ヒアリング|推定|目安|約|およそ|条件|場合|時点|根拠)[:：、\s]|^(未確認|断定しない|可能性|傾向|照合)/i;
+
+const longSentenceCharacterLimit = 130;
 
 const repetitiveConnectors = [
   "また",
@@ -114,6 +183,13 @@ const vagueHeadingRoots = [
   "手順",
 ];
 
+const mechanicalSequenceHeadingPatterns = [
+  /^(?:まず|次に|最後に|はじめに|STEP\s*[0-9０-９]+|Step\s*[0-9０-９]+|ステップ\s*[0-9０-９]+|手順\s*[0-9０-９]+)/i,
+  /^[0-9０-９]+(?:つ目|番目)[、:\s　]/,
+  /[0-9０-９一二三四五六七八九十]+つの(?:ポイント|メリット|デメリット|方法|コツ|手順|注意点|理由)$/,
+  /(?:ポイント|メリット|デメリット|方法|コツ|手順|注意点)を(?:解説|紹介|確認)$/,
+];
+
 const editorialAnchorPatterns = [
   /(事例|現場|相談|支援現場|問い合わせ|ヒアリング)/,
   /(判断基準|チェック|手順|比較|選定|優先順位)/,
@@ -130,6 +206,16 @@ const sectionEvidencePatterns = [
   /(費用|期間|担当|体制|工数|人数|頻度|期限|料金|給付基礎日額|補償開始日)/,
   /(参照|出典|参考|source|sources|照合|根拠)/i,
 ];
+
+const usefulTableSignalPatterns = [
+  /(判断基準|比較軸|比較|選定|優先順位|条件|例外|確認|チェック|注意点|失敗|リスク)/,
+  /(費用|料金|期間|時期|担当|体制|工数|頻度|導入|運用|承認|手続き)/,
+  /(出典|参照|参考|根拠|未確認|断定しない|照合|現場|相談|経験|観察)/,
+  /[0-9０-９]/,
+];
+
+const weakTableOnlyPattern =
+  /^(?:項目|内容|説明|詳細|概要|ポイント|メリット|デメリット|チェック|備考|例)+$/;
 
 const primaryInfoStopWords = new Set([
   "当社",
@@ -256,6 +342,31 @@ const themeStopWords = new Set([
   "marketing",
 ]);
 
+const audienceIntentStopWords = new Set([
+  ...themeStopWords,
+  "想定",
+  "対象",
+  "読者",
+  "検索",
+  "意図",
+  "知りたい",
+  "理解",
+  "向け",
+  "担当者",
+  "ユーザー",
+  "target",
+  "reader",
+  "audience",
+  "search",
+  "intent",
+  "understand",
+  "learn",
+  "know",
+  "want",
+  "needs",
+  "teams",
+]);
+
 const competitorStopWords = new Set([
   ...referenceInfoStopWords,
   "競合",
@@ -289,12 +400,18 @@ export function evaluateArticleQuality(
   context: ArticleQualityContext = {},
 ): ArticleQualityEvaluation {
   const text = normalizeText(stripHtml(html));
+  const sentences = extractSentences(text);
   const sentenceEndings = extractSentenceEndings(text);
   const leadingConnectors = extractLeadingConnectors(text);
   const formulaicFrames = extractFormulaicSentenceFrames(text);
   const genericPhraseHits = countPhraseHits(text, genericPhrases);
   const verboseAiPhraseHits = countPhraseHits(text, verboseAiPhrases);
   const unsupportedClaimHits = countPhraseHits(text, unsupportedStrongClaims);
+  const numericClaims = extractNumericClaims(text);
+  const unsupportedNumericClaims = numericClaims.filter(
+    (claim) => !hasNearbyNumericClaimSupport(text, claim.index),
+  );
+  const hasNumericClaimSupport = unsupportedNumericClaims.length === 0;
   const hasNumbers = /[0-9０-９]/.test(text);
   const hasConcreteAnchors =
     /(事例|現場|相談|失敗|注意点|判断基準|チェック|手順|比較|費用|期間|担当|運用|導入)/.test(text);
@@ -302,14 +419,37 @@ export function evaluateArticleQuality(
   const openingText = text.slice(0, 420);
   const hasAnswerFirst =
     /(結論|先に結論|要するに|つまり|最初に押さえるべき|とは、|とは )/.test(openingText);
+  const genericOpeningHits = findGenericOpeningHits(openingText);
+  const hasSpecificOpeningFrame = genericOpeningHits.length === 0;
+  const endingText = text.slice(-520);
+  const genericEndingHits = findGenericEndingHits(endingText);
+  const hasSpecificEndingFrame = genericEndingHits.length === 0;
   const editorialAnchorCount = editorialAnchorPatterns.filter((pattern) => pattern.test(text)).length;
-  const hasTable = /<table[\s>]/i.test(html);
+  const tableTexts = extractTableTexts(html);
+  const hasTable = tableTexts.length > 0;
+  const hasUsefulTable = tableTexts.some(isUsefulDecisionTable);
   const hasList = /<(ul|ol)[\s>]/i.test(html);
   const hasFaq = /(FAQ|よくある質問|<h2[^>]*>[^<]*質問|<h3[^>]*>[^<]*質問)/i.test(html);
   const hasSourceNote = /(出典|参照|参考|source|sources)/i.test(text);
+  const sourceUrls = normalizeSourceUrls(context.sourceUrls);
+  const requiredSourceUrls = sourceUrls.slice(0, 3);
+  const missingSourceUrls = requiredSourceUrls.filter(
+    (url) => !sourceUrlAppearsInArticle(url, html, text),
+  );
+  const shouldCheckSourceUrls = requiredSourceUrls.length > 0;
+  const hasSourceUrlPresence =
+    !shouldCheckSourceUrls || missingSourceUrls.length === 0;
+  const targetWordCount = normalizeTargetWordCount(context.targetWordCount);
+  const visibleCharacterCount = countVisibleCharacters(text);
+  const lengthRange = targetWordCount ? targetLengthRange(targetWordCount) : null;
+  const hasTargetLengthAlignment =
+    !lengthRange ||
+    (visibleCharacterCount >= lengthRange.min && visibleCharacterCount <= lengthRange.max);
   const headings = extractHeadings(html);
   const mechanicalHeadingHits = headings.filter(isMechanicalHeading).length;
+  const mechanicalSequenceHeadingHits = headings.filter(isMechanicalSequenceHeading).length;
   const hasEditorialHeadings = headings.length >= 2 && mechanicalHeadingHits === 0;
+  const hasHeadingStoryline = headings.length < 3 || mechanicalSequenceHeadingHits <= 1;
   const headingSections = extractHeadingSections(html);
   const thinSections = headingSections.filter(isThinHeadingSection);
   const allowedThinSections = headingSections.length >= 2 ? 1 : 0;
@@ -335,11 +475,31 @@ export function evaluateArticleQuality(
     : 0;
   const hasNaturalSentenceFrames =
     formulaicFrameCount <= 2 || (repeatedFormulaicFrameCount <= 2 && formulaicFrameRate <= 0.22);
+  const longSentences = sentences.filter(
+    (sentence) => countVisibleCharacters(sentence) > longSentenceCharacterLimit,
+  );
+  const hasConciseSentenceLength = longSentences.length === 0;
   const themeTerms = extractSignalTerms(context.themeText, themeStopWords);
   const themeHitCount = themeTerms.filter((term) => termAppearsInText(term, text)).length;
   const themeTargetHits = Math.min(4, Math.max(2, themeTerms.length));
   const shouldCheckTheme = themeTerms.length >= 2;
   const hasThemeReflection = !shouldCheckTheme || themeHitCount >= themeTargetHits;
+  const targetReaderTerms = extractSignalTerms(context.targetReaderText, audienceIntentStopWords);
+  const targetReaderHitCount = targetReaderTerms.filter((term) =>
+    termAppearsInText(term, text),
+  ).length;
+  const targetReaderTargetHits = Math.min(3, Math.max(1, targetReaderTerms.length));
+  const shouldCheckTargetReader = targetReaderTerms.length > 0;
+  const hasTargetReaderReflection =
+    !shouldCheckTargetReader || targetReaderHitCount >= targetReaderTargetHits;
+  const searchIntentTerms = extractSignalTerms(context.searchIntentText, audienceIntentStopWords);
+  const searchIntentHitCount = searchIntentTerms.filter((term) =>
+    termAppearsInText(term, text),
+  ).length;
+  const searchIntentTargetHits = Math.min(3, Math.max(1, searchIntentTerms.length));
+  const shouldCheckSearchIntent = searchIntentTerms.length > 0;
+  const hasSearchIntentReflection =
+    !shouldCheckSearchIntent || searchIntentHitCount >= searchIntentTargetHits;
   const primaryInfoTerms = extractPrimaryInfoTerms(context.primaryInfo);
   const primaryInfoHitCount = primaryInfoTerms.filter((term) =>
     termAppearsInText(term, text),
@@ -400,6 +560,26 @@ export function evaluateArticleQuality(
           : `${genericPhraseHits}件の凡庸表現候補があります。`,
     },
     {
+      id: "generic-opening-frame",
+      label: "冒頭のAI風フレーム",
+      passed: hasSpecificOpeningFrame,
+      detail: hasSpecificOpeningFrame
+        ? "冒頭がテンプレ導入ではなく、具体的な結論・判断から始まっています。"
+        : `冒頭に「${genericOpeningHits
+            .slice(0, 3)
+            .join("」「")}」型のテンプレ表現があります。背景説明から入らず、読者が最初に判断できる結論、定義、現場観察、条件から書き出すと自然になります。`,
+    },
+    {
+      id: "generic-ending-frame",
+      label: "締めのAI風フレーム",
+      passed: hasSpecificEndingFrame,
+      detail: hasSpecificEndingFrame
+        ? "締め文は汎用的な定型句ではなく、記事内容に沿った次の行動へ自然につながっています。"
+        : `末尾に「${genericEndingHits
+            .slice(0, 3)
+            .join("」「")}」型の定型表現があります。記事固有の判断基準、確認手順、問い合わせ前に準備する情報などへ置き換えると、AI記事らしさが薄まります。`,
+    },
+    {
       id: "verbose-ai-phrasing",
       label: "AI風の冗長表現",
       passed: verboseAiPhraseHits <= 1,
@@ -436,6 +616,26 @@ export function evaluateArticleQuality(
             .map((section) => section.heading)
             .join("、")}）。各H2/H3に数字、現場例、判断基準、失敗/注意点、体制・費用・期間、参照元のいずれかを2つ以上入れると、人間の編集記事らしくなります。`,
     },
+    ...(lengthRange
+      ? [
+          {
+            id: "target-length-alignment",
+            label: "指定文字数との整合",
+            passed: hasTargetLengthAlignment,
+            detail: hasTargetLengthAlignment
+              ? `本文量は指定された${lengthRange.target.toLocaleString("ja-JP")}字に対して自然な範囲です。`
+              : `本文量が約${visibleCharacterCount.toLocaleString(
+                  "ja-JP",
+                )}字で、指定された${lengthRange.target.toLocaleString(
+                  "ja-JP",
+                )}字から外れています。目安は${lengthRange.min.toLocaleString(
+                  "ja-JP",
+                )}〜${lengthRange.max.toLocaleString(
+                  "ja-JP",
+                )}字です。薄い一般論を足すのではなく、参照情報、一次情報、競合差分にもとづく具体例、判断基準、注意点を増減して調整してください。`,
+          },
+        ]
+      : []),
     ...(shouldCheckTheme
       ? [
           {
@@ -445,6 +645,34 @@ export function evaluateArticleQuality(
             detail: hasThemeReflection
               ? "入力されたテーマ・キーワードの主要語彙が本文に反映されています。"
               : `テーマ・キーワードの固有語彙（${themeTerms.slice(0, 5).join("、")}）を、タイトル、冒頭、見出し、FAQに自然に戻すと、入力意図から外れにくくなります。`,
+          },
+        ]
+      : []),
+    ...(shouldCheckTargetReader
+      ? [
+          {
+            id: "target-reader-reflection",
+            label: "想定読者の反映",
+            passed: hasTargetReaderReflection,
+            detail: hasTargetReaderReflection
+              ? "想定読者の文脈が本文内の課題、判断基準、具体例に反映されています。"
+              : `想定読者の固有語彙（${targetReaderTerms
+                  .slice(0, 5)
+                  .join("、")}）を、冒頭、見出し、具体例、FAQに戻すと、誰向けの記事か明確になります。`,
+          },
+        ]
+      : []),
+    ...(shouldCheckSearchIntent
+      ? [
+          {
+            id: "search-intent-reflection",
+            label: "検索意図の反映",
+            passed: hasSearchIntentReflection,
+            detail: hasSearchIntentReflection
+              ? "検索意図に含まれる目的や判断軸が本文に反映されています。"
+              : `検索意図の固有語彙（${searchIntentTerms
+                  .slice(0, 5)
+                  .join("、")}）を、結論、比較軸、注意点、FAQに戻すと、読者の疑問に答える記事になります。`,
           },
         ]
       : []),
@@ -547,12 +775,25 @@ export function evaluateArticleQuality(
           : "H2/H3を2つ以上置き、各見出しで読者が何を判断できるか分かる表現にすると強くなります。",
     },
     {
+      id: "heading-storyline",
+      label: "見出しの企画性",
+      passed: hasHeadingStoryline,
+      detail: hasHeadingStoryline
+        ? "見出しが単なる手順列ではなく、読者の判断や記事の企画意図を示しています。"
+        : `「${headings
+            .filter(isMechanicalSequenceHeading)
+            .slice(0, 3)
+            .join("」「")}」のような連番・手順型の見出しが続いています。まず/次に/最後に型ではなく、判断、失敗、比較、現場差分が伝わる見出しへ変えると編集記事らしくなります。`,
+    },
+    {
       id: "comparison-table",
       label: "比較・整理のしやすさ",
-      passed: hasTable,
-      detail: hasTable
-        ? "表が含まれており、比較・要点整理がしやすい構成です。"
-        : "比較表または整理表を追加すると、読み手とAI検索の双方に伝わりやすくなります。",
+      passed: hasUsefulTable,
+      detail: hasUsefulTable
+        ? "判断基準や比較軸が入った表が含まれており、要点整理がしやすい構成です。"
+        : hasTable
+          ? "表はありますが、項目/内容だけの薄い整理に見えます。判断基準、比較軸、条件、費用、期間、担当、注意点を入れると実務で使いやすくなります。"
+          : "比較表または整理表を追加すると、読み手とAI検索の双方に伝わりやすくなります。",
     },
     {
       id: "sentence-variety",
@@ -561,6 +802,16 @@ export function evaluateArticleQuality(
       detail: repeatedEndingRate <= 0.42
         ? "語尾の偏りは強くありません。"
         : "同じ語尾が続いているため、文体に抑揚を出す余地があります。",
+    },
+    {
+      id: "sentence-length",
+      label: "一文の読みやすさ",
+      passed: hasConciseSentenceLength,
+      detail: hasConciseSentenceLength
+        ? "一文が長くなりすぎず、読み手が追いやすい文量です。"
+        : `130字を超える長い一文があります（例: ${longSentences[0]
+            .slice(0, 46)
+            .trim()}...）。条件、例外、具体例、結論を短い文に分けると、人間が編集した記事らしくなります。`,
     },
     {
       id: "connector-variety",
@@ -588,6 +839,17 @@ export function evaluateArticleQuality(
           : `${unsupportedClaimHits}件の強い断定候補があります。根拠、条件、例外を添えると信頼性が上がります。`,
     },
     {
+      id: "numeric-claim-support",
+      label: "数字・実績の根拠づけ",
+      passed: hasNumericClaimSupport,
+      detail: hasNumericClaimSupport
+        ? "数字や実績らしい表現には、出典、条件、目安、現場観察などの補足があります。"
+        : `数字や実績らしい表現（例: ${unsupportedNumericClaims
+            .slice(0, 3)
+            .map((claim) => claim.value)
+            .join("、")}）の近くに、出典、条件、時点、目安、現場観察の補足が不足しています。`,
+    },
+    {
       id: "source-awareness",
       label: "参照元への意識",
       passed: hasSourceNote,
@@ -595,6 +857,20 @@ export function evaluateArticleQuality(
         ? "参照・出典に触れる記述があります。"
         : "参照元や未確認情報への扱いを明示すると信頼性が上がります。",
     },
+    ...(shouldCheckSourceUrls
+      ? [
+          {
+            id: "source-url-presence",
+            label: "出典URLの明示",
+            passed: hasSourceUrlPresence,
+            detail: hasSourceUrlPresence
+              ? "主要な参照元URLが本文内の出典注記またはリンクとして確認できます。"
+              : `主要な参照元URL（例: ${missingSourceUrls
+                  .slice(0, 3)
+                  .join("、")}）が本文内に見当たりません。WordPress投稿後にも読者が確認できるよう、本文末尾や該当箇所に出典URLを残してください。`,
+          },
+        ]
+      : []),
   ];
 
   const failed = checks.filter((check) => !check.passed);
@@ -603,8 +879,13 @@ export function evaluateArticleQuality(
     100 -
       failed.length * 8 -
       Math.min(genericPhraseHits, 6) * 2 -
+      Math.min(genericOpeningHits.length, 4) * 3 -
+      Math.min(genericEndingHits.length, 4) * 3 -
       Math.min(verboseAiPhraseHits, 6) * 2 -
-      Math.min(unsupportedClaimHits, 4) * 2,
+      Math.min(unsupportedClaimHits, 4) * 2 -
+      Math.min(unsupportedNumericClaims.length, 4) * 2 -
+      Math.min(mechanicalSequenceHeadingHits, 4) * 2 -
+      Math.min(longSentences.length, 4) * 2,
   );
 
   return {
@@ -624,6 +905,36 @@ function stripHtml(html: string) {
 
 function normalizeText(text: string) {
   return text.replace(/\s+/g, " ").trim();
+}
+
+function countVisibleCharacters(text: string) {
+  return Array.from(text.replace(/\s+/g, "")).length;
+}
+
+function stripUrlText(text: string) {
+  return text.replace(/https?:\/\/[^\s<>"'）)]+/gi, "");
+}
+
+function normalizeTargetWordCount(value: number | undefined) {
+  return [1000, 2000, 3000, 4000, 5000, 6000].includes(value ?? 0) ? value : undefined;
+}
+
+function targetLengthRange(targetWordCount: number) {
+  return {
+    target: targetWordCount,
+    min: Math.round(targetWordCount * 0.7),
+    max: Math.round(targetWordCount * 1.35),
+  };
+}
+
+function sourceUrlAppearsInArticle(url: string, html: string, text: string) {
+  const candidates = sourceUrlCandidates(url);
+  const rawArticle = decodeHtmlAmpersands(html);
+  if (candidates.some((candidate) => rawArticle.includes(candidate) || text.includes(candidate))) {
+    return true;
+  }
+
+  return articleContainsCanonicalSourceUrl(url, `${rawArticle} ${text}`);
 }
 
 function extractPrimaryInfoTerms(primaryInfo?: string) {
@@ -717,19 +1028,88 @@ function slidingWindows(value: string, size: number) {
 function countPhraseHits(text: string, phrases: string[]) {
   return phrases.reduce((total, phrase) => {
     const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return total + (text.match(new RegExp(escaped, "g"))?.length ?? 0);
+    return total + (text.match(new RegExp(escaped, "gi"))?.length ?? 0);
   }, 0);
 }
 
+function findGenericOpeningHits(openingText: string) {
+  return genericOpeningPatterns
+    .filter((item) => item.pattern.test(openingText))
+    .map((item) => item.label);
+}
+
+function findGenericEndingHits(endingText: string) {
+  return genericEndingPatterns
+    .filter((item) => item.pattern.test(endingText))
+    .map((item) => item.label);
+}
+
+function extractNumericClaims(text: string) {
+  return Array.from(text.matchAll(numericClaimPattern)).map((match) => ({
+    value: match[0],
+    index: match.index ?? 0,
+  }));
+}
+
+function hasNearbyNumericClaimSupport(text: string, index: number) {
+  const sentenceStart = Math.max(
+    0,
+    Math.max(
+      text.lastIndexOf("。", index - 1),
+      text.lastIndexOf("！", index - 1),
+      text.lastIndexOf("？", index - 1),
+      text.lastIndexOf(".", index - 1),
+      text.lastIndexOf("!", index - 1),
+      text.lastIndexOf("?", index - 1),
+    ) + 1,
+  );
+  const nextStops = ["。", "！", "？", ".", "!", "?"]
+    .map((mark) => text.indexOf(mark, index))
+    .filter((position) => position >= 0);
+  const sentenceEnd = nextStops.length ? Math.min(...nextStops) : text.length;
+  const sentence = text.slice(sentenceStart, sentenceEnd);
+
+  if (numericClaimSupportPattern.test(sentence)) {
+    return true;
+  }
+
+  const adjacentSentence = extractNextSentence(text, sentenceEnd);
+  return Boolean(
+    adjacentSentence &&
+      countVisibleCharacters(adjacentSentence) <= 90 &&
+      adjacentNumericSupportPattern.test(adjacentSentence),
+  );
+}
+
+function extractNextSentence(text: string, sentenceEnd: number) {
+  const afterCurrentSentence = text.slice(sentenceEnd + 1).trimStart();
+  if (!afterCurrentSentence) {
+    return "";
+  }
+
+  const nextEnd = ["。", "！", "？", ".", "!", "?"]
+    .map((mark) => afterCurrentSentence.indexOf(mark))
+    .filter((position) => position >= 0);
+  const end = nextEnd.length ? Math.min(...nextEnd) : afterCurrentSentence.length;
+  return afterCurrentSentence.slice(0, end).trim();
+}
+
 function extractSentenceEndings(text: string) {
-  return text
+  return stripUrlText(text)
     .split(/[。！？!?]/)
     .map((sentence) => sentence.trim().slice(-3))
     .filter((ending) => ending.length >= 2);
 }
 
+function extractSentences(text: string) {
+  return stripUrlText(text)
+    .split(/[。！？!?]+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length >= 2);
+}
+
 function extractLeadingConnectors(text: string) {
-  return text
+  return stripUrlText(text)
     .split(/[。！？!?]/)
     .map((sentence) => sentence.trim().replace(/^[「『（(【\s]+/, ""))
     .map((sentence) =>
@@ -741,7 +1121,7 @@ function extractLeadingConnectors(text: string) {
 }
 
 function extractFormulaicSentenceFrames(text: string) {
-  return text
+  return stripUrlText(text)
     .split(/[。！？!?]/)
     .map((sentence) => sentence.trim().replace(/^[「『（(【\s]+/, ""))
     .map((sentence) => formulaicSentenceFrames.find((frame) => sentence.startsWith(frame)))
@@ -763,6 +1143,22 @@ function extractHeadings(html: string) {
   }
 
   return headings.filter(Boolean);
+}
+
+function extractTableTexts(html: string) {
+  return Array.from(html.matchAll(/<table[\s\S]*?<\/table>/gi))
+    .map((match) => normalizeText(stripHtml(match[0])))
+    .filter(Boolean);
+}
+
+function isUsefulDecisionTable(tableText: string) {
+  const compact = tableText.replace(/\s+/g, "");
+  const textLength = countVisibleCharacters(tableText);
+  const signalCount = usefulTableSignalPatterns.filter((pattern) => pattern.test(tableText)).length;
+  const hasEnoughSubstance = textLength >= 18;
+  const isWeakPlaceholder = weakTableOnlyPattern.test(compact);
+
+  return hasEnoughSubstance && signalCount >= 1 && !isWeakPlaceholder;
 }
 
 function extractHeadingSections(html: string) {
@@ -806,6 +1202,14 @@ function isMechanicalHeading(heading: string) {
       normalized === `${root}のポイント` ||
       normalized === `${root}の流れ` ||
       normalized === `${root}の方法`,
+  );
+}
+
+function isMechanicalSequenceHeading(heading: string) {
+  const normalized = heading.replace(/\s+/g, " ").trim();
+  const compact = heading.replace(/\s+/g, "");
+  return mechanicalSequenceHeadingPatterns.some(
+    (pattern) => pattern.test(normalized) || pattern.test(compact),
   );
 }
 

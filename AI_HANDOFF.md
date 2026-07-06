@@ -3,108 +3,239 @@
 ## 0. Current Loop Phase
 - Current owner: Codex
 - Next owner: Claude Code
-- Loop: 2
-- Loop number inferred from: Previous `AI_HANDOFF.md` had Current owner: Claude Code, Next owner: Codex, Loop: 1, and explicitly instructed Codex to start the next development cycle as Loop 2. This handoff therefore records the completed Codex phase of Loop 2.
-- Phase: Handoff
-- Last updated: 2026-07-05 19:08 +09:00
+- Loop: 3 continuation
+- Loop number inferred from: Previous handoff had `Current owner: Claude Code`, `Next owner: Codex`, and `Loop: 3`; Claude Code returned the same uncommitted Loop 2 + Loop 3 worktree to Codex for the next development pass.
+- Phase: Autonomous Improvement / Handoff
+- Last updated: 2026-07-06 10:25 +09:00
 
 ## 1. Current Goal
-今回の目的：
-
-既存アプリを「機能・画面遷移の安定性」「業務利用価値」「AIっぽさを抑えた生成記事品質」の3指標で100点に近づける。今回は、Claude Codeが残したNext Recommended Actionに従い、丸写し検知しきい値（現状28文字）が短い固有語句の自然な引用を誤検知しないことを単体テストで固定した。
+Current objective:
+- Move the AIO article generator closer to the 100/100 targets for functional reliability, daily-use UX value, and non-commodity article quality.
+- Keep changes scoped and reviewable while preserving existing UI, specs, routes, tests, and quality gates.
+- Prepare the large uncommitted Loop 2 + Loop 3 diff for Claude Code review and, after review, CodeRabbit OSS/PR flow.
 
 ## 2. Current Branch / Commit
-- Branch: codex/persistent-quality-gate-operations
-- Latest commit: current HEAD after `Validate source digestion threshold`
-- Last known good commit: current HEAD after `npm run quality`
+- Branch: `codex/persistent-quality-gate-operations`
+- Latest commit: `d20ac08 Validate source digestion threshold`
+- Last known good commit: `d20ac08` plus the current uncommitted Loop 2 + Loop 3 worktree has passed `npm run quality`.
+- Important: The worktree still contains a large uncommitted diff. Several new files are untracked and must be staged deliberately before any commit.
 
 ## 3. What Was Done
-今回完了したこと：
+Completed in this Codex pass:
+- Read the required handoff/orientation context and confirmed Claude Code returned Loop 3 to Codex.
+- Addressed Claude Code's noted risk in HTML attachment extraction: legitimate article sections such as `subscription-pricing` are now preserved instead of being removed as noise.
+- Kept subscription UI noise removal for widget-like markers such as `subscribe-box` and newsletter subscribe blocks.
+- Added regression assertions to the HTML extraction unit test for both the preserved article section and removed subscribe/newsletter widgets.
+- Ran the targeted unit test and the full project quality gate successfully.
+- Rewrote this handoff file to clean ASCII text because the previous rendered content was mojibake in the shell.
+- Migrated automated review policy documentation: CodeRabbit OSS is now the standard PR reviewer, and Cursor Bugbot is optional/backup only for cost control.
+- Added `.coderabbit.yaml` and `docs/review-automation.md`; updated `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/testing.md`, and the PR template to match the new review policy.
+- Added CodeRabbit schema metadata to `.coderabbit.yaml` and documented `@coderabbitai configuration` as the PR-side check for resolved settings.
+- Added `docs/quality-audit.md` with the current feature inventory, mechanical evidence, proof gaps, self-scores, and next improvement targets for the active 100/100 goal.
+- Linked `docs/quality-audit.md` from `README.md`.
+- Ran `npm run test:live:readiness`; it failed closed without calling providers because sandbox-only flags/credentials are not ready. Documented the result in `docs/quality-audit.md`.
+- Performed a manual PC-browser smoke pass at 1440 x 1000 through demo login, initial form visibility, sticky CTA, generation-log collapse/expand, reference/theme/primary-info inputs, and console-error checks.
+- Found and fixed a sticky step-navigation overlap where anchor clicks left target cards slightly hidden under the nav; increased left/right card `scroll-mt` from 280px to 360px.
+- Added an E2E regression assertion to the core workflow so `#theme` anchor navigation must leave visible clearance below the sticky step navigation.
+- Fixed the remaining draft-only step-navigation issue: before a draft exists, `承認` and `WordPress` now render as disabled non-link items instead of anchors to missing sections; after draft generation, they become normal links again.
+- Added E2E assertions for the draft-only nav states and the generated `#approval` anchor clearance.
+- Performed an additional generated-draft PC browser smoke pass using local fallback `.data` and no live providers.
+- Confirmed generation-log reopening, preview, fullscreen preview, edit form visibility, approval/WordPress section visibility, no page-level horizontal overflow, clipboard-error recovery messaging, HTML export success messaging, and zero console errors.
+- Saved ignored local screenshots under `test-results/manual-generated-draft-*.png`.
+- Confirmed CodeRabbit GitHub App was already installed for the account, added `kotakase2022-jpg/aio` to its selected repository access, and verified GitHub now shows `Selected 3 repositories` including `kotakase2022-jpg/aio`.
+- Re-ran the full local quality gate after the CodeRabbit installation documentation updates; it passed.
+- Ran a focused secret-pattern scan over the repository. Matches were limited to documented/test dummy values, not real keys.
 
-- Claude Codeの前回ハンドオフを確認し、Current owner: Claude Code / Next owner: Codex / Loop: 1 から、今回はLoop 2のCodex再開と判断した。
-- `tests/unit/article-quality.test.ts`に、短い入力由来フレーズを本文に残しても、周辺文脈が編集的に書き換えられていれば丸写し未達にしない境界テストを追加した。
-- 追加テストでは、一次情報（LINE承認と帳票不在）、参照情報（給付基礎日額と補償開始日）、競合情報（料金表と導入期間）の短い固有語句が本文に残るケースで、`primary-info-digestion` / `reference-info-digestion` / `competitor-insight-digestion` がすべてpassedになることを確認した。
-- `AI_HANDOFF.md`を指定テンプレートに合わせ、Loop 2のCodex作業結果として更新した。
-- `AGENTS.md`と`CLAUDE.md`は読み直したが、運用ルール変更は不要と判断し変更していない。
+Previously completed in the broader Loop 2 + Loop 3 uncommitted diff:
+- Shared source URL normalization in `src/lib/source-url.ts`.
+- Expanded article, title, FAQ, source digestion, and regeneration-action quality checks.
+- Strengthened draft HTML handling and quality edit guidance.
+- Improved article/image generation validation and tests.
+- Improved file extraction for Office XML entities, HTML noise removal, and Shift_JIS fallback.
+- Added/expanded extensive unit, integration, contract, and Playwright E2E coverage.
+- Added demo login recovery E2E coverage.
 
 ## 4. Files Changed
-主な変更ファイル：
-
-- `tests/unit/article-quality.test.ts`
+Main files changed in this Codex pass:
+- `src/lib/server/file-extraction.ts`
+- `tests/unit/file-extraction.test.ts`
 - `AI_HANDOFF.md`
+- `.coderabbit.yaml`
+- `.github/pull_request_template.md`
+- `AGENTS.md`
+- `CLAUDE.md`
+- `README.md`
+- `docs/testing.md`
+- `docs/review-automation.md`
+- `docs/quality-audit.md`
+- `src/components/aio/article-generator-app.tsx`
+- `tests/e2e/aio-workflow.spec.ts`
+
+The worktree also still contains the larger existing Loop 2 + Loop 3 diff across:
+- `src/components/aio/article-generator-app.tsx`
+- `src/components/aio/demo-login-form.tsx`
+- `src/lib/article-quality.ts`
+- `src/lib/draft-html.ts`
+- `src/lib/faq-quality.ts`
+- `src/lib/server/article-generation.ts`
+- `src/lib/server/article-images.ts`
+- `src/lib/title-quality.ts`
+- `tests/e2e/aio-workflow.spec.ts`
+- `tests/fixtures/article.ts`
+- `tests/integration/drafts-supabase.integration.test.ts`
+- multiple `tests/unit/*` files
+- untracked `src/lib/quality-regeneration-action.ts`
+- untracked `src/lib/source-url.ts`
+- untracked `tests/unit/quality-edit-guidance.test.ts`
+- untracked `tests/unit/quality-regeneration-action-coverage.test.ts`
+- untracked `tests/unit/source-url.test.ts`
 
 ## 5. Current Status
-現在の状態：
-
-- `npm run quality`が成功しており、typecheck、lint、test integrity、単体/結合、契約テスト、coverage、Playwright E2E、本番ビルドはすべて通過済み。
-- Playwright E2Eは36件成功。
-- 丸写し検知は、長文貼り付けを落とす単体テストと、短い固有語句の自然な再利用を許す単体テストの両側で検証済み。
-- Claude Codeの前回レビューではコード修正不要と判断されており、今回も重大なビルド/型/Lint/テスト/実行時不整合は検出されなかった。
+- `npm run quality` passes locally after the latest Codex change.
+- A manual PC-browser smoke pass for the initial workflow passes with zero console errors.
+- A manual PC-browser smoke pass for an already generated draft passes with zero console errors.
+- The targeted core workflow E2E passes after adding the sticky-anchor and draft-only-nav regression assertions.
+- Test integrity, unit/integration tests, contract tests, coverage, Playwright E2E, and production build all pass.
+- `docs/quality-audit.md` now records the current inventory and why the three 100/100 scores are still unproven.
+- Live readiness is currently not ready. This is expected and safe: the readiness script stopped before live provider calls.
+- The current diff is still intentionally uncommitted.
+- CodeRabbit is installed/enabled for `kotakase2022-jpg/aio`; an actual PR review by CodeRabbit is still pending until a PR is opened or updated.
+- No deploy, production DB write, production API mutation, force push, or secret output was performed.
 
 ## 6. Known Issues
-既知の問題：
-
-- 外部OpenAI / Supabase / WordPressのライブ契約テストは、本番データ保護のためsandbox環境変数が揃わない限りfail-closedする。
-- `npm run test:live:readiness`は、sandbox用の確認環境変数がない状態では成功しない想定。
-- 本番DB・本番API・本番ユーザーデータをテストで変更しないこと。
-- 実OpenAIのライブ生成記事に対する編集者目線の視覚確認はsandbox契約テスト環境が揃うまで未検証。
-- 3指標すべて100点の完了条件は未達。次ループでも機能棚卸し、実ブラウザ確認、生成品質改善を継続する。
+- Live OpenAI / Supabase / WordPress sandbox verification is still not completed. Existing E2E tests mock external services to avoid production data/API damage.
+- `npm run test:live:readiness` reports missing `AIO_LIVE_CONTRACT_TESTS`, Supabase live-test confirmation/write variables, and WordPress sandbox credentials. It also warns that the current Supabase host does not look like a sandbox/staging host.
+- Real generated-article quality review and live WordPress recovery remain manual/sandbox follow-up work.
+- The large uncommitted diff should be reviewed carefully before staging/committing. Untracked files are required by tests and should not be missed.
+- The three high-level 100/100 targets are not yet fully proven because live sandbox/manual checks remain.
 
 ## 7. Bugbot Findings
-Cursor Bugbotの指摘と対応状況：
-
-- 未実行。今回のCodex作業中にBugbot指摘は提供されていない。利用可能なローカル/CLIツールからBugbotを直接実行できる状態も確認できていないため、次のPR/差分レビューでCursor Bugbotを実行することを推奨。
+Automated review findings and status:
+- CodeRabbit OSS is now the standard automated PR reviewer for this repository.
+- CodeRabbit GitHub App is installed and includes `kotakase2022-jpg/aio` in the selected repository list.
+- Cursor Bugbot is optional/backup only. Do not run Bugbot by default.
+- No CodeRabbit PR review has run for this uncommitted diff yet, and no Bugbot findings were provided in this Codex pass.
+- Recommended next step after Claude Code review: open/update the PR and let CodeRabbit review the full diff. Use Bugbot only if CodeRabbit is unavailable, a second opinion is materially useful, or the user explicitly asks for it.
 
 ## 8. Verification Results
-実行した確認コマンドと結果：
+Commands run in this Codex pass:
 
 ```bash
-npx vitest run tests/unit/article-quality.test.ts
+npx vitest run tests/unit/file-extraction.test.ts
 npm run quality
+git diff --check
+git diff --stat
+git status --short
+rg -n "Bugbot|CodeRabbit|Cursor|bugbot|coderabbit" .
+rg -n "quality-audit|coderabbitai configuration|schema.v2" README.md docs .coderabbit.yaml AI_HANDOFF.md
+npm run test:live:readiness
+npx playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep "PC browser can complete"
+Chrome/GitHub manual verification for CodeRabbit installation
+git diff --check
 ```
 
-結果：
-
-- `npx vitest run tests/unit/article-quality.test.ts`: 成功（1 file / 27 tests passed）
-- `npm run quality`: 成功
-- `npm run typecheck`: 成功（quality内）
-- `npm run lint`: 成功（quality内）
-- `npm run test:integrity`: 成功（37 files checked、quality内）
-- `npm run test`: 成功（33 files / 143 tests passed、quality内）
-- `npm run test:contract`: 成功（3 files / 9 tests passed、quality内）
-- `npm run test:coverage`: 成功（statements 81.59%、branches 67.06%、functions 88.57%、lines 82.09%、quality内）
-- `npm run test:e2e`: 成功（36 passed、quality内）
-- `npm run build`: 成功（Next.js 16.2.9 production build passed、quality内）
+Results:
+- `npx vitest run tests/unit/file-extraction.test.ts`: passed, 1 file / 7 tests.
+- `npm run quality`: passed.
+  - `npm run typecheck`: passed.
+  - `npm run lint`: passed.
+  - `npm run test:integrity`: passed, 40 files checked.
+  - `npm run test`: passed, 36 files / 223 tests.
+  - `npm run test:contract`: passed, 3 files / 9 tests.
+  - `npm run test:coverage`: passed, statements 84.5%, branches 70.69%, functions 90.74%, lines 84.97%.
+  - `npm run test:e2e`: passed, 45 Chromium PC tests.
+- `npm run build`: passed, Next.js 16.2.9 production build.
+- `git diff --check`: passed with no whitespace errors.
+- Review-policy migration docs/config were included in the latest full `npm run quality` run, and the full gate passed.
+- The full `npm run quality` gate was rerun after the live-readiness/audit documentation updates, and it passed again.
+- `.coderabbit.yaml` was inspected with UTF-8 decoding and now includes `# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json`.
+- `docs/quality-audit.md` was added and README-linked; the audit explicitly keeps all three scores below 100 until live sandbox checks, hosted CodeRabbit review, and manual PC browser review are proven.
+- `npm run test:live:readiness`: failed closed as expected because sandbox live-test env vars are not configured. No live provider calls were made.
+- Manual PC-browser smoke: passed at 1440 x 1000 after the anchor fix; screenshots were written to ignored local files under `test-results/manual-pc-*.png`; console error log was empty.
+- Initial manual anchor measurement found `#theme` and other left cards hidden by the sticky step navigation by about 26px. After the `scroll-mt` fix, the main left-card anchors measured visible clearance and no console errors.
+- `npx playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep "PC browser can complete"`: passed, 1 Chromium PC test.
+- After the draft-only nav fix, `npx playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep "PC browser can complete"` passed again, 1 Chromium PC test.
+- Generated-draft manual PC browser smoke: passed using local fallback `.data` and no live provider calls.
+  - Generation log reopen worked.
+  - Draft preview, fullscreen preview, edit form, approval section, and WordPress section were visible.
+  - Page-level horizontal overflow was absent (`bodyScrollWidth` matched client width).
+  - Clipboard copy showed the expected manual recovery message when this browser environment denied clipboard access.
+  - HTML export showed success after a direct click retry; the browser download-event hook itself timed out once in the in-app browser, but the app UI recovered and reported success without console errors.
+  - Console error log remained empty.
+- `git diff --check` after the generated-draft smoke documentation updates: passed with no whitespace errors.
+- Final `npm run quality` after the draft-only navigation fix: passed.
+  - `npm run typecheck`: passed.
+  - `npm run lint`: passed.
+  - `npm run test:integrity`: passed, 40 files checked.
+  - `npm run test`: passed, 36 files / 223 tests.
+  - `npm run test:contract`: passed, 3 files / 9 tests.
+  - `npm run test:coverage`: passed, statements 84.5%, branches 70.69%, functions 90.74%, lines 84.97%.
+  - `npm run test:e2e`: passed, 45 Chromium PC tests.
+  - `npm run build`: passed, Next.js 16.2.9 production build.
+- Final `git diff --check`: passed with no whitespace errors.
+- Chrome/GitHub manual verification for CodeRabbit installation: passed. GitHub App settings show `coderabbitai` installed with selected repository access and selected repositories including `kotakase2022-jpg/aio`, `kotakase2022-jpg/ai-jimukyoku`, and `kotakase2022-jpg/SalesForm`. All-repositories access remains disabled.
+- `git diff --check` after the CodeRabbit installation documentation updates: passed with no whitespace errors.
+- Secret-pattern scan after CodeRabbit setup: passed for real-secret risk. Matches were only documented/test dummy values such as CI placeholders and test-only Supabase/OpenAI/WordPress keys.
+- Latest `npm run quality` after the CodeRabbit installation documentation updates: passed.
+  - `npm run typecheck`: passed.
+  - `npm run lint`: passed.
+  - `npm run test:integrity`: passed, 40 files checked.
+  - `npm run test`: passed, 36 files / 223 tests.
+  - `npm run test:contract`: passed, 3 files / 9 tests.
+  - `npm run test:coverage`: passed, statements 84.5%, branches 70.69%, functions 90.74%, lines 84.97%.
+  - `npm run test:e2e`: passed, 45 Chromium PC tests.
+  - `npm run build`: passed, Next.js 16.2.9 production build.
+- Final `npm run quality` after the manual-smoke documentation, anchor fix, and E2E regression update: passed.
+  - `npm run typecheck`: passed.
+  - `npm run lint`: passed.
+  - `npm run test:integrity`: passed, 40 files checked.
+  - `npm run test`: passed, 36 files / 223 tests.
+  - `npm run test:contract`: passed, 3 files / 9 tests.
+  - `npm run test:coverage`: passed, statements 84.5%, branches 70.69%, functions 90.74%, lines 84.97%.
+  - `npm run test:e2e`: passed, 45 Chromium PC tests.
+  - `npm run build`: passed, Next.js 16.2.9 production build.
 
 ## 9. Next Recommended Action
-次にClaude Codeが最初にやるべきこと：
-
-- 今回追加した「短い固有語句は許す」境界テストが、実務上の引用・固有名詞再利用として自然かレビューする。
-- `includesLongVerbatimClause`の28文字しきい値について、長文丸写しの見逃しと短文引用の誤検知のバランスが適切か確認する。
-- Bugbotレビューを実行できる環境なら、Loop 2差分に対してCursor Bugbotを実行し、指摘があれば優先度順に対応する。
-- 次の改善候補は、実ブラウザでの視覚確認、OpenAI sandboxでのライブ生成品質確認、または生成品質チェックの実務サンプル拡充。
+Next first action for Claude Code:
+1. Review the small latest Codex fix in `src/lib/server/file-extraction.ts` and `tests/unit/file-extraction.test.ts`.
+2. Confirm the HTML noise marker policy is conservative enough: keep article sections like `subscription-pricing`, remove widget blocks like `subscribe-box` and newsletters.
+3. Review the broader uncommitted Loop 2 + Loop 3 diff and verify untracked files are included before commit/PR.
+4. Review the CodeRabbit OSS migration docs/config added in this pass.
+5. Review the sticky-anchor and draft-only navigation changes in `src/components/aio/article-generator-app.tsx` and the E2E assertions in `tests/e2e/aio-workflow.spec.ts`.
+6. Review the generated-draft manual smoke notes in this handoff and `docs/quality-audit.md`.
+7. Review `docs/quality-audit.md` for accuracy against the actual app/test state.
+8. Prepare disposable `.env.live.local` settings if live sandbox verification is required, then rerun `npm run test:live:readiness`.
+9. Open/update the PR and let the installed CodeRabbit app review the diff. Record CodeRabbit findings here.
+10. Comment `@coderabbitai configuration` on the PR to verify the effective CodeRabbit settings.
+11. Use Cursor Bugbot only as optional backup if CodeRabbit is unavailable, a second opinion is needed, or the user explicitly asks for it.
+12. If CodeRabbit and quality checks are clean, prepare a deliberate commit/PR flow. Do not push to `main` directly.
 
 ## 10. Suggested Review Scope for Claude Code
-Claude Codeに重点レビューしてほしい範囲：
-
-- `tests/unit/article-quality.test.ts`の追加テストが、丸写し検知を過度に緩めるものではなく、短い固有語句の自然な再利用だけを許す内容になっているか。
-- `primary-info-digestion` / `reference-info-digestion` / `competitor-insight-digestion`のpassed期待が、既存の長文丸写し検知テストと矛盾していないか。
-- 今回のテスト追加により、今後しきい値や正規化ロジックを変更した際に意図した回帰検知ができるか。
+Please focus review on:
+- False positives/false negatives in `isHtmlNoiseMarker`.
+- Whether `subscription`/`subscribe` widget detection should include or exclude any additional token combinations.
+- The larger quality-check additions in `article-quality`, `draft-html`, title/FAQ quality, and regeneration-action mapping.
+- E2E coverage realism for PC workflows, especially mocked OpenAI/Supabase/WordPress boundaries.
+- Whether the untracked files are correctly included before staging.
+- Whether `.coderabbit.yaml` is appropriately conservative for this public OSS repository and does not create excessive review noise.
+- Whether `docs/quality-audit.md` accurately captures the feature inventory, proof gaps, and active self-scores.
+- Whether the `scroll-mt-[360px]` anchor clearance and disabled draft-only nav items are the right long-term UX.
 
 ## 11. Do Not Touch
-触らない方がよい領域：
-
-- `.env`、`.env.local`、`.env.production`など秘密情報を含むファイル
-- 本番Supabase、WordPress、OpenAIアカウントや本番データ
-- ユーザーが明示していない既存UI刷新
-- 品質ゲートを弱める変更
-- 生成済みビルド成果物や依存パッケージ本体
+Avoid touching:
+- `.env`, `.env.local`, `.env.production`, or any secrets.
+- Production Supabase, WordPress, OpenAI, or Vercel data/configuration.
+- Existing quality gates by deletion, skip, todo, or weakening.
+- Generated build artifacts and dependency directories.
+- Unrelated UI redesigns or broad refactors.
 
 ## 12. Notes for Claude Code
-Claude Codeへの補足：
-
-- このプロジェクトはNext.js 16系のため、Next.js関連の実装前には`node_modules/next/dist/docs/`の該当ガイドを読むこと。
-- main直pushではなくPR経由、GitHub Actionsの`quality-gate`通過、Vercel本番デプロイはmainから、という運用を維持すること。
-- テストを削除・skip・緩和して通すことは禁止。
-- 丸写し検知は`src/lib/article-quality.ts`の`includesLongVerbatimClause`に集約されている。source側/target側の正規化（`normalizeComparableText`）を変える場合は、両方が同じ正規化を通ることを崩さないよう注意。
-- 前回Claude Codeが`AI_HANDOFF.md`のみを未コミット更新していたため、今回のCodexコミットにはそのハンドオフ更新をLoop 2用に再整理した内容も含まれる。
+- This is still Loop 3 continuation. Move to Loop 4 only after this large uncommitted diff is reviewed, committed/PR'd, and handed back.
+- The repository uses Next.js 16.2.9; read `node_modules/next/dist/docs/` before changing Next.js-specific APIs.
+- PR flow is required. Do not push directly to `main`.
+- Tests are intentionally strict about no `skip`/`only`/weakened checks.
+- CodeRabbit OSS is now the default PR review automation. Cursor Bugbot is backup only; this is a cost-control policy.
+- Current high-level self-score after this pass:
+  - Functional reliability: 99/100, limited by live sandbox/manual external-service verification.
+  - Daily-use UX value: 98/100, limited by remaining live WordPress recovery verification and CodeRabbit PR review.
+  - Non-commodity article quality: 98/100, limited by live generated-output review against real business inputs.
