@@ -130,8 +130,10 @@ export function appendAuthorBlockWhenNeeded(
   // Otherwise render the managed author block. Strip any existing author section or a bare/orphan
   // "この記事の執筆者" heading first so the output does not end up with a duplicate heading.
   const base =
-    hasCompleteAuthorSection || headingAlreadyVisible
+    hasCompleteAuthorSection
       ? removeExistingAuthorProfileBlock(withoutManagedAuthor, normalizedAuthor)
+      : headingAlreadyVisible
+        ? removeBareAuthorHeading(withoutManagedAuthor)
       : withoutManagedAuthor;
   return `${base}\n${buildAuthorBlockHtml(normalizedAuthor, options)}`.trim();
 }
@@ -237,6 +239,13 @@ function removeExistingAuthorProfileBlock(
       ),
       "",
     )
+    .trim();
+}
+
+function removeBareAuthorHeading(html: string) {
+  const escapedHeading = escapeRegExp(authorSectionHeading);
+  return html
+    .replace(new RegExp(`<h[2-3][^>]*>\\s*${escapedHeading}\\s*<\\/h[2-3]>`, "gi"), "")
     .trim();
 }
 

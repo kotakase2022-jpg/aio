@@ -198,6 +198,26 @@ describe("draft HTML rendering", () => {
     expect(html.match(/この記事の執筆者/g)).toHaveLength(2);
   });
 
+  test("preserves body text after a bare author heading when adding the managed block", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml:
+          "<h2>本文セクション</h2><p>First paragraph.</p><h2>この記事の執筆者</h2><p>Unrelated closing note that must stay.</p>",
+        author: {
+          name: "Test Author",
+          title: "Content Strategist",
+          bio: "Writes practical B2B content operations guides.",
+          imageUrl: "",
+        },
+      }),
+    );
+
+    expect(html).toContain("<p>Unrelated closing note that must stay.</p>");
+    expect(html).toContain('class="aio-author-block"');
+    expect(html).toContain("Test Author");
+    expect(html.match(/この記事の執筆者/g)).toHaveLength(2);
+  });
+
   test("appends the author block when the author name appears only incidentally", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
