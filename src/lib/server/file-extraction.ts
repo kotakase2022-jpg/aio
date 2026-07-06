@@ -503,7 +503,7 @@ async function extractDocxText(buffer: Buffer) {
     .filter((file) => /^word\/(document|header\d*|footer\d*)\.xml$/i.test(file.name))
     .sort((a, b) => a.name.localeCompare(b.name));
   const texts = await Promise.all(files.map((file) => file.async("text")));
-  return texts.map((xml) => extractXmlTextNodes(xml, ["w:t"])).join("\n\n");
+  return texts.map((xml) => extractXmlParagraphText(xml, ["w:p"], ["w:t"])).join("\n\n");
 }
 
 async function extractPptxText(buffer: Buffer) {
@@ -512,7 +512,7 @@ async function extractPptxText(buffer: Buffer) {
     .filter((file) => /^ppt\/slides\/slide\d+\.xml$/i.test(file.name))
     .sort((a, b) => naturalCompare(a.name, b.name));
   const texts = await Promise.all(files.map((file) => file.async("text")));
-  return texts.map((xml) => extractXmlTextNodes(xml, ["a:t"])).join("\n\n");
+  return texts.map((xml) => extractXmlParagraphText(xml, ["a:p"], ["a:t"])).join("\n\n");
 }
 
 async function extractXlsxText(buffer: Buffer) {
@@ -554,7 +554,7 @@ function extractWorksheetText(xml: string, sharedStrings: string[]) {
     const attrs = match[1] ?? "";
     const body = match[2] ?? "";
     const rawValue = firstMatch(body, /<v[^>]*>([\s\S]*?)<\/v>/) ?? "";
-    const inlineValue = extractXmlTextNodes(body, ["t"]);
+    const inlineValue = extractInlineXmlText(body, ["t"]);
     const value =
       attrs.includes('t="s"') && rawValue
         ? sharedStrings[Number(rawValue)] ?? rawValue
@@ -577,12 +577,40 @@ function extractXmlTextNodes(xml: string, tags: string[]) {
   return decodeXmlEntities(stripXmlTags(xml));
 }
 
+function extractXmlParagraphText(xml: string, paragraphTags: string[], textTags: string[]) {
+  const paragraphs: string[] = [];
+  for (const tag of paragraphTags) {
+    const regex = new RegExp(
+      `<${escapeXmlTagForRegex(tag)}\\b[^>]*>([\\s\\S]*?)<\\/${escapeXmlTagForRegex(tag)}>`,
+      "g",
+    );
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(xml))) {
+      const text = extractInlineXmlText(match[1] ?? "", textTags);
+      if (text.trim()) {
+        paragraphs.push(text.trim());
+      }
+    }
+  }
+
+  return paragraphs.length > 0 ? paragraphs.join("\n") : extractXmlTextNodes(xml, textTags);
+}
+
+function extractInlineXmlText(xml: string, tags: string[]) {
+  const values = extractXmlTextNodeValues(xml, tags, { trim: false });
+  if (values.length > 0) {
+    return values.join("");
+  }
+
+  return decodeXmlEntities(stripXmlTags(xml));
+}
+
 function extractXmlTextNodeValues(xml: string, tags: string[], options: { trim?: boolean } = {}) {
   const values: string[] = [];
   const shouldTrim = options.trim ?? true;
   for (const tag of tags) {
-    const escaped = tag.replace(":", "\\:");
-    const regex = new RegExp(`<${escaped}[^>]*>([\\s\\S]*?)<\\/${escaped}>`, "g");
+    const escaped = escapeXmlTagForRegex(tag);
+    const regex = new RegExp(`<${escaped}\\b[^>]*>([\\s\\S]*?)<\\/${escaped}>`, "g");
     let match: RegExpExecArray | null;
     while ((match = regex.exec(xml))) {
       const stripped = stripXmlTags(match[1] ?? "");
@@ -594,6 +622,10 @@ function extractXmlTextNodeValues(xml: string, tags: string[], options: { trim?:
   }
 
   return values;
+}
+
+function escapeXmlTagForRegex(tag: string) {
+  return tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(":", "\\:");
 }
 
 function stripXmlTags(value: string) {

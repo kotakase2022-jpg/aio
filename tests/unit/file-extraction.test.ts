@@ -184,6 +184,103 @@ describe("extractAttachmentText", () => {
     );
   });
 
+  test("joins DOCX text runs inside the same paragraph without artificial line breaks", async () => {
+    const zip = new JSZip();
+    zip.file(
+      "word/document.xml",
+      `
+        <w:document>
+          <w:body>
+            <w:p>
+              <w:r><w:t>当社の支援現場では、</w:t></w:r>
+              <w:r><w:t>一人親方の事務作業は</w:t></w:r>
+              <w:r><w:t>LINE連絡と帳票不在が重なりやすい。</w:t></w:r>
+            </w:p>
+            <w:p>
+              <w:r><w:t>承認者と締切を先に決めると手戻りが減る。</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>
+      `,
+    );
+    const buffer = Buffer.from(await zip.generateAsync({ type: "uint8array" }));
+
+    const text = await extractAttachmentText({
+      buffer,
+      filename: "field-notes.docx",
+      contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    expect(text).toContain(
+      "当社の支援現場では、一人親方の事務作業はLINE連絡と帳票不在が重なりやすい。",
+    );
+    expect(text).toContain("承認者と締切を先に決めると手戻りが減る。");
+    expect(text).not.toContain("当社の支援現場では、 一人親方");
+  });
+
+  test("joins PPTX and inline XLSX rich-text runs inside a single text object", async () => {
+    const pptx = new JSZip();
+    pptx.file(
+      "ppt/slides/slide1.xml",
+      `
+        <p:sld>
+          <p:cSld>
+            <p:spTree>
+              <p:sp>
+                <p:txBody>
+                  <a:p>
+                    <a:r><a:t>競合LPは</a:t></a:r>
+                    <a:r><a:t>価格訴求が強いが、</a:t></a:r>
+                    <a:r><a:t>導入後の運用説明が薄い。</a:t></a:r>
+                  </a:p>
+                </p:txBody>
+              </p:sp>
+            </p:spTree>
+          </p:cSld>
+        </p:sld>
+      `,
+    );
+    const pptxBuffer = Buffer.from(await pptx.generateAsync({ type: "uint8array" }));
+
+    const pptxText = await extractAttachmentText({
+      buffer: pptxBuffer,
+      filename: "competitor.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    });
+
+    expect(pptxText).toContain("競合LPは価格訴求が強いが、導入後の運用説明が薄い。");
+    expect(pptxText).not.toContain("競合LPは 価格訴求");
+
+    const xlsx = new JSZip();
+    xlsx.file(
+      "xl/worksheets/sheet1.xml",
+      `
+        <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+          <sheetData>
+            <row r="1">
+              <c r="A1" t="inlineStr">
+                <is>
+                  <r><t>初回相談では</t></r>
+                  <r><t>請求書と発注書の所在確認から始める。</t></r>
+                </is>
+              </c>
+            </row>
+          </sheetData>
+        </worksheet>
+      `,
+    );
+    const xlsxBuffer = Buffer.from(await xlsx.generateAsync({ type: "uint8array" }));
+
+    const xlsxText = await extractAttachmentText({
+      buffer: xlsxBuffer,
+      filename: "field-notes.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    expect(xlsxText).toContain("初回相談では請求書と発注書の所在確認から始める。");
+    expect(xlsxText).not.toContain("初回相談では 請求書");
+  });
+
   test("rejects empty and unsupported files with ApiError", async () => {
     await expect(
       extractAttachmentText({
