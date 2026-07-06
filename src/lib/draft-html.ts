@@ -119,18 +119,21 @@ export function appendAuthorBlockWhenNeeded(
   }
 
   const text = normalizeText(stripHtmlText(withoutManagedAuthor));
-  if (hasExistingAuthorSection(text, normalizedAuthor)) {
-    if (normalizedAuthor.imageUrl) {
-      const withoutExistingAuthor = removeExistingAuthorProfileBlock(
-        withoutManagedAuthor,
-        normalizedAuthor,
-      );
-      return `${withoutExistingAuthor}\n${buildAuthorBlockHtml(normalizedAuthor, options)}`.trim();
-    }
+  const headingAlreadyVisible = text.includes(normalizeText(authorSectionHeading));
+  const hasCompleteAuthorSection = hasExistingAuthorSection(text, normalizedAuthor);
+
+  // Keep an existing complete author section as-is unless an uploaded portrait must be injected.
+  if (hasCompleteAuthorSection && !normalizedAuthor.imageUrl) {
     return withoutManagedAuthor;
   }
 
-  return `${withoutManagedAuthor}\n${buildAuthorBlockHtml(normalizedAuthor, options)}`;
+  // Otherwise render the managed author block. Strip any existing author section or a bare/orphan
+  // "この記事の執筆者" heading first so the output does not end up with a duplicate heading.
+  const base =
+    hasCompleteAuthorSection || headingAlreadyVisible
+      ? removeExistingAuthorProfileBlock(withoutManagedAuthor, normalizedAuthor)
+      : withoutManagedAuthor;
+  return `${base}\n${buildAuthorBlockHtml(normalizedAuthor, options)}`.trim();
 }
 
 function hasExistingAuthorSection(
@@ -138,16 +141,18 @@ function hasExistingAuthorSection(
   author: Required<Pick<AuthorInput, "name" | "title" | "bio" | "imageUrl">>,
 ) {
   const headingAlreadyVisible = normalizedBodyText.includes(normalizeText(authorSectionHeading));
-  if (headingAlreadyVisible) {
-    return true;
-  }
-
   const nameAlreadyVisible = author.name && normalizedBodyText.includes(normalizeText(author.name));
   const titleAlreadyVisible =
     author.title && normalizedBodyText.includes(normalizeText(author.title));
   const bioAlreadyVisible = author.bio && normalizedBodyText.includes(normalizeText(author.bio));
 
-  return Boolean(nameAlreadyVisible && (titleAlreadyVisible || bioAlreadyVisible));
+  // A bare "この記事の執筆者" heading with no actual author identity in the body is an
+  // orphan/placeholder, not a complete author section. Require the author name to appear
+  // alongside the heading (or a title/bio) before suppressing the managed author block, so
+  // uploaded author name/title/bio are not silently dropped when only the heading exists.
+  return Boolean(
+    nameAlreadyVisible && (headingAlreadyVisible || titleAlreadyVisible || bioAlreadyVisible),
+  );
 }
 
 function buildFaqBlockHtml(items: Array<{ question: string; answer: string }>) {

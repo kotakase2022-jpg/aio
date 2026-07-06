@@ -174,6 +174,30 @@ describe("draft HTML rendering", () => {
     expect(html.match(/この記事の執筆者/g)).toHaveLength(2);
   });
 
+  test("supplements a bare author heading that has no author identity with the managed block", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml:
+          "<h2>本題</h2><p>Real content here.</p><h2>この記事の執筆者</h2>",
+        author: {
+          name: "Test Author",
+          title: "Content Strategist",
+          bio: "Writes practical B2B content operations guides.",
+          imageUrl: "",
+        },
+      }),
+    );
+
+    expect(html).toContain('class="aio-author-block"');
+    expect(html).toContain("Test Author");
+    expect(html).toContain("Content Strategist");
+    expect(html).toContain("Writes practical B2B content operations guides.");
+    expect(html).toContain("<h2>本題</h2>");
+    expect(html).toContain("Real content here.");
+    // The orphan heading is replaced by the managed block (aria-label + h2), not duplicated.
+    expect(html.match(/この記事の執筆者/g)).toHaveLength(2);
+  });
+
   test("appends the author block when the author name appears only incidentally", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
