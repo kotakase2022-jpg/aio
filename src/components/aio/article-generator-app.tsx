@@ -203,7 +203,6 @@ export function ArticleGeneratorApp() {
     applicationPassword: "",
     status: "draft" as "draft" | "publish",
   });
-  const generationAbortRef = useRef<AbortController | null>(null);
   const generationPollingRef = useRef<string | null>(null);
   const themeCandidateApplyTimerRef = useRef<number | null>(null);
 
@@ -418,149 +417,32 @@ export function ArticleGeneratorApp() {
       return;
     }
 
-    if (typeof window !== "undefined") {
-      setActiveError("");
-      setDraft(isRegeneration ? previousDraft : null);
-      setTab("preview");
-      setSteps(generationSteps);
-      setFetchedReferences([]);
-      setFetchedCompetitors([]);
-      persistReusableInputs(effectiveFormPayload);
-
-      try {
-        updateStep("fetch_refs", "running", "サーバー側ジョブを開始しています");
-        const started = await apiPost<{ job: GenerationJob }>("/api/generation-jobs", {
-          form: effectiveFormPayload,
-          competitorResearch: editableResearch,
-        });
-
-        setActiveGenerationJobId(started.job.id);
-        generationPollingRef.current = started.job.id;
-        window.localStorage.setItem(activeGenerationJobStorageKey, started.job.id);
-        applyGenerationJob(started.job);
-        await pollGenerationJob(started.job.id);
-      } catch (error) {
-        if (isRegeneration && previousDraft) {
-          setDraft(previousDraft);
-        }
-        setActiveError(readError(error));
-        markRunningAsError(readError(error));
-      }
-      return;
-    }
-
-    const controller = new AbortController();
-    generationAbortRef.current = controller;
-    const { signal } = controller;
-
     setActiveError("");
     setDraft(isRegeneration ? previousDraft : null);
     setTab("preview");
     setSteps(generationSteps);
+    setFetchedReferences([]);
+    setFetchedCompetitors([]);
+    persistReusableInputs(effectiveFormPayload);
 
     try {
-      updateStep("fetch_refs", "running");
-      const referenceResults = await fetchInputs(references, referenceFiles, signal);
-      throwIfAborted(signal);
-      setFetchedReferences(referenceResults);
-      updateStep(
-        "fetch_refs",
-        "done",
-        summarizeFetch(referenceResults, "参照URL"),
-      );
+      updateStep("fetch_refs", "running", "サーバー側ジョブを開始しています");
+      const started = await apiPost<{ job: GenerationJob }>("/api/generation-jobs", {
+        form: effectiveFormPayload,
+        competitorResearch: editableResearch,
+      });
 
-      updateStep("fetch_competitors", "running");
-      const competitorResults = await fetchInputs(competitors, competitorFiles, signal);
-      throwIfAborted(signal);
-      setFetchedCompetitors(competitorResults);
-      updateStep(
-        "fetch_competitors",
-        "done",
-        summarizeFetch(competitorResults, "競合URL"),
-      );
-
-      updateStep("merge_research", "running");
-      updateStep(
-        "merge_research",
-        "done",
-        editableResearch ? "AI競合調査結果を統合" : "競合調査なしで続行",
-      );
-
-      updateStep("generate_outline", "running");
-      updateStep("generate_body", "running");
-      updateStep("generate_meta", "running");
-      updateStep("image_prompts", "running");
-      const article = await apiPost<{ result: ArticleGenerationResult }>(
-        "/api/generate-article",
-        {
-          form: effectiveFormPayload,
-          fetchedReferences: referenceResults,
-          fetchedCompetitors: competitorResults,
-          competitorResearch: editableResearch,
-        },
-        { signal },
-      );
-      throwIfAborted(signal);
-      updateStep("generate_outline", "done");
-      updateStep("generate_body", "done");
-      updateStep("generate_meta", "done");
-      updateStep("image_prompts", "done");
-
-      updateStep("images", "running");
-      const images = await createArticleImages(article.result, signal);
-      throwIfAborted(signal);
-      updateStep("images", "done", `${images.length}枚を反映`);
-
-      updateStep("save", "running");
-      const now = new Date().toISOString();
-      const bodyWithImages = injectImages(article.result.body_html, images);
-      const nextDraft: ArticleDraft = {
-        id: crypto.randomUUID(),
-        inputPayload: formPayload,
-        fetchedReferences: referenceResults,
-        fetchedCompetitors: competitorResults,
-        competitorResearch: editableResearch ?? undefined,
-        aiResult: article.result,
-        editedTitle: article.result.selected_title,
-        editedSlug: article.result.suggested_slug,
-        editedMetaDescription: article.result.meta_description,
-        editedBodyHtml: bodyWithImages,
-        faqItems: article.result.faq_items,
-        tags: article.result.tags,
-        categories: article.result.categories,
-        images,
-        author,
-        status: "draft",
-        createdAt: now,
-        updatedAt: now,
-      };
-      const saved = await apiPost<{ draft: ArticleDraft; storageMode: string }>(
-        "/api/save-draft",
-        { draft: prepareDraftForSave(nextDraft) },
-        { signal },
-      );
-      throwIfAborted(signal);
-      setDraft({ ...nextDraft, updatedAt: saved.draft.updatedAt });
-      updateStep("save", "done", `保存先: ${saved.storageMode}`);
+      setActiveGenerationJobId(started.job.id);
+      generationPollingRef.current = started.job.id;
+      window.localStorage.setItem(activeGenerationJobStorageKey, started.job.id);
+      applyGenerationJob(started.job);
+      await pollGenerationJob(started.job.id);
     } catch (error) {
-      if (isAbortError(error)) {
-        if (isRegeneration && previousDraft) {
-          setDraft(previousDraft);
-        }
-        setActiveError("記事作成を停止しました。");
-        markRunningAsError("ユーザー操作により停止しました。");
-        return;
-      }
-
       if (isRegeneration && previousDraft) {
         setDraft(previousDraft);
       }
       setActiveError(readError(error));
       markRunningAsError(readError(error));
-    } finally {
-      if (generationAbortRef.current === controller) {
-        generationAbortRef.current = null;
-      }
     }
   }
 
@@ -583,8 +465,6 @@ export function ArticleGeneratorApp() {
       return;
     }
 
-    generationAbortRef.current?.abort();
-    generationAbortRef.current = null;
     setActiveError("記事作成を停止しました。");
     markRunningAsError("ユーザー操作により停止しました。");
   }
@@ -1233,110 +1113,6 @@ export function ArticleGeneratorApp() {
       target?.focus();
       target?.scrollIntoView({ block: "center", behavior: "smooth" });
     }, 0);
-  }
-
-  async function fetchInputs(
-    inputs: KeyValueInput[],
-    files: AttachedFileInput[] = [],
-    signal?: AbortSignal,
-  ) {
-    const urls = inputs.map((item) => item.url?.trim()).filter(Boolean) as string[];
-    const results = await Promise.all(
-      urls.map(async (url) => {
-        try {
-          const response = await apiPost<{ result: FetchResult }>(
-            "/api/fetch-url-content",
-            { url },
-            { signal },
-          );
-          return response.result;
-        } catch (error) {
-          if (isAbortError(error)) {
-            throw error;
-          }
-
-          return { url, ok: false, reason: readError(error) };
-        }
-      }),
-    );
-
-    for (const item of inputs) {
-      if (item.text?.trim()) {
-        results.push({
-          url: "manual-text",
-          title: "手動入力テキスト",
-          text: item.text.trim(),
-          ok: true,
-          sourceType: "manual",
-        });
-      }
-    }
-
-    for (const file of files) {
-      if (file.ok && file.text?.trim()) {
-        results.push({
-          url: `file:${file.name}`,
-          title: file.name,
-          text: file.text.trim(),
-          ok: true,
-          sourceType: "file",
-          fileName: file.name,
-          fileType: file.type,
-        });
-        continue;
-      }
-
-      if (!file.ok) {
-        results.push({
-          url: `file:${file.name}`,
-          title: file.name,
-          ok: false,
-          reason: file.error || "添付ファイルを解析できませんでした。",
-          sourceType: "file",
-          fileName: file.name,
-          fileType: file.type,
-        });
-      }
-    }
-
-    return results;
-  }
-
-  async function createArticleImages(article: ArticleGenerationResult, signal?: AbortSignal) {
-    if (imageCount === 0) {
-      return [];
-    }
-
-    if (visualTone.mode === "upload" && visualTone.uploadedImageUrl) {
-      return [
-        {
-          id: crypto.randomUUID(),
-          slot: "featured" as const,
-          url: visualTone.uploadedImageUrl,
-          path: visualTone.uploadedImagePath,
-          prompt: visualTone.uploadedImageName || "Uploaded article image",
-          altText: article.selected_title,
-          source: "uploaded" as const,
-        },
-      ];
-    }
-
-    const toneText = visualTone.mode === "custom" ? visualTone.custom : visualTone.preset;
-    const prompts = article.image_prompts.slice(0, imageCount).map((prompt) => ({
-      ...prompt,
-      prompt: buildArticleImagePrompt(prompt.prompt, toneText, article),
-    }));
-
-    return Promise.all(
-      prompts.map(async (prompt) => {
-        const response = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-          prompt: prompt.prompt,
-          slot: prompt.slot,
-          altText: prompt.alt_text,
-        }, { signal });
-        return response.image;
-      }),
-    );
   }
 
   return (
@@ -3371,14 +3147,6 @@ function formatDateTime(value: string) {
   return formatJaDateTime(value);
 }
 
-function summarizeFetch(results: FetchResult[], label: string) {
-  const urlResults = results.filter((result) => result.url !== "manual-text");
-  const failed = urlResults.filter((result) => !result.ok);
-  if (urlResults.length === 0) return `${label}なし`;
-  if (failed.length === 0) return `${urlResults.length}件取得`;
-  return `${urlResults.length - failed.length}件取得、${failed.length}件失敗`;
-}
-
 function injectImages(html: string, images: ArticleImage[]) {
   let output = html;
   const featured = images.find((image) => image.slot === "featured");
@@ -3431,25 +3199,6 @@ function buildImageRegenerationPrompt(
     "Quality bar: premium Japanese B2B SaaS / consulting / financial whitepaper visual, crisp layout, coherent perspective, refined lighting, generous whitespace, high-end corporate polish.",
     "Keep the regenerated image article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
     "Avoid readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, distorted hands, unnecessary people, clip-art, cheap stock-photo look, and dark blurry AI-art backgrounds.",
-  ].join("\n");
-}
-
-function buildArticleImagePrompt(
-  basePrompt: string,
-  toneText: string | undefined,
-  article: Pick<ArticleGenerationResult, "article_summary" | "headings" | "key_takeaways">,
-) {
-  return [
-    basePrompt,
-    "",
-    `Visual tone from user: ${toneText || "clean Japanese B2B whitepaper editorial style"}`,
-    `Article summary anchor: ${truncatePromptLine(article.article_summary, 220)}`,
-    `Key takeaways to visualize: ${article.key_takeaways.slice(0, 3).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
-    `Relevant headings: ${article.headings.slice(0, 4).map((heading) => truncatePromptLine(heading.text, 80)).join(" / ")}`,
-    "Create a premium 3:2 landscape editorial visual for a Japanese B2B article.",
-    "Use a refined whitepaper/SaaS/consulting composition with clean geometry, subtle depth, balanced margins, and a clear focal concept.",
-    "Make the visual article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
-    "Avoid text-heavy layouts, readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, unnecessary people, and cheap stock-photo aesthetics.",
   ].join("\n");
 }
 
@@ -4040,16 +3789,6 @@ async function apiGet<T>(url: string): Promise<T> {
 
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function throwIfAborted(signal: AbortSignal) {
-  if (signal.aborted) {
-    throw new DOMException("Article generation stopped.", "AbortError");
-  }
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === "AbortError";
 }
 
 function imageGenerationEstimate(count: ImageCount, mode: VisualToneInput["mode"]) {
