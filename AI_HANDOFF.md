@@ -22,7 +22,8 @@ This pass focused only on the leftover article-quality regex boundary issue from
 - Latest local commit for this handoff: this commit, `Tighten article quality English regexes`
 - Last known good commit: this commit; local `npm.cmd run quality` passes after this fix.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Installed and responding on PR #1. Latest visible PR state before this pass showed CodeRabbit pending/no new inline findings available from public PR data.
+- CodeRabbit OSS review status: Installed and responding on PR #1. After pushing this pass, the PR status context is `PENDING`.
+- Hosted CI status after push: GitHub Actions `quality-gate` / `Typecheck, lint, tests, E2E, build` is `QUEUED` for the pushed head.
 
 ## 3. What Was Done
 This Codex pass closed the optional article-quality regex boundary item:
@@ -51,17 +52,17 @@ No AGENTS/CLAUDE operating-rule changes were needed; both already describe CodeR
 
 ## 6. Known Issues
 - Live OpenAI/Supabase/WordPress sandbox verification remains unproven.
-- Latest hosted GitHub Actions after the next push must be checked.
-- CodeRabbit review after the next push may still be pending.
+- Latest hosted GitHub Actions is queued after the push and must be checked.
+- CodeRabbit review/status is pending after the push and must be checked.
 - The broader 100/100 target still needs continued manual/live validation and iterative UX/content-quality improvements.
 
 ## 7. CodeRabbit Review
 CodeRabbit OSS findings and response status:
 
-- Review status: Installed and responding on PR #1. `.coderabbit.yaml` is present and was acknowledged by CodeRabbit in prior checks.
+- Review status: Installed and responding on PR #1. `.coderabbit.yaml` is present and was acknowledged by CodeRabbit in prior checks. Latest post-push status context is pending.
 - Critical findings: None visible from the latest public PR data checked before this pass.
 - Resolved findings in this pass: Non-CodeRabbit handoff item for English regex boundary false positives in article quality checks.
-- Deferred findings: Live sandbox verification and any new CodeRabbit comments after the next push.
+- Deferred findings: Live sandbox verification and any new CodeRabbit comments after the latest push.
 - False positives / not applicable: None recorded in this pass.
 
 ## 8. Optional Bugbot Findings
@@ -101,15 +102,15 @@ Claude Code should first review this small regex/test change:
 
 1. Confirm that `\bour\b`, `\bwe\b`, and `\bLP\b` preserve intended English matches while preventing substring false positives.
 2. Confirm the added regressions are valid and do not over-constrain legitimate English first-party or LP references.
-3. Re-check PR #1 CodeRabbit output and hosted GitHub Actions after the latest push.
+3. Re-check PR #1 CodeRabbit output and hosted GitHub Actions after the latest push completes.
 
 After that, resume broader 100/100 improvement work one item at a time, preferably starting with live sandbox contract verification planning for OpenAI/Supabase/WordPress.
 
 ## 11. Suggested Review Scope for Claude Code
 - `src/lib/article-quality.ts`
 - `tests/unit/article-quality.test.ts`
-- PR #1 CodeRabbit comments after this commit is pushed.
-- Hosted GitHub Actions status after this commit is pushed.
+- PR #1 CodeRabbit comments/status after the pending review completes.
+- Hosted GitHub Actions status after the queued run completes.
 
 ## 12. Risk Notes
 - The regex fix intentionally changes only English bare-token matching. Japanese terms and longer English signals such as `support team`, `client`, `customer`, `observed`, `observation`, and `experience` remain unchanged.
