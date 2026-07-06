@@ -43,6 +43,15 @@ The latest local full gate passed:
 - `npm run test:e2e`
 - `npm run build`
 
+The latest pushed GitHub Actions run also passed:
+
+- Commit: `1ab2dd4`
+- Workflow: `quality-gate`
+- Job: `Typecheck, lint, tests, E2E, build`
+- Run: `28762907982`
+- Result: success across setup, dependency install, typecheck, lint, test integrity, unit/integration
+  tests, external contract tests, coverage, Playwright E2E, production build, and artifact upload.
+
 Current E2E coverage includes 45 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -88,11 +97,11 @@ These gaps prevent a true 100/100 completion claim:
   initial form, sticky CTA, generation logs, primary-information input, left-card anchor movement,
   generated draft preview/editing, fullscreen preview, copy recovery, HTML export messaging, and
   WordPress section visibility. A live WordPress recovery pass still remains for sandbox credentials.
-- CodeRabbit OSS is installed for `kotakase2022-jpg/aio`, but it has not yet reviewed an actual PR
-  for this diff. The repository configuration is present, but the effective hosted review result is
-  unproven until a PR runs.
-- The current worktree contains a large uncommitted diff. It should be split or reviewed carefully
-  before merge to keep CodeRabbit and human review effective.
+- CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. A review was
+  requested again after the latest push, but the latest fetched PR comments did not yet include a
+  CodeRabbit reply or inline CodeRabbit findings for commit `1ab2dd4`.
+- The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. The current local worktree
+  was clean after push, so the remaining risk is hosted review completion, not unstaged drift.
 
 ## Current Self Score
 
@@ -107,9 +116,9 @@ recovery verification, and live generated-output quality review are not yet comp
 
 Highest-value next actions:
 
-1. Review and, if needed, split the large uncommitted diff before PR creation.
-2. Open/update a PR so the installed CodeRabbit OSS app can review `.coderabbit.yaml` and the implementation diff.
-3. Run `@coderabbitai configuration` on the PR to verify the effective CodeRabbit configuration.
-4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
-5. Run sandbox live checks only after readiness passes and every target is confirmed non-production.
-6. Complete the remaining sandbox browser pass focused on real WordPress posting recovery.
+1. Re-check PR #1 for CodeRabbit's latest review response after the `@coderabbitai review` request
+   on 2026-07-06 10:55 +09:00.
+2. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
+3. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
+4. Run sandbox live checks only after readiness passes and every target is confirmed non-production.
+5. Complete the remaining sandbox browser pass focused on real WordPress posting recovery.
