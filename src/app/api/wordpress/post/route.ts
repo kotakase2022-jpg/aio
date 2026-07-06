@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApiError, errorJson, okJson } from "@/lib/server/http";
+import { getDraft } from "@/lib/server/drafts";
 import { publishDraftToWordpress } from "@/lib/server/wordpress";
 import type { ArticleDraft } from "@/types/aio";
 
@@ -16,7 +17,16 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const body = schema.parse(await request.json());
-    const draft = body.draft as ArticleDraft;
+    const requestDraft = body.draft as ArticleDraft;
+    const draft = requestDraft.id ? await getDraft(requestDraft.id) : null;
+    if (!draft) {
+      throw new ApiError(
+        "Draft not found.",
+        404,
+        "Save and approve the draft before posting to WordPress.",
+      );
+    }
+
     if (draft.status !== "approved") {
       throw new ApiError(
         "承認済みドラフトのみWordPress投稿できます。",
