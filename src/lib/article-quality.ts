@@ -997,12 +997,12 @@ function extractSignalTerms(value: string | undefined, stopWords: Set<string>) {
 }
 
 function termAppearsInText(term: string, text: string) {
-  if (text.includes(term)) {
-    return true;
+  if (/^[A-Za-z0-9_-]+$/.test(term)) {
+    return englishTokenAppearsInText(term, text);
   }
 
-  if (/^[A-Za-z0-9_-]+$/.test(term)) {
-    return text.toLowerCase().includes(term.toLowerCase());
+  if (text.includes(term)) {
+    return true;
   }
 
   if (term.length < 5) {
@@ -1010,6 +1010,11 @@ function termAppearsInText(term: string, text: string) {
   }
 
   return slidingWindows(term, 4).some((part) => text.includes(part));
+}
+
+function englishTokenAppearsInText(term: string, text: string) {
+  const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![A-Za-z0-9_-])${escapedTerm}(?![A-Za-z0-9_-])`, "i").test(text);
 }
 
 function includesLongVerbatimClause(source: string | undefined, targetText: string) {

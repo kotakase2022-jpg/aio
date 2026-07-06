@@ -86,6 +86,26 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
+  test("does not count English first-party signal terms inside longer words", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article operations require attributed operational evidence</h2>
+        <p>Our editors describe platform alpha beta evidence before publication, but this copy never mentions the missing document term from the input.</p>
+        <table><tr><th>Decision point</th><td>Alpha, beta evidence and publication timing are checked before approval.</td></tr></table>
+        <ul><li>Failure pattern: teams treat platform wording as if it reflected the original field input.</li><li>Review note: keep exact operational terms visible when they matter.</li></ul>
+        <h2>Platform wording is not enough for original evidence</h2>
+        <p>FAQ: editors separate source evidence from first-party claims. Source: https://example.com/reference</p>
+      `,
+      {
+        primaryInfo: "Our form alpha beta",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-reflection", passed: false }),
+    );
+  });
+
   test("flags first-party information that is only mentioned after a generic opening", () => {
     const result = evaluateArticleQuality(
       `
@@ -764,6 +784,26 @@ describe("evaluateArticleQuality", () => {
         competitorTexts: [
           "A rival article emphasizes pricing and implementation timeline. Another landing page promotes grant support, while onboarding and approval flow are thinner.",
         ],
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "competitor-insight-reflection", passed: false }),
+    );
+  });
+
+  test("does not count English competitor signal terms inside longer words", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article operations need a real comparison axis</h2>
+        <p>Compared with rival pages, the platform explains grant support, onboarding, and pricing, but it does not mention the missing document term from the competitor input.</p>
+        <table><tr><th>Decision point</th><td>Grant support, onboarding, pricing, and publication caveats are compared.</td></tr></table>
+        <ul><li>Failure pattern: platform wording can hide a missing competitor term.</li><li>Review note: add the actual comparison axis before approval.</li></ul>
+        <h2>Missing terms should not pass competitor reflection</h2>
+        <p>FAQ: editors should verify competitor-specific terms before publishing. Source: https://example.com/reference</p>
+      `,
+      {
+        competitorTexts: ["Form grant onboarding pricing"],
       },
     );
 
