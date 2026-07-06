@@ -1025,35 +1025,50 @@ export function ArticleGeneratorApp() {
       let nextImages = draft.images;
       let nextBodyHtml = draft.editedBodyHtml;
       const rewriteInstruction = instruction.trim();
+      const regenerationFailures: string[] = [];
 
       for (const image of generatedImages) {
-        const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-          prompt: buildImageRegenerationPrompt(image.prompt, rewriteInstruction, draft.aiResult),
-          slot: image.slot,
-          altText: image.altText,
-        });
+        try {
+          const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
+            prompt: buildImageRegenerationPrompt(image.prompt, rewriteInstruction, draft.aiResult),
+            slot: image.slot,
+            altText: image.altText,
+          });
 
-        nextImages = nextImages.map((item) =>
-          item.id === image.id ? result.image : item,
-        );
-        nextBodyHtml = replaceImageReferences(nextBodyHtml, image, result.image);
+          nextImages = nextImages.map((item) =>
+            item.id === image.id ? result.image : item,
+          );
+          nextBodyHtml = replaceImageReferences(nextBodyHtml, image, result.image);
+        } catch (error) {
+          regenerationFailures.push(`${image.slot}: ${readError(error)}`);
+        }
       }
 
       const recoveredImages: ArticleImage[] = [];
       for (const prompt of missingImagePrompts) {
-        const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-          prompt: buildImageRegenerationPrompt(prompt.prompt, rewriteInstruction, draft.aiResult),
-          slot: prompt.slot,
-          altText: prompt.alt_text,
-        });
+        try {
+          const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
+            prompt: buildImageRegenerationPrompt(prompt.prompt, rewriteInstruction, draft.aiResult),
+            slot: prompt.slot,
+            altText: prompt.alt_text,
+          });
 
-        recoveredImages.push(result.image);
-        nextImages = [...nextImages, result.image];
+          recoveredImages.push(result.image);
+          nextImages = [...nextImages, result.image];
+        } catch (error) {
+          regenerationFailures.push(`${prompt.slot}: ${readError(error)}`);
+        }
       }
 
       if (recoveredImages.length) {
         nextBodyHtml = injectImages(nextBodyHtml, recoveredImages);
         nextImages = sortArticleImages(nextImages);
+      }
+
+      const hadSuccessfulRegeneration =
+        nextImages !== draft.images || nextBodyHtml !== draft.editedBodyHtml;
+      if (!hadSuccessfulRegeneration && regenerationFailures.length > 0) {
+        throw new Error(regenerationFailures.join(" / "));
       }
 
       setDraft({
@@ -1062,6 +1077,13 @@ export function ArticleGeneratorApp() {
         editedBodyHtml: nextBodyHtml,
         updatedAt: new Date().toISOString(),
       });
+      if (regenerationFailures.length > 0) {
+        setActiveError(
+          `一部の画像再作成に失敗しました。成功した画像は反映済みです。${regenerationFailures.join(
+            " / ",
+          )}`,
+        );
+      }
       setImageRegenerationProgress(100);
     } catch (error) {
       setActiveError(readError(error));

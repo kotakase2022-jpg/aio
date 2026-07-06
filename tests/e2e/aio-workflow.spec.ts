@@ -1096,6 +1096,61 @@ test("image regeneration failure shows a recoverable error and resets progress",
   expect(errors()).toEqual([]);
 });
 
+test("bulk image regeneration preserves successful images when a later image fails", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generate-image$/],
+  });
+  const completedJob = createCompletedGenerationJob();
+  const originalImage = {
+    ...completedJob.draft!.images[0],
+    url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  };
+  completedJob.draft = {
+    ...completedJob.draft!,
+    images: [
+      originalImage,
+      {
+        ...originalImage,
+        id: "img-2",
+        slot: "inline-1",
+        path: "generated/inline-1.png",
+        prompt: "Inline editorial workflow visual",
+        altText: "Inline workflow image",
+      },
+    ],
+  };
+  const calls = await mockCommonApiRoutes(page, completedJob, {
+    generateImageFailOnCalls: [2],
+  });
+
+  await login(page);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text for partial image regeneration failure.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await page.getByTestId("image-regenerate-all-button").click();
+  await page
+    .getByTestId("image-regeneration-instruction")
+    .fill("Regenerate both images with more concrete editorial detail.");
+  await page.getByTestId("image-regeneration-start").click();
+
+  await expect(page.getByText("一部の画像再作成に失敗しました。")).toBeVisible();
+  expect(calls.generateImage).toBe(2);
+  await expect(page.getByTestId("image-regeneration-progress")).toHaveAttribute(
+    "aria-valuenow",
+    "100",
+  );
+  await expect(page.locator('img[src*="regenerated-1.png"]').first()).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "画像のみ再作成" })).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("drafts with failed initial image generation can regenerate from saved prompts", async ({
   page,
 }) => {
@@ -2913,6 +2968,7 @@ async function mockCommonApiRoutes(
     competitorResearchShouldFail?: boolean;
     competitorResearchFailOnce?: boolean;
     generateImageShouldFail?: boolean;
+    generateImageFailOnCalls?: number[];
     generationJobFailureCall?: number;
     wordpressPostShouldFail?: boolean;
     wordpressConnectShouldReturnRawValidation?: boolean;
@@ -3061,7 +3117,10 @@ async function mockCommonApiRoutes(
 
   await page.route("**/api/generate-image", async (route) => {
     calls.generateImage += 1;
-    if (options.generateImageShouldFail) {
+    if (
+      options.generateImageShouldFail ||
+      options.generateImageFailOnCalls?.includes(calls.generateImage)
+    ) {
       await route.fulfill({
         status: 500,
         json: { ok: false, error: "画像再作成に失敗しました。" },
