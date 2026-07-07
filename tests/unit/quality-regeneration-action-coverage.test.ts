@@ -79,6 +79,8 @@ describe("quality regeneration action coverage", () => {
     const action = qualityRegenerationAction("generic-phrases");
 
     expect(action).toContain("わかりやすく解説");
+    expect(action).toContain("today's fast-paced digital landscape");
+    expect(action).toContain("unlock the potential");
     expect(action).toContain("参照元の事実");
     expect(action).toContain("一次情報");
     expect(action).toContain("判断基準");
@@ -90,6 +92,15 @@ describe("quality regeneration action coverage", () => {
     expect(action).toContain("冒頭400字以内");
     expect(action).toContain("一次情報");
     expect(action).toContain("現場で見た条件");
+  });
+
+  test("keeps generic opening frame regeneration focused away from English boilerplate", () => {
+    const action = qualityRegenerationAction("generic-opening-frame");
+
+    expect(action).toContain("結論");
+    expect(action).toContain("現場観察");
+    expect(action).toContain("today's fast-paced digital landscape");
+    expect(action).toContain("ever-evolving landscape");
   });
 
   test("keeps an explicit non-empty fallback action for future quality checks", () => {

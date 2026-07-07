@@ -99,6 +99,10 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("streamline");
     expect(call?.instructions).toContain("enhance productivity");
     expect(call?.instructions).toContain("leverage");
+    expect(call?.instructions).toContain("today's fast-paced digital landscape");
+    expect(call?.instructions).toContain("ever-evolving landscape");
+    expect(call?.instructions).toContain("unlock the potential");
+    expect(call?.instructions).toContain("empower businesses");
     expect(call?.instructions).toContain("human editor who has interviewed the business");
     expect(call?.instructions).toContain("Do not paste long reference or competitor passages");
     expect(call?.instructions).toContain("Do not paste primaryInfo verbatim");

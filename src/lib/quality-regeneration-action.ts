@@ -11,7 +11,7 @@ export function qualityRegenerationAction(checkId: string) {
   }
 
   if (checkId === "generic-opening-frame") {
-    return "冒頭を背景説明から始めず、結論、定義、現場観察、条件のいずれかで書き出す。";
+    return "冒頭を背景説明から始めず、結論、定義、現場観察、条件のいずれかで書き出す。In today's fast-paced digital landscape、ever-evolving landscape型の英語定型導入も削る。";
   }
 
   if (checkId === "generic-opening-density") {
@@ -23,7 +23,7 @@ export function qualityRegenerationAction(checkId: string) {
   }
 
   if (checkId === "generic-phrases") {
-    return "近年、重要です、注目されています、わかりやすく解説等の汎用句を削り、参照元の事実、一次情報、固有名詞、現場例、判断基準に置き換える。";
+    return "近年、重要です、注目されています、わかりやすく解説、today's fast-paced digital landscape、unlock the potential等の汎用句を削り、参照元の事実、一次情報、固有名詞、現場例、判断基準に置き換える。";
   }
 
   if (checkId === "verbose-ai-phrasing") {
