@@ -32,15 +32,15 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 06:51 +09:00 after expanding title-quality
-coverage for short-topic beginner and explainer templates such as `AIO toha`,
-beginner-friendly explainer titles, and introductory-title patterns:
+The latest local full gate passed on 2026-07-08 07:07 +09:00 after tightening title-quality
+coverage so English input terms must match as title tokens, not as accidental substrings inside
+longer words such as `platform`:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 46 files
-  - `npm run test`: passed, 42 files / 317 tests
+  - `npm run test`: passed, 42 files / 318 tests
   - `npm run test:contract`: passed, 3 files / 13 tests
   - `npm run test:coverage`: passed, statements 88.21%, branches 76.19%, functions 92.13%,
     lines 88.65%
@@ -130,6 +130,16 @@ The latest pushed head containing that title-quality pass and handoff update was
 - CodeRabbit: success
 - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m32s
 
+The latest pushed status-only head before this pass was also checked:
+
+- Commit: `45642d1`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m33s
+
+The current local branch also includes implementation commit `894c666`, which makes English title
+input-signal matching token-aware. Hosted CodeRabbit and Actions must be re-checked after this
+handoff/docs update is pushed.
+
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -144,7 +154,8 @@ quality checks when they read like generic AI copy.
 
 Title-quality coverage checks that selected titles and title candidates are specific enough for the
 topic. It now also flags short-topic beginner/explainer templates that can make otherwise useful
-drafts feel like commodity SEO content before the body is reviewed.
+drafts feel like commodity SEO content before the body is reviewed. It also verifies that English
+input terms are not counted when they only appear as substrings inside longer title words.
 
 Publishing-readiness coverage now also checks meta descriptions, image alt quality, source URL
 deduplication, author block preservation, edited image alt text in publishable HTML / WordPress post
@@ -194,8 +205,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  are green through implementation/handoff head `e57d421`; re-check any later status-only handoff
-  commits on the current PR head.
+  are green through status-only head `45642d1`; re-check the current English title-signal
+  implementation and handoff/docs commits after they are pushed.
 
 ## Current Self Score
 
@@ -210,8 +221,8 @@ human review of real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit if a new status-only handoff commit is pushed after
-   `e57d421`.
+1. Re-check hosted Actions and CodeRabbit after the `894c666` title-signal implementation and
+   following handoff/docs update are pushed.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
