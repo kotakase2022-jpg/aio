@@ -86,6 +86,16 @@ describe("check-live-readiness script", () => {
     });
   });
 
+  test("fails closed for unknown provider names", async () => {
+    await withTempProject(async (projectDir) => {
+      const result = await runReadiness(projectDir, "unknown-provider");
+
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("Unknown live readiness provider: unknown-provider");
+    });
+  });
+
   test("fails closed for production-like live write hosts unless explicitly allowlisted", async () => {
     await withTempProject(async (projectDir) => {
       await writeFile(
