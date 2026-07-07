@@ -8,11 +8,11 @@ export async function fetchUrlContent(url: string): Promise<FetchResult> {
   try {
     parsed = new URL(url);
   } catch {
-    throw new ApiError("URL format is invalid.", 400);
+    throw new ApiError("URL形式が正しくありません。", 400);
   }
 
   if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new ApiError("Only http and https URLs are supported.", 400);
+    throw new ApiError("httpまたはhttpsのURLを入力してください。", 400);
   }
 
   const controller = new AbortController();
@@ -33,7 +33,7 @@ export async function fetchUrlContent(url: string): Promise<FetchResult> {
       return {
         url,
         ok: false,
-        reason: `HTTP ${response.status} ${response.statusText}`,
+        reason: `URL取得に失敗しました（HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}）。`,
         sourceType: "url",
       };
     }
@@ -43,7 +43,9 @@ export async function fetchUrlContent(url: string): Promise<FetchResult> {
       return {
         url,
         ok: false,
-        reason: `Unsupported content type: ${contentType || "unknown"}`,
+        reason: `HTMLページではないため取得できませんでした（content-type: ${
+          contentType || "unknown"
+        }）。`,
         sourceType: "url",
       };
     }
@@ -89,7 +91,7 @@ export async function fetchUrlContent(url: string): Promise<FetchResult> {
         url,
         title,
         ok: false,
-        reason: "Could not extract enough page text.",
+        reason: "十分な本文を抽出できませんでした。",
         sourceType: "url",
       };
     }
@@ -103,15 +105,15 @@ export async function fetchUrlContent(url: string): Promise<FetchResult> {
       reason:
         articleText.length >= 120
           ? undefined
-          : "Page text was limited, so metadata and headings were used.",
+          : "本文量が少ないため、メタ情報・見出しを利用しました。",
     };
   } catch (error) {
     const reason =
       error instanceof Error && error.name === "AbortError"
-        ? "Request timed out."
+        ? "通信がタイムアウトしました。"
         : error instanceof Error
-          ? error.message
-          : "Unknown fetch error.";
+          ? `URL取得に失敗しました。${error.message}`
+          : "URL取得中に不明なエラーが発生しました。";
 
     return { url, ok: false, reason, sourceType: "url" };
   } finally {
