@@ -4,54 +4,54 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: 前回handoffは Current owner: Codex / Next owner: Claude Code / Loop: 3 continuation。今回も同じGoal継続中のCodex再開として、i18n残課題のうちドラフト承認エラー表示を小さく改善してClaude Codeへ戻す。
-- Phase: Autonomous Improvement / Draft Approval Error Localization / Handoff
-- Last updated: 2026-07-07 21:39 +09:00
+- Loop number inferred from: 前回handoffは Current owner: Codex / Next owner: Claude Code / Loop: 3 continuation。今回も同じGoal継続中のCodex再開として、i18n残課題のうちSupabase下書き保存/読み込みエラー表示を小さく改善してClaude Codeへ戻す。
+- Phase: Autonomous Improvement / Supabase Draft Error Localization / Handoff
+- Last updated: 2026-07-07 21:49 +09:00
 
 ## 1. Current Goal
 今回の目的：
 
 AIO記事生成アプリを、機能信頼性・PCブラウザ画面遷移・日常利用UX・非commodity品質の観点で100/100へ近づける。
 
-今回のCodexフェーズでは、i18n残課題のうちドラフト承認エラーを改善した。承認対象の下書き情報が欠けている場合や保存済みドラフトが見つからない場合に、画面上で分かる日本語と復旧方針が返るようにした。
+今回のCodexフェーズでは、i18n残課題のうちSupabase利用時の下書き保存/読み込みエラーを改善した。Vercel/Supabase構成で下書き保存、画像保存、下書き読み込み、画像読み込みが失敗した場合に、画面上で分かる日本語の主エラーが返るようにした。
 
 Goal全体は未完了。ライブsandbox契約テスト、残Deferred指摘、実生成記事品質の人間評価は継続課題。
 
 ## 2. Current Branch / Commit / PR
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `7a1e5e0 Localize draft approval errors`
-- Previous handoff commit: `171f3ab Update handoff after file extraction localization`
-- Previous implementation commit: `3d8dfb1 Localize file extraction validation errors`
-- Last known good commit: `7a1e5e0 Localize draft approval errors`
+- Latest implementation commit: `f6006e6 Localize Supabase draft persistence errors`
+- Previous handoff commit: `bb22b91 Update handoff after draft approval localization`
+- Previous implementation commit: `7a1e5e0 Localize draft approval errors`
+- Last known good commit: `f6006e6 Localize Supabase draft persistence errors`
 - Last known good verification: `npm.cmd run quality` 成功（実装commit前に実行）
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: 今回作業開始時点でPR #1はCodeRabbit SUCCESS、GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS、mergeState CLEAN。`7a1e5e0` とこのhandoff commit push後に再確認が必要。
+- CodeRabbit OSS review status: 今回作業開始時点でPR #1はCodeRabbit SUCCESS、GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS、mergeState CLEAN。`f6006e6` とこのhandoff commit push後に再確認が必要。
 
 ## 3. What Was Done
 今回完了したこと：
 
 - 必読ファイル、作業ツリー、直近commit、PR #1 checksを確認。
 - PR #1は作業開始時点でCodeRabbit OSS SUCCESS、GitHub Actions SUCCESS、mergeState CLEANであることを確認。
-- Next.js Route Handlerのローカルdocsを確認。
-- `src/app/api/approve-draft/route.ts` と `src/lib/server/drafts.ts` に残っていた英語のドラフト承認エラーを日本語化。
-  - 承認する下書き情報がない場合。
-  - 保存済みドラフトが見つからない場合。
-- `tests/integration/drafts.integration.test.ts` の期待値を更新し、承認エラーの日本語契約を確認。
+- `src/lib/server/drafts.ts` に残っていた英語のSupabase下書き保存/読み込みエラーを日本語化。
+  - 下書き保存失敗。
+  - 下書き画像保存失敗。
+  - 下書き読み込み失敗。
+  - 下書き画像読み込み失敗。
+- `tests/integration/drafts-supabase.integration.test.ts` に上記4つの失敗系契約テストを追加。
 - 対象テストとフル品質ゲートを実行し成功を確認。
-- 実装修正を `7a1e5e0 Localize draft approval errors` としてコミット。
+- 実装修正を `f6006e6 Localize Supabase draft persistence errors` としてコミット。
 
 ## 4. Files Changed
 主な変更ファイル：
 
-- `src/app/api/approve-draft/route.ts`
 - `src/lib/server/drafts.ts`
-- `tests/integration/drafts.integration.test.ts`
+- `tests/integration/drafts-supabase.integration.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 現在の状態：
 
-- 実装commit `7a1e5e0` 作成済み。
+- 実装commit `f6006e6` 作成済み。
 - `npm.cmd run quality` 成功済み。
 - このhandoff更新は別commit予定。
 - push後にPR #1のCodeRabbit再レビューとGitHub Actionsの再実行確認が必要。
@@ -63,7 +63,7 @@ Goal全体は未完了。ライブsandbox契約テスト、残Deferred指摘、�
 - CodeRabbit Deferred指摘が残る：
   - `file-extraction.ts` inline rich text連結方針: 既存テストでDOCX/PPTX/XLSX連結はカバー済み。まだCodeRabbitが指摘する場合は具体コメントと現在のテストを照合すること。
   - 重複コード共通化（`truncatePromptLine` は `e371976`、生成開始条件は `555b3dc` で対応済み。他の重複が残る場合は個別確認）。
-  - i18nメッセージ統一（WordPress画像関連エラーは `181da67`、画像アップロードAPIバリデーションは `6555974`、URL本文抽出理由は `1a0250b`、ファイル添付/抽出エラーは `3d8dfb1`、ドラフト承認エラーは `7a1e5e0` で一部対応済み。ほかの英語エラーが残る場合は個別確認）。
+  - i18nメッセージ統一（WordPress画像関連エラーは `181da67`、画像アップロードAPIバリデーションは `6555974`、URL本文抽出理由は `1a0250b`、ファイル添付/抽出エラーは `3d8dfb1`、ドラフト承認エラーは `7a1e5e0`、Supabase下書き保存/読み込みエラーは `f6006e6` で一部対応済み。ほかの英語エラーが残る場合は個別確認）。
   - markdownlint系の文書整形。
   - さらに残る個別env復元余地があれば、重要度の高いテストから段階的に適用する。
 - 実際のOpenAI/Supabase/WordPress sandbox資格情報を使った `test:live:*` は未実行。
@@ -87,6 +87,7 @@ CodeRabbit OSSの指摘と対応状況：
   - URL extraction reason i18n: `1a0250b` で参照URL/競合URL本文抽出の失敗理由を日本語化し、単体テストを追加。
   - File extraction validation i18n: `3d8dfb1` で参照/競合ファイル添付・抽出系のユーザー向けエラーを日本語化し、統合テストを追加。
   - Draft approval error i18n: `7a1e5e0` で下書き承認時の欠落/404エラーを日本語化し、統合テストを更新。
+  - Supabase draft persistence i18n: `f6006e6` でSupabase下書き保存/読み込み系のユーザー向けエラーを日本語化し、統合テストを追加。
 - Deferred findings:
   - §6のKnown Issuesを参照。
 - False positives / not applicable:
@@ -98,27 +99,27 @@ Cursor Bugbotの任意確認：
 - Status: Not run
 - Findings: なし
 - Actions taken: なし
-- Reason: 標準レビューはCodeRabbit OSS。今回の変更はドラフト承認エラーメッセージと統合テストの更新であり、本番APIやDB本体へ接続する変更ではないため、Bugbot予備確認は不要と判断。
+- Reason: 標準レビューはCodeRabbit OSS。今回の変更はSupabase下書き保存/読み込みエラーメッセージとmock統合テストの追加であり、本番APIやDB本体へ接続する変更ではないため、Bugbot予備確認は不要と判断。
 
 ## 9. Verification Results
 実行した確認コマンドと結果：
 
 ```bash
-npx.cmd vitest run tests/integration/drafts.integration.test.ts
+npx.cmd vitest run tests/integration/drafts-supabase.integration.test.ts
 npm.cmd run quality
-git commit -m "Localize draft approval errors"
+git commit -m "Localize Supabase draft persistence errors"
 ```
 
 結果：
 
-- 対象integrationテスト: 成功（1 file / 5 tests passed）
+- 対象integrationテスト: 成功（1 file / 6 tests passed）
 - `npm.cmd run quality`: 成功
   - `npm run typecheck`: 成功
   - `npm run lint`: 成功
   - `npm run test:integrity`: 成功（43 files）
-  - `npm run test`: 成功（39 files / 265 tests passed）
+  - `npm run test`: 成功（39 files / 269 tests passed）
   - `npm run test:contract`: 成功（3 files / 12 tests passed）
-  - `npm run test:coverage`: 成功（statements 85.76% / branches 72.39% / functions 91.31% / lines 86.16%）
+  - `npm run test:coverage`: 成功（statements 85.97% / branches 72.66% / functions 91.31% / lines 86.38%）
   - `npm run test:e2e`: 成功（48 passed）
   - `npm run build`: 成功（Next.js 16.2.9 production build passed）
 - 実装commit時pre-commit: 成功（`npm run lint`、`npm run test:integrity`）
@@ -126,14 +127,14 @@ git commit -m "Localize draft approval errors"
 未実行：
 
 - `npm.cmd run test:live:*` はsandbox資格情報が必要なため未実行。
-- `7a1e5e0` とこのhandoff commit push後のCodeRabbit/GitHub Actions再確認。
+- `f6006e6` とこのhandoff commit push後のCodeRabbit/GitHub Actions再確認。
 
 ## 10. Next Recommended Action
 次にClaude Codeが最初にやるべきこと：
 
-1. `7a1e5e0 Localize draft approval errors` とこのhandoff更新commitをレビューする。
+1. `f6006e6 Localize Supabase draft persistence errors` とこのhandoff更新commitをレビューする。
 2. PR #1で最新push後のCodeRabbit OSSとGitHub Actionsの結果を確認する。
-3. ドラフト承認時の下書き情報欠落/保存済みドラフト404が、画面上で分かる日本語として十分か確認する。
+3. Supabase構成時の下書き保存/読み込み失敗が、画面上で分かる日本語として十分か確認する。
 4. 重大な新規指摘がなければ、CodeRabbit Deferredのうち高価値な1件を選んで最小差分で対応する。
    - 追加のenv cleanup適用。
    - i18nメッセージ統一。
@@ -143,17 +144,15 @@ git commit -m "Localize draft approval errors"
 ## 11. Suggested Review Scope for Claude Code
 Claude Codeに重点レビューしてほしい範囲：
 
-- `src/app/api/approve-draft/route.ts`
-  - `ApiError.message` の日本語がUIにそのまま出ても分かりやすいか。
 - `src/lib/server/drafts.ts`
-  - 下書き404のdetailが復旧判断に役立つか。
-- `tests/integration/drafts.integration.test.ts`
-  - invalid payload / missing persisted draftの契約テストが十分か。
+  - Supabase errorのdetailを維持しつつ、主メッセージが日本語として分かりやすいか。
+- `tests/integration/drafts-supabase.integration.test.ts`
+  - 下書き保存/画像保存/下書き読込/画像読込の失敗系契約テストが十分か。
 
 ## 12. Risk Notes
 リスク・人間確認が必要な事項：
 
-- 今回はドラフト承認のエラー文言と統合テスト更新のみ。本番deploy、本番DB/API書き込み、秘密情報出力、`.env*`内容の参照/コミットは行っていない。
+- 今回はSupabase下書き保存/読み込みのエラー文言とmock統合テスト追加のみ。本番deploy、本番DB/API書き込み、秘密情報出力、`.env*`内容の参照/コミットは行っていない。
 - 実生成記事品質の人間評価は未完了。
 - CodeRabbit/GitHub Actionsの最新結果はpush後に確認が必要。
 
