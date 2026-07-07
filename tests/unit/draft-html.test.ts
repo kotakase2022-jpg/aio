@@ -159,6 +159,34 @@ describe("draft HTML rendering", () => {
     expect(html).not.toContain("aio-image:inline-1");
   });
 
+  test("syncs edited image alt text when replacing image references", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml:
+          '<p><img src="aio-image:inline-1" alt="Old generated alt"></p><p><img src="/uploads/inline.png"></p>',
+        images: [
+          {
+            id: "inline-1",
+            slot: "inline-1",
+            url: "/uploads/inline.png",
+            path: "uploads/inline.png",
+            prompt: "Inline image",
+            altText: 'Current "reviewed" alt <safe>',
+            source: "generated",
+          },
+        ],
+      }),
+      {
+        imageUrlResolver: (url) => `https://app.example.com${url}`,
+      },
+    );
+
+    expect(html).toContain('src="https://app.example.com/uploads/inline.png"');
+    expect(html).toContain('alt="Current &quot;reviewed&quot; alt &lt;safe&gt;"');
+    expect(html).not.toContain("Old generated alt");
+    expect(html).not.toContain("aio-image:inline-1");
+  });
+
   test("escapes FAQ text before appending it to the article", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({

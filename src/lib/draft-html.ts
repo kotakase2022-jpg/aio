@@ -35,10 +35,12 @@ export function replaceDraftImageReferences(
     }
 
     const resolvedUrl = options.imageUrlResolver ? options.imageUrlResolver(url) : url;
-    return replaceImageSrc(
-      replaceImageSrc(currentHtml, `aio-image:${image.id}`, resolvedUrl),
+    const altText = image.altText.trim();
+    return replaceImageReference(
+      replaceImageReference(currentHtml, `aio-image:${image.id}`, resolvedUrl, altText),
       url,
       resolvedUrl,
+      altText,
     );
   }, html);
 }
@@ -401,10 +403,34 @@ function sourceUrlAlreadyVisible(url: string, html: string) {
   return articleContainsCanonicalSourceUrl(url, normalizedHtml);
 }
 
-function replaceImageSrc(html: string, from: string, to: string) {
+function replaceImageReference(html: string, from: string, to: string, altText: string) {
   const escapedFrom = escapeRegExp(from);
   const escapedTo = escapeHtmlAttribute(to);
-  return html.replace(new RegExp(`src=(["'])${escapedFrom}\\1`, "g"), `src="${escapedTo}"`);
+  const escapedAlt = escapeHtmlAttribute(altText);
+  return html.replace(
+    new RegExp(`<img\\b([^>]*?)\\bsrc=(["'])${escapedFrom}\\2([^>]*)>`, "gi"),
+    (_match, before: string, _quote: string, after: string) => {
+      const attributes = `${before}src="${escapedTo}"${after}`;
+      return `<img${syncImageAltAttribute(attributes, escapedAlt)}>`;
+    },
+  );
+}
+
+function syncImageAltAttribute(attributes: string, escapedAlt: string) {
+  if (!escapedAlt) {
+    return attributes;
+  }
+
+  const altAttribute = /\balt\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i;
+  if (altAttribute.test(attributes)) {
+    return attributes.replace(altAttribute, `alt="${escapedAlt}"`);
+  }
+
+  const trailingSlash = attributes.match(/\s*\/\s*$/)?.[0] ?? "";
+  const baseAttributes = trailingSlash
+    ? attributes.slice(0, -trailingSlash.length).trimEnd()
+    : attributes;
+  return `${baseAttributes} alt="${escapedAlt}"${trailingSlash}`;
 }
 
 function stripHtmlText(html: string) {
