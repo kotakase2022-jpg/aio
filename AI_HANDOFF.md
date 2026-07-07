@@ -7,7 +7,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this remains a narrow continuation rather than a new loop.
 - Phase: Autonomous Improvement / Japanese Commodity Phrase Coverage / Handoff
-- Last updated: 2026-07-08 06:38 +09:00
+- Last updated: 2026-07-08 06:44 +09:00
 
 ## 1. Current Goal
 
@@ -29,7 +29,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Last known good local verification: `npm.cmd run quality` passed after `19e3290`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - PR status before this implementation pass at head `4d4b5a2`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS in 3m33s.
-- PR status after this handoff/docs update: needs re-check after push.
+- PR status after implementation/handoff push at head `e4c231b`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS in 3m44s.
+- Later status-only handoff commits should be re-checked on the current PR head; they do not change runtime code.
 - Later status-only handoff commits should be re-checked on the current PR head; they do not change runtime code.
 - CodeRabbit OSS review status: CodeRabbit is installed and responding on PR #1. Old duplicate comments about image recovery / parallel image regeneration still appear in PR review history, but current status check was SUCCESS before this pass; current code and E2E coverage had already addressed those areas in previous Loop 3 work.
 
@@ -60,8 +61,9 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 - Implementation commit `19e3290` exists locally and passed the focused article-quality tests plus the full local quality gate.
 - This handoff/docs update records the implementation commit and local quality gate.
-- The branch is ahead of origin after `19e3290` before this handoff/docs update.
-- Hosted CodeRabbit and GitHub Actions need to be re-checked after this handoff/docs update is committed and pushed.
+- Implementation and handoff/docs commits were pushed through `e4c231b`.
+- Hosted CodeRabbit and GitHub Actions are green on `e4c231b`.
+- If this file is included in a later status-only commit, Claude Code should re-check the latest PR head. Status-only handoff commits do not change runtime code.
 - If this file is included in a later status-only commit, Claude Code should re-check the latest PR head. Status-only handoff commits do not change runtime code.
 
 ## 6. Known Issues
@@ -76,6 +78,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `4d4b5a2`.
+- Review status after implementation/handoff push at head `e4c231b`: CodeRabbit SUCCESS and GitHub Actions SUCCESS.
 - Current pass:
   - Expands existing generic phrase detection for Japanese AI-ish variants.
   - Adds regression coverage without adding a new quality-check ID or UI surface.
@@ -128,19 +131,20 @@ Results:
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials and explicit non-production confirmation are required.
-- Hosted PR checks after this handoff/docs update; re-check after push.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 10` after push:
+  - CodeRabbit: pass.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m44s.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Confirm this handoff/docs update has been pushed to PR #1.
-2. Confirm CodeRabbit OSS and GitHub Actions are green on the latest PR head.
-3. Review the updated generic phrase dictionary and make sure it is neither too strict nor too weak:
+1. Confirm any latest status-only handoff commit after `e4c231b`, if present, is green on PR #1.
+2. Review the updated generic phrase dictionary and make sure it is neither too strict nor too weak:
    - `src/lib/article-quality.ts`
    - `tests/unit/article-quality.test.ts`
-4. If checks stay green and no major CodeRabbit comments appear, decide whether the next pass should be live/sandbox readiness or another small regression test around generated-output quality.
-5. Run `npm.cmd run quality` after any code changes and record the result here.
+3. If checks stay green and no major CodeRabbit comments appear, decide whether the next pass should be live/sandbox readiness or another small regression test around generated-output quality.
+4. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
