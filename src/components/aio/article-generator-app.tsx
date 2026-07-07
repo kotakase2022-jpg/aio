@@ -45,6 +45,7 @@ import {
   formatGenerationRequirementMessage,
   getMissingGenerationRequirements,
 } from "@/lib/generation-requirements";
+import { evaluateImageAltQuality } from "@/lib/image-alt-quality";
 import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
 import { truncatePromptLine } from "@/lib/prompt-text";
 import { qualityCheckEditGuidance } from "@/lib/quality-edit-guidance";
@@ -2444,6 +2445,17 @@ function ArticlePreview({
       }),
     [draft],
   );
+  const imageAltQualityEvaluation = useMemo(
+    () =>
+      evaluateImageAltQuality({
+        images: draft.images,
+        imagePrompts: draft.aiResult.image_prompts,
+        imageCount: draft.inputPayload.imageCount,
+        themeText: draft.inputPayload.theme,
+        primaryInfo: draft.inputPayload.primaryInfo,
+      }),
+    [draft],
+  );
   const qualityEvaluation = useMemo(
     () =>
       combineQualityEvaluations(
@@ -2451,10 +2463,12 @@ function ArticlePreview({
         bodyQualityEvaluation,
         faqQualityEvaluation,
         metaDescriptionQualityEvaluation,
+        imageAltQualityEvaluation,
       ),
     [
       bodyQualityEvaluation,
       faqQualityEvaluation,
+      imageAltQualityEvaluation,
       metaDescriptionQualityEvaluation,
       titleQualityEvaluation,
     ],
@@ -3073,7 +3087,7 @@ function ArticleEditor({
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div data-testid="draft-images-section" tabIndex={-1} className="grid grid-cols-3 gap-4">
         {draft.images.map((image) => (
           <div key={image.id} className="rounded-md border border-slate-200 p-3">
             <PreviewImage src={image.url} alt={image.altText} className="h-36 w-full" />
@@ -3335,6 +3349,7 @@ function combineQualityEvaluations(
   bodyEvaluation: ArticleQualityEvaluation,
   faqEvaluation: ArticleQualityEvaluation,
   metaDescriptionEvaluation: ArticleQualityEvaluation,
+  imageAltEvaluation: ArticleQualityEvaluation,
 ): ArticleQualityEvaluation {
   return {
     score: Math.min(
@@ -3342,24 +3357,28 @@ function combineQualityEvaluations(
       bodyEvaluation.score,
       faqEvaluation.score,
       metaDescriptionEvaluation.score,
+      imageAltEvaluation.score,
     ),
     checks: [
       ...titleEvaluation.checks,
       ...bodyEvaluation.checks,
       ...faqEvaluation.checks,
       ...metaDescriptionEvaluation.checks,
+      ...imageAltEvaluation.checks,
     ],
     strengths: uniqueStrings([
       ...titleEvaluation.strengths,
       ...bodyEvaluation.strengths,
       ...faqEvaluation.strengths,
       ...metaDescriptionEvaluation.strengths,
+      ...imageAltEvaluation.strengths,
     ]),
     improvements: uniqueStrings([
       ...titleEvaluation.improvements,
       ...bodyEvaluation.improvements,
       ...faqEvaluation.improvements,
       ...metaDescriptionEvaluation.improvements,
+      ...imageAltEvaluation.improvements,
     ]),
   };
 }
@@ -3371,6 +3390,10 @@ function draftEditorTargetTestId(checkId: string) {
 
   if (checkId.startsWith("meta-description-")) {
     return "draft-meta-textarea";
+  }
+
+  if (checkId.startsWith("image-alt-")) {
+    return "draft-images-section";
   }
 
   if (checkId === "faq-count") {

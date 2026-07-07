@@ -3,6 +3,7 @@ import { articleGenerationSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
 import { evaluateArticleQuality } from "@/lib/article-quality";
 import { evaluateFaqQuality } from "@/lib/faq-quality";
+import { evaluateImageAltQuality } from "@/lib/image-alt-quality";
 import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
 import { truncatePromptLine } from "@/lib/prompt-text";
 import { evaluateTitleQuality } from "@/lib/title-quality";
@@ -128,11 +129,20 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     primaryInfo:
       typeof compactPayload.form.primaryInfo === "string" ? compactPayload.form.primaryInfo : "",
   });
+  const normalizedImagePrompts = normalizeImagePrompts(result, compactPayload.form);
+  const imageAltEvaluation = evaluateImageAltQuality({
+    imagePrompts: normalizedImagePrompts,
+    imageCount:
+      typeof compactPayload.form.imageCount === "number" ? compactPayload.form.imageCount : 2,
+    themeText: typeof compactPayload.form.theme === "string" ? compactPayload.form.theme : "",
+    primaryInfo:
+      typeof compactPayload.form.primaryInfo === "string" ? compactPayload.form.primaryInfo : "",
+  });
 
   return {
     ...result,
     body_html: sanitizedBodyHtml,
-    image_prompts: normalizeImagePrompts(result, compactPayload.form),
+    image_prompts: normalizedImagePrompts,
     aio_score_self_evaluation: {
       score: Math.min(
         result.aio_score_self_evaluation.score,
@@ -140,6 +150,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
         titleEvaluation.score,
         faqEvaluation.score,
         metaDescriptionEvaluation.score,
+        imageAltEvaluation.score,
       ),
       strengths: uniqueItems([
         ...result.aio_score_self_evaluation.strengths,
@@ -147,10 +158,12 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
         ...titleEvaluation.strengths.map((item) => `タイトル品質チェック: ${item}`),
         ...faqEvaluation.strengths.map((item) => `FAQ品質チェック: ${item}`),
         ...metaDescriptionEvaluation.strengths.map((item) => `メタ品質チェック: ${item}`),
+        ...imageAltEvaluation.strengths.map((item) => `画像alt品質チェック: ${item}`),
       ]).slice(0, 8),
       improvements: uniqueItems([
         ...titleEvaluation.improvements,
         ...metaDescriptionEvaluation.improvements,
+        ...imageAltEvaluation.improvements,
         ...qualityEvaluation.improvements,
         ...faqEvaluation.improvements,
         ...result.aio_score_self_evaluation.improvements,

@@ -460,6 +460,7 @@ test("editing the title to a generic label updates the quality checklist", async
       {
         ...completedJob.draft!.images[0],
         url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+        altText: "image",
       },
     ],
   };
@@ -514,6 +515,16 @@ test("editing the title to a generic label updates the quality checklist", async
     .click();
   await expect(page.getByTestId("draft-meta-textarea")).toBeVisible();
   await expect(page.getByTestId("draft-meta-textarea")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "画像altの具体性" }),
+  ).toContainText("修正先: 生成画像");
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "画像altの具体性" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-images-section")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
   await expect(
     page.getByTestId("quality-check-failed").filter({ hasText: "FAQ件数" }),

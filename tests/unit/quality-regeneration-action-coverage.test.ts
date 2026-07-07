@@ -33,6 +33,7 @@ function currentQualityCheckIds() {
     ...extractQualityCheckIds("src/lib/title-quality.ts"),
     ...extractQualityCheckIds("src/lib/faq-quality.ts"),
     ...extractQualityCheckIds("src/lib/meta-description-quality.ts"),
+    ...extractQualityCheckIds("src/lib/image-alt-quality.ts"),
   ];
 }
 
@@ -45,6 +46,7 @@ describe("quality regeneration action coverage", () => {
       "src/lib/meta-description-quality.ts": extractQualityCheckIds(
         "src/lib/meta-description-quality.ts",
       ),
+      "src/lib/image-alt-quality.ts": extractQualityCheckIds("src/lib/image-alt-quality.ts"),
     };
 
     for (const [path, ids] of Object.entries(idsByFile)) {
@@ -67,13 +69,15 @@ describe("quality regeneration action coverage", () => {
     expect(idsWithoutActions(articleQualityIds)).toEqual([]);
   });
 
-  test("covers title, meta description, and FAQ quality checks through their regeneration action prefixes", () => {
+  test("covers title, meta description, image alt, and FAQ quality checks through their regeneration action prefixes", () => {
     const titleQualityIds = extractQualityCheckIds("src/lib/title-quality.ts");
     const metaQualityIds = extractQualityCheckIds("src/lib/meta-description-quality.ts");
+    const imageAltQualityIds = extractQualityCheckIds("src/lib/image-alt-quality.ts");
     const faqQualityIds = extractQualityCheckIds("src/lib/faq-quality.ts");
 
     expect(idsWithoutActions(titleQualityIds)).toEqual([]);
     expect(idsWithoutActions(metaQualityIds)).toEqual([]);
+    expect(idsWithoutActions(imageAltQualityIds)).toEqual([]);
     expect(idsWithoutActions(faqQualityIds)).toEqual([]);
   });
 
@@ -83,6 +87,14 @@ describe("quality regeneration action coverage", () => {
     expect(action).toContain("メタディスクリプション");
     expect(action).toContain("50〜160文字");
     expect(action).toContain("記事固有の判断軸");
+  });
+
+  test("keeps image alt regeneration focused on concrete article context", () => {
+    const action = qualityRegenerationAction("image-alt-specificity");
+
+    expect(action).toContain("画像alt");
+    expect(action).toContain("hero image");
+    expect(action).toContain("記事テーマ");
   });
 
   test("uses specialized regeneration actions for all current quality check IDs", () => {

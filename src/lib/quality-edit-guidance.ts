@@ -7,6 +7,10 @@ export function qualityCheckEditGuidance(checkId: string) {
     return "修正先: メタディスクリプション。検索結果で読む理由が伝わるよう、記事固有の判断軸、一次情報、対象読者を短く入れます。";
   }
 
+  if (checkId.startsWith("image-alt-")) {
+    return "修正先: 生成画像。再生成または差し替え時に、記事テーマ、図解内容、読者が見るべき判断軸が伝わるaltにします。";
+  }
+
   if (checkId === "faq-count") {
     return "修正先: FAQ。読者の不安、比較、次の行動に答える質問を追加します。";
   }

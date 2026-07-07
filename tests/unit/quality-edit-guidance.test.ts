@@ -11,6 +11,7 @@ describe("qualityCheckEditGuidance", () => {
       ...extractQualityCheckIds("src/lib/title-quality.ts"),
       ...extractQualityCheckIds("src/lib/faq-quality.ts"),
       ...extractQualityCheckIds("src/lib/meta-description-quality.ts"),
+      ...extractQualityCheckIds("src/lib/image-alt-quality.ts"),
     ];
 
     expect(currentIds).not.toHaveLength(0);
@@ -44,6 +45,14 @@ describe("qualityCheckEditGuidance", () => {
 
     expect(guidance).toContain("修正先: メタディスクリプション");
     expect(guidance).toContain("記事固有の判断軸");
+    expect(guidance).not.toContain("本文HTML");
+  });
+
+  it("gives specific guidance for image alt checks", () => {
+    const guidance = qualityCheckEditGuidance("image-alt-specificity");
+
+    expect(guidance).toContain("修正先: 生成画像");
+    expect(guidance).toContain("記事テーマ");
     expect(guidance).not.toContain("本文HTML");
   });
 });

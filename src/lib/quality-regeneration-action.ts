@@ -10,6 +10,10 @@ export function qualityRegenerationAction(checkId: string) {
     return "メタディスクリプションを50〜160文字程度に整え、汎用句を削り、記事固有の判断軸・一次情報・対象読者にとって読む理由を短く入れる。";
   }
 
+  if (checkId.startsWith("image-alt-")) {
+    return "画像altを「画像」「hero image」などの汎用説明にせず、記事テーマ、図解内容、読者が見るべき判断軸が分かる短い説明にする。";
+  }
+
   if (checkId === "answer-first") {
     return "冒頭400字以内で、結論、定義、読者が最初に判断すべきことを先に示す。";
   }

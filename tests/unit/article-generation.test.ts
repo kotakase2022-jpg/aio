@@ -393,6 +393,36 @@ describe("generateAioArticle", () => {
     );
   });
 
+  test("caps self-evaluation when generated image alt text is generic", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      image_prompts: [
+        {
+          slot: "featured",
+          prompt: "generic business image",
+          alt_text: "image",
+        },
+      ],
+      aio_score_self_evaluation: {
+        score: 99,
+        strengths: ["High claimed score"],
+        improvements: [],
+      },
+    });
+
+    const result = await generateAioArticle({
+      form: { ...sampleFormPayload, imageCount: 1 },
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
+    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain("画像alt");
+  });
+
   test("caps self-evaluation when FAQ items are generic and thin", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");
