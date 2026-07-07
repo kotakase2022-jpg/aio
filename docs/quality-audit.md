@@ -32,14 +32,14 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 05:50 +09:00 after adding WordPress featured media
-alt metadata updates:
+The latest local full gate passed on 2026-07-08 06:05 +09:00 after adding WordPress post route
+failure-response coverage:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 46 files
-  - `npm run test`: passed, 42 files / 313 tests
+  - `npm run test`: passed, 42 files / 314 tests
   - `npm run test:contract`: passed, 3 files / 13 tests
   - `npm run test:coverage`: passed, statements 88.18%, branches 76.10%, functions 92.13%,
     lines 88.61%
@@ -75,6 +75,11 @@ The latest pushed head containing that implementation and handoff update was als
   Chromium because the runner could not fetch signed Microsoft apt repository metadata; rerun of the
   same workflow succeeded in 3m04s.
 
+The current local branch also includes test commit `15f2b65`, which adds route-level regression
+coverage proving `/api/wordpress/post` preserves WordPress publishing `ApiError` status, Japanese
+error text, and recovery detail. Hosted CodeRabbit and Actions must be re-checked after the
+handoff/docs update is pushed.
+
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -86,7 +91,8 @@ they read like generic AI copy until a late paragraph briefly mentions the user'
 
 Publishing-readiness coverage now also checks meta descriptions, image alt quality, source URL
 deduplication, author block preservation, edited image alt text in publishable HTML / WordPress post
-content, and featured image alt text in WordPress media metadata.
+content, featured image alt text in WordPress media metadata, and WordPress post route propagation of
+recoverable publishing failures.
 
 Additional manual PC browser smoke on 2026-07-06:
 

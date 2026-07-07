@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this remains a narrow continuation rather than a new loop.
-- Phase: Autonomous Improvement / WordPress Featured Media Alt Metadata / Handoff
-- Last updated: 2026-07-08 05:51 +09:00
+- Phase: Autonomous Improvement / WordPress Post Route Failure Coverage / Handoff
+- Last updated: 2026-07-08 06:06 +09:00
 
 ## 1. Current Goal
 
@@ -17,47 +17,42 @@ Improve the AIO article generator toward the active 100/100 goal:
 - the app feels strong enough for daily article-production work
 - generated articles feel specific, source-aware, accessible, and editorial rather than commodity AI content
 
-This Codex pass fixed a WordPress publishing-quality gap: when a featured image is uploaded to WordPress, the app now writes the image `altText` into the WordPress media library `alt_text` field before creating the post. The previous pass already synced inline article image alt text into the post body; this pass extends the same accessibility / editorial quality to the featured media record.
+This Codex pass strengthened WordPress posting recovery coverage. The previous implementation added WordPress featured media `alt_text` updates. This pass adds an integration regression test proving `/api/wordpress/post` preserves `ApiError` status, Japanese error text, and detail when the publishing layer fails, so UI callers can display understandable recovery messages instead of losing the cause.
 
 The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority cleanup are still open.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `d80a080 Set WordPress featured media alt text`
-- Previous pushed handoff commit: `e1dc47b Clarify handoff status check expectations`
-- Last known good local verification: `npm.cmd run quality` passed after `d80a080`.
+- Latest implementation commit: `15f2b65 Cover WordPress post route failure responses`
+- Previous pushed handoff commit: `b2aa2e5 Record PR checks after WordPress media alt metadata`
+- Last known good local verification: `npm.cmd run quality` passed after `15f2b65`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS at head `e1dc47b8f23403345bd1c4df4ccf63cfdf519280`.
-- PR status after implementation/handoff push at head `cbbf6335589da2132586819a335ec31d9fccf0df`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS after rerun.
-- Later status-only handoff commits should be re-checked on the current PR head; they do not change runtime code.
+- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS at head `b2aa2e5b6d36ea63fcd9799656471fda14c89545`.
+- PR status after this implementation pass: not yet re-checked on GitHub until this handoff/docs update is pushed.
 
 ## 3. What Was Done
 
-- Read the required workflow files, current handoff, branch state, recent commits, PR status, README, package scripts, WordPress publishing code, and relevant contract tests before editing.
-- Confirmed PR #1 was green before this pass at head `e1dc47b`.
-- Checked the official WordPress REST API media reference and confirmed `alt_text` is a supported media create/update field.
-- Updated `publishDraftToWordpress` / `uploadMedia` so featured image uploads pass the draft image alt text into the media upload path.
-- Added `updateMediaAltText`, which calls `POST /wp-json/wp/v2/media/{id}` with `{ alt_text }` after a successful media upload.
-- Preserved existing behavior when the featured image alt text is empty: upload still succeeds and no metadata update request is sent.
-- Added contract coverage confirming the media alt update happens before post creation.
-- Added contract coverage confirming a media alt update failure stops before post creation and returns a clear Japanese API error.
-- Kept the change scoped to WordPress media metadata and tests; no persistence, auth, route contract, OpenAI, image-generation, or saved draft schema changed.
+- Read the required workflow files, current handoff, branch state, recent commits, PR status, README, package scripts, latest CodeRabbit comments, WordPress post route, and relevant tests before editing.
+- Confirmed PR #1 was green before this pass at head `b2aa2e5`.
+- Verified old CodeRabbit comments about image regeneration / partial missing image recovery are addressed in current code (`Promise.allSettled`, visible partial-recovery banner, and existing E2E coverage).
+- Added a `wordpress-post-route` integration test for publishing-layer failures, using the media-alt update failure message as a representative recoverable WordPress error.
+- Confirmed the route returns HTTP status, Japanese `error`, and `detail` from `ApiError`.
+- Kept the change scoped to tests; no runtime implementation, persistence, auth, route contract, OpenAI, image-generation, or saved draft schema changed.
 - Cursor Bugbot was not run; CodeRabbit OSS remains the standard review path.
 
 ## 4. Files Changed
 
-- `src/lib/server/wordpress.ts`
-- `tests/contract/wordpress.contract.test.ts`
+- `tests/integration/wordpress-post-route.integration.test.ts`
 - `docs/quality-audit.md`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
-- Implementation commit `d80a080` exists locally and passed focused checks plus the full local quality gate.
+- Implementation/test commit `15f2b65` exists locally and passed focused checks plus the full local quality gate.
 - This handoff document records the implementation commit and local quality gate.
-- Implementation and handoff/docs commits were pushed through `cbbf633`, which was green on CodeRabbit and GitHub Actions after a CI rerun.
-- If this file is included in a later status-only commit, Claude Code should re-check the latest PR head. Status-only handoff commits do not change runtime code.
+- Branch is expected to be ahead of origin until the handoff/docs commit is created and pushed.
+- PR #1 was green before this pass at `b2aa2e5`; Claude Code should re-check the latest PR head after push.
 
 ## 6. Known Issues
 
@@ -70,11 +65,11 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 ## 7. CodeRabbit Review
 
-- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `e1dc47b`.
-- Review status after implementation/handoff push at head `cbbf633`: CodeRabbit SUCCESS and GitHub Actions SUCCESS after rerun.
+- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `b2aa2e5`.
+- Review status after this pass: pending until the latest commits are pushed and checked.
 - Current pass:
-  - Writes featured image alt text into WordPress media library metadata.
-  - Adds regression tests for the media metadata update and failure path.
+  - Adds route-level coverage for WordPress publishing failure responses.
+  - Confirms the route preserves status, Japanese error text, and recovery detail from `ApiError`.
 - Critical findings:
   - No known open Critical findings at the time of this handoff.
 - Resolved / strengthened findings:
@@ -89,48 +84,44 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Status: Not run
 - Findings: None
 - Actions taken: None
-- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow WordPress media metadata / accessibility contract fix with CodeRabbit OSS as the standard review path.
+- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow WordPress route regression-coverage change with CodeRabbit OSS as the standard review path.
 
 ## 9. Verification Results
 
 Commands run in this pass:
 
 ```bash
-npx.cmd vitest run tests/contract/wordpress.contract.test.ts
+npx.cmd vitest run tests/integration/wordpress-post-route.integration.test.ts
 git diff --check
 npm.cmd run lint
 npm.cmd run typecheck
 npm.cmd run test
-npm.cmd run test:contract
 npm.cmd run quality
-git commit -m "Set WordPress featured media alt text"
+git commit -m "Cover WordPress post route failure responses"
 ```
 
 Results:
 
-- `npx.cmd vitest run tests/contract/wordpress.contract.test.ts`: passed, 1 file / 8 tests.
+- `npx.cmd vitest run tests/integration/wordpress-post-route.integration.test.ts`: passed, 1 file / 6 tests.
 - `git diff --check`: passed.
 - `npm.cmd run lint`: passed.
 - `npm.cmd run typecheck`: passed.
-- `npm.cmd run test`: passed, 42 files / 313 tests.
-- `npm.cmd run test:contract`: passed, 3 files / 13 tests.
+- `npm.cmd run test`: passed, 42 files / 314 tests.
 - `npm.cmd run quality`: passed.
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
   - `npm run test:integrity`: passed, 46 files.
-  - `npm run test`: passed, 42 files / 313 tests.
+  - `npm run test`: passed, 42 files / 314 tests.
   - `npm run test:contract`: passed, 3 files / 13 tests.
   - `npm run test:coverage`: passed, statements 88.18%, branches 76.10%, functions 92.13%, lines 88.61%.
   - `npm run test:e2e`: passed, 48 PC Chromium tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
-- Commit pre-commit hook for `d80a080`: passed, `npm run lint` and `npm run test:integrity`.
+- Commit pre-commit hook for `15f2b65`: passed, `npm run lint` and `npm run test:integrity`.
 
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials are required.
-- First post-push `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 10`: CodeRabbit passed; GitHub Actions failed during Playwright Chromium install because the GitHub runner could not fetch signed Microsoft apt repository metadata (`NOSPLIT` / repository no longer signed).
-- `gh run rerun 28897941867 --repo kotakase2022-jpg/aio`: rerun succeeded.
-- `gh run watch 28897941867 --repo kotakase2022-jpg/aio --interval 10`: passed, `Typecheck, lint, tests, E2E, build` completed in 3m04s with 48 E2E tests passed.
+- Post-push `gh pr checks --watch` is still pending until this handoff/docs commit is created and pushed.
 
 ## 10. Next Recommended Action
 
@@ -138,24 +129,21 @@ Next Claude Code should:
 
 1. Confirm the latest PR #1 head after this handoff/docs update is pushed.
 2. Confirm CodeRabbit OSS and GitHub Actions are green on the latest head.
-3. Review the WordPress featured media alt metadata path:
-   - `src/lib/server/wordpress.ts`
-   - `tests/contract/wordpress.contract.test.ts`
-4. Decide whether media-alt update failures should remain blocking before post creation, or whether a future UX iteration should allow posting with a warning. This pass chooses blocking behavior to avoid silent accessibility regressions.
+3. Review the WordPress post route failure-response coverage:
+   - `tests/integration/wordpress-post-route.integration.test.ts`
+4. Decide whether the next meaningful progress should be a live/sandbox readiness pass, or another small regression test around WordPress/UI recovery.
 5. If checks stay green and no major review comments appear, continue with another small high-value deferred item or a live/sandbox article-quality proof step.
 6. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- Whether the extra `POST /wp-json/wp/v2/media/{id}` call is the right compatibility tradeoff after binary media upload.
-- Whether the Japanese error message for media alt update failure is clear enough in the WordPress posting UI.
-- Whether preserving no-op behavior for empty alt text is correct.
+- Whether the mocked `ApiError` route test is enough route-level proof, given lower-level WordPress contract tests already cover the media-alt failure path.
+- Whether the next pass should run/repair live readiness rather than adding more mock coverage.
 
 ## 12. Risk Notes
 
-- This change does not alter DB persistence, OpenAI model wrappers, image generation, route handlers, auth, or saved draft schema.
-- It affects WordPress posting behavior when a featured image has non-empty alt text.
-- It intentionally stops before creating a post if WordPress refuses the media alt update, so users do not unknowingly publish an accessibility regression.
+- This change is test-only and does not alter runtime behavior.
+- It strengthens proof that WordPress publishing failures remain understandable at the API boundary.
 - Real WordPress behavior still needs sandbox live verification with non-production credentials.
 - Real article-quality and image-alt benefit still requires human review with real OpenAI output.
 
