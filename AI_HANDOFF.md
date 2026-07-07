@@ -5,9 +5,9 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The previous handoff kept `Loop: 3 continuation`, the active 100/100 objective is still not fully proven by live sandbox tests or human article-quality review, and this pass continued with one narrow follow-up improvement to the first-party information path.
-- Phase: Autonomous Improvement / Primary Info Normalization / Handoff
-- Last updated: 2026-07-08 02:57 +09:00
+- Loop number inferred from: The previous handoff kept `Loop: 3 continuation`, the active 100/100 objective is still not fully proven by live sandbox tests or human article-quality review, and this pass continued with one narrow follow-up to keep first-party information handling consistent between theme candidates and article generation.
+- Phase: Autonomous Improvement / Article Primary Info Normalization / Handoff
+- Last updated: 2026-07-08 03:06 +09:00
 
 ## 1. Current Goal
 
@@ -17,46 +17,44 @@ Improve the AIO article generator toward the active 100/100 goal:
 - the app feels strong enough for daily article-production work
 - generated articles feel specific, source-aware, and editorial rather than commodity AI content
 
-This Codex pass followed up on the `AIOのための一次情報` theme-candidate path. The route already accepted and used `primaryInfo`, but whitespace-only input could still be passed through as a value. That can add noisy, meaningless first-party context to the AI payload.
-
-The theme-candidate API now trims optional `primaryInfo`, treats whitespace-only content as missing, and still truncates real long notes. Integration coverage proves both trimmed long notes and whitespace-only notes are handled correctly.
+This Codex pass aligned article generation with the already-normalized theme-candidate path. `primaryInfo` is now trimmed before it is sent to the article-generation model payload and before it is used by title/FAQ/article quality evaluation. Whitespace-only primary information is treated as missing, which avoids giving the model and quality checks meaningless first-party context.
 
 The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority CodeRabbit deferred cleanup are still open.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `c2d8235 Normalize primary info for theme candidates`
-- Previous implementation commit: `9670708 Use primary info for theme candidates`
-- Previous pushed handoff commit: `c1fcc1c Update handoff after primary info theme candidate fix`
-- Last known good local verification: `npm.cmd run quality` passed after `c2d8235`.
+- Latest implementation commit: `47ca036 Normalize primary info for article generation`
+- Previous implementation commit: `c2d8235 Normalize primary info for theme candidates`
+- Previous pushed handoff commit: `e93586a Update handoff after primary info normalization`
+- Last known good local verification: `npm.cmd run quality` passed after `47ca036`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `c1fcc1c`.
+- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `e93586a`.
 - PR status after this handoff commit/push: re-check required after pushing the handoff commit.
 
 ## 3. What Was Done
 
-- Read required workflow files, current handoff, branch status, recent commits, and PR status before editing.
+- Read required workflow files, current handoff, branch status, recent commits, PR status, docs quality audit, and relevant generation code/tests before editing.
 - Confirmed PR #1 was green before this pass.
-- Added `compactOptionalText` in `/api/theme-candidates` so optional first-party text is trimmed before truncation.
-- Ensured whitespace-only `primaryInfo` becomes an empty string in the AI payload rather than meaningless context.
-- Strengthened integration tests:
-  - long `primaryInfo` with surrounding whitespace is trimmed and truncated
-  - whitespace-only `primaryInfo` is treated as missing
+- Updated `compactForm` in `src/lib/server/article-generation.ts` so `primaryInfo` is trimmed before truncation.
+- Ensured whitespace-only `primaryInfo` becomes an empty string for article generation and downstream quality checks.
+- Strengthened article-generation unit tests:
+  - first-party notes with surrounding whitespace are trimmed before model input
+  - whitespace-only first-party notes are treated as missing before article generation
 - Ran focused checks and the full local quality gate successfully.
 - Cursor Bugbot was not run; CodeRabbit OSS remains the standard review path.
 
 ## 4. Files Changed
 
-- `src/app/api/theme-candidates/route.ts`
-- `tests/integration/ai-routes.integration.test.ts`
+- `src/lib/server/article-generation.ts`
+- `tests/unit/article-generation.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
-- Implementation commit `c2d8235` exists locally and passed the full local quality gate.
+- Implementation commit `47ca036` exists locally and passed the full local quality gate.
 - This handoff document records the state before the final handoff commit/push.
-- PR #1 was green at `c1fcc1c` before this implementation pass.
+- PR #1 was green at `e93586a` before this implementation pass.
 - After pushing the implementation and handoff commits, Claude Code should confirm CodeRabbit OSS and GitHub Actions are green on the latest PR head.
 
 ## 6. Known Issues
@@ -72,13 +70,13 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 ## 7. CodeRabbit Review
 
-- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `c1fcc1c`.
+- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `e93586a`.
 - Current pass:
-  - Normalizes optional first-party information before theme-candidate AI payload creation.
+  - Normalizes optional first-party information before article-generation AI payload creation.
 - Critical findings:
   - No known open Critical findings at the time of this handoff.
 - Resolved / strengthened findings:
-  - Added integration coverage for trimmed long `primaryInfo` and whitespace-only `primaryInfo`.
+  - Added unit coverage for trimmed and whitespace-only `primaryInfo` in article generation.
 - Deferred findings:
   - See `Known Issues`.
 - False positives / not applicable:
@@ -98,25 +96,25 @@ Commands run in this pass:
 ```bash
 npm.cmd run lint
 npm.cmd run typecheck
-npx.cmd vitest run tests/integration/ai-routes.integration.test.ts
+npx.cmd vitest run tests/unit/article-generation.test.ts
 git diff --check
 npm.cmd run quality
-git commit -m "Normalize primary info for theme candidates"
+git commit -m "Normalize primary info for article generation"
 ```
 
 Results:
 
 - `npm.cmd run lint`: passed.
 - `npm.cmd run typecheck`: passed.
-- `npx.cmd vitest run tests/integration/ai-routes.integration.test.ts`: passed, 1 file / 3 tests.
+- `npx.cmd vitest run tests/unit/article-generation.test.ts`: passed, 1 file / 19 tests.
 - `git diff --check`: passed.
 - `npm.cmd run quality`: passed.
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
   - `npm run test:integrity`: passed, 43 files.
-  - `npm run test`: passed, 39 files / 286 tests.
+  - `npm run test`: passed, 39 files / 287 tests.
   - `npm run test:contract`: passed, 3 files / 12 tests.
-  - `npm run test:coverage`: passed, statements 87.5%, branches 75.33%, functions 91.65%, lines 87.95%.
+  - `npm run test:coverage`: passed, statements 87.51%, branches 75.36%, functions 91.66%, lines 87.96%.
   - `npm run test:e2e`: passed, 48 PC Chromium tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
 - Commit pre-commit hook: passed, `npm run lint` and `npm run test:integrity`.
@@ -137,26 +135,26 @@ Next Claude Code should:
 
 1. Confirm the latest PR #1 head after this handoff is pushed.
 2. Confirm CodeRabbit OSS and GitHub Actions are green on the latest head.
-3. Review the narrow `primaryInfo` normalization path:
-   - `src/app/api/theme-candidates/route.ts`
-   - `tests/integration/ai-routes.integration.test.ts`
-4. Confirm the trim/empty behavior is desirable for theme-candidate generation and does not conflict with article-generation behavior.
+3. Review the narrow article-generation `primaryInfo` normalization path:
+   - `src/lib/server/article-generation.ts`
+   - `tests/unit/article-generation.test.ts`
+4. Decide whether the local `compactOptionalText` helper should later be shared with `/api/theme-candidates`, or whether duplication is acceptable to keep the diff small.
 5. If checks stay green and no major review comments appear, continue with another small high-value deferred item or a live/sandbox article-quality proof step.
 6. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `/api/theme-candidates` compact payload behavior for `primaryInfo`.
-- Whether `compactOptionalText` should remain local to the route or later be shared if another route needs the same semantics.
-- Integration test coverage for:
-  - long first-party notes with surrounding whitespace
+- `compactForm` behavior for `primaryInfo`.
+- Interaction between trimmed `primaryInfo` and downstream `evaluateArticleQuality`, `evaluateTitleQuality`, and `evaluateFaqQuality` calls.
+- Unit test coverage for:
+  - real first-party notes with surrounding whitespace
   - whitespace-only first-party notes
 
 ## 12. Risk Notes
 
 - This change is intentionally narrow and does not alter DB persistence, OpenAI model wrappers, image generation, WordPress calls, auth, or screen layout.
-- It affects AI input hygiene, not the UI. The real article-quality benefit still requires human review with real OpenAI output.
-- Theme-candidate `primaryInfo` is trimmed and truncated to 1200 characters. Claude Code may consider whether the limit is appropriate for longer first-party notes.
+- It affects AI input hygiene and quality evaluation context. Real article-quality benefit still requires human review with real OpenAI output.
+- Theme-candidate `primaryInfo` and article-generation `primaryInfo` now share the same trim/empty semantics, but use separate local helper functions.
 - Live external-service proof is still missing.
 
 ## 13. Do Not Touch
