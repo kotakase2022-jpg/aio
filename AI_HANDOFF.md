@@ -30,7 +30,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Last known good local verification: `npm.cmd run quality` passed after `031b997`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `7b516a0`.
-- PR status after this handoff commit/push: re-check required after pushing the implementation and handoff commits.
+- PR status after pushing implementation/handoff commits through `a6bfafa`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS.
+- If this document is included in a later status-only handoff commit, re-check the latest PR head once more.
 
 ## 3. What Was Done
 
@@ -58,9 +59,10 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 5. Current Status
 
 - Implementation commit `031b997` exists locally and passed focused checks plus the full local quality gate.
-- This handoff document records the state before the final handoff commit/push.
+- This handoff document records the state after implementation commit `031b997` and handoff commit `a6bfafa`.
 - PR #1 was green at `7b516a0` before this implementation pass.
-- After pushing the implementation and handoff commits, Claude Code should confirm CodeRabbit OSS and GitHub Actions are green on the latest PR head.
+- PR #1 was also green at `a6bfafa` after the implementation and handoff commits were pushed.
+- If the latest head differs from `a6bfafa`, Claude Code should confirm CodeRabbit OSS and GitHub Actions are green on the latest PR head.
 
 ## 6. Known Issues
 
@@ -75,6 +77,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `7b516a0`.
+- Review status after implementation/handoff push: CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `a6bfafa`.
 - Current pass:
   - Consolidates duplicated optional-text compaction into `src/lib/utils.ts`.
   - Keeps article-generation and theme-candidate input hygiene semantics aligned.
@@ -125,11 +128,11 @@ Results:
   - `npm run build`: passed, Next.js 16.2.9 production build.
 - Commit pre-commit hook: passed, `npm run lint` and `npm run test:integrity`.
 
-Not yet recorded in this handoff:
+Post-push PR check:
 
-- Final handoff commit hash.
-- Push result for this implementation/handoff pair.
-- Post-push CodeRabbit OSS and GitHub Actions result for the latest head.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed for head `a6bfafa`.
+  - CodeRabbit: passed.
+  - `Typecheck, lint, tests, E2E, build`: passed in 3m47s.
 
 Not run:
 
