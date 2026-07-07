@@ -101,4 +101,26 @@ describe("evaluateTitleQuality", () => {
     );
     expect(result.score).toBeLessThan(90);
   });
+
+  test("flags short topic plus beginner-friendly explanatory title templates", () => {
+    const result = evaluateTitleQuality({
+      selectedTitle: "AIOとは？基本からわかりやすく解説",
+      titleCandidates: [
+        "AIOとは？基本からわかりやすく解説",
+        "AIO初心者向け",
+        "AIO入門",
+      ],
+      themeText: "AIO workflow for editorial review and AI search optimization",
+      primaryInfo:
+        "Our support team sees one-person contractors using LINE for approvals while forms are often missing.",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-specificity", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-candidate-count", passed: true }),
+    );
+    expect(result.score).toBeLessThan(90);
+  });
 });
