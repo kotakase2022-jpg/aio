@@ -32,18 +32,18 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 07:07 +09:00 after tightening title-quality
-coverage so English input terms must match as title tokens, not as accidental substrings inside
-longer words such as `platform`:
+The latest local full gate passed on 2026-07-08 07:22 +09:00 after refining title-quality coverage
+so English input terms must not match accidental substrings inside longer words, while still
+matching natural hyphenated title phrases such as `AI-powered` and `form-based`:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 46 files
-  - `npm run test`: passed, 42 files / 318 tests
+  - `npm run test`: passed, 42 files / 319 tests
   - `npm run test:contract`: passed, 3 files / 13 tests
-  - `npm run test:coverage`: passed, statements 88.21%, branches 76.19%, functions 92.13%,
-    lines 88.65%
+  - `npm run test:coverage`: passed, statements 88.22%, branches 76.19%, functions 92.14%,
+    lines 88.66%
   - `npm run test:e2e`: passed, 48 Chromium PC tests
   - `npm run build`: passed, Next.js 16.2.9 production build
 
@@ -143,6 +143,16 @@ also checked:
 - CodeRabbit: success
 - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m07s
 
+The latest pushed status-only head before this pass was also checked:
+
+- Commit: `29d11b9`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m53s
+
+The current local branch also includes implementation commit `1a90f4e`, which treats hyphen as an
+English title token separator while keeping underscore as part of a token. Hosted CodeRabbit and
+Actions must be re-checked after this handoff/docs update is pushed.
+
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -158,7 +168,8 @@ quality checks when they read like generic AI copy.
 Title-quality coverage checks that selected titles and title candidates are specific enough for the
 topic. It now also flags short-topic beginner/explainer templates that can make otherwise useful
 drafts feel like commodity SEO content before the body is reviewed. It also verifies that English
-input terms are not counted when they only appear as substrings inside longer title words.
+input terms are not counted when they only appear as substrings inside longer title words, while
+hyphenated title phrases still count as natural input-signal matches.
 
 Publishing-readiness coverage now also checks meta descriptions, image alt quality, source URL
 deduplication, author block preservation, edited image alt text in publishable HTML / WordPress post
@@ -208,8 +219,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  are green through implementation/handoff head `309b2fc`; re-check any later status-only handoff
-  commits on the current PR head.
+  are green through status-only head `29d11b9`; re-check the current hyphenated title-signal
+  implementation and handoff/docs commits after they are pushed.
 
 ## Current Self Score
 
@@ -224,8 +235,8 @@ human review of real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit if a new status-only handoff commit is pushed after
-   `309b2fc`.
+1. Re-check hosted Actions and CodeRabbit after the `1a90f4e` title-signal implementation and
+   following handoff/docs update are pushed.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
