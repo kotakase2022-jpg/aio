@@ -54,7 +54,7 @@ export async function saveWordpressConnection(input: {
       updated_at: connection.updatedAt,
     });
     if (error) {
-      throw new ApiError("Failed to save WordPress connection.", 500, error.message);
+      throw new ApiError("WordPress接続情報の保存に失敗しました。", 500, error.message);
     }
   } else if (isSupabaseGatewayConfigured()) {
     await callSupabaseGateway("insert_wordpress_connection", {
@@ -101,7 +101,11 @@ export async function publishDraftToWordpress({
     (await loadStoredConnection(connectionId)) ||
     connectionFromToken(fallbackConnection);
   if (!connection) {
-    throw new ApiError("WordPress connection not found.", 404);
+    throw new ApiError(
+      "WordPress接続情報が見つかりません。",
+      404,
+      "WordPress接続情報を保存し直してから、もう一度投稿してください。",
+    );
   }
 
   const password = decryptSecret(connection.encryptedApplicationPassword);
@@ -148,7 +152,7 @@ export async function publishDraftToWordpress({
 
   if (!response.ok) {
     throw new ApiError(
-      "WordPress post failed.",
+      "WordPress投稿に失敗しました。",
       response.status,
       json.message ?? json.code ?? response.statusText,
     );
@@ -180,9 +184,9 @@ function getEncryptionKey() {
   const raw = process.env.WORDPRESS_ENCRYPTION_KEY;
   if (!raw && process.env.NODE_ENV === "production") {
     throw new ApiError(
-      "WORDPRESS_ENCRYPTION_KEY is required in production.",
+      "本番環境ではWordPress認証情報の暗号化キーが必要です。",
       500,
-      "Set a random 32+ character value in Vercel Environment Variables.",
+      "Vercel Environment VariablesにWORDPRESS_ENCRYPTION_KEYを32文字以上のランダム文字列で設定してください。",
     );
   }
 
@@ -216,7 +220,7 @@ async function loadStoredConnection(id: string): Promise<StoredConnection | null
       .maybeSingle();
 
     if (error) {
-      throw new ApiError("Failed to load WordPress connection.", 500, error.message);
+      throw new ApiError("WordPress接続情報の読み込みに失敗しました。", 500, error.message);
     }
 
     if (!data) {
@@ -314,16 +318,16 @@ async function ensureTerms(
     const searchJson = (await searchResponse.json().catch(() => null)) as unknown;
     if (!searchResponse.ok) {
       throw new ApiError(
-        `Failed to search WordPress ${singularTerm(type)}.`,
+        `WordPress${termLabel(type)}の検索に失敗しました。`,
         searchResponse.status,
         readWordpressError(searchJson) ?? searchResponse.statusText,
       );
     }
     if (!Array.isArray(searchJson)) {
       throw new ApiError(
-        `Unexpected WordPress ${type} search response.`,
+        `WordPress${termLabel(type)}検索の応答形式が不正です。`,
         502,
-        "WordPress REST API returned a non-list response while searching terms.",
+        "WordPress REST APIが一覧形式ではないターム検索結果を返しました。",
       );
     }
 
@@ -342,7 +346,7 @@ async function ensureTerms(
     const created = (await createResponse.json().catch(() => ({}))) as Record<string, unknown>;
     if (!createResponse.ok) {
       throw new ApiError(
-        `Failed to create WordPress ${singularTerm(type)}.`,
+        `WordPress${termLabel(type)}の作成に失敗しました。`,
         createResponse.status,
         readWordpressError(created),
       );
@@ -363,9 +367,9 @@ function readWordpressTermId(
   }
 
   throw new ApiError(
-    `Unexpected WordPress ${singularTerm(type)} ${operation} response.`,
+    `WordPress${termLabel(type)}${termOperationLabel(operation)}の応答形式が不正です。`,
     502,
-    "WordPress REST API returned a term without a numeric id.",
+    "WordPress REST APIが数値IDを持たないタームを返しました。",
   );
 }
 
@@ -373,8 +377,12 @@ function readTermName(value: Record<string, unknown>) {
   return typeof value.name === "string" ? value.name : "";
 }
 
-function singularTerm(type: "categories" | "tags") {
-  return type === "categories" ? "category" : "tag";
+function termLabel(type: "categories" | "tags") {
+  return type === "categories" ? "カテゴリー" : "タグ";
+}
+
+function termOperationLabel(operation: "search" | "create") {
+  return operation === "search" ? "検索" : "作成";
 }
 
 function readWordpressError(value: unknown) {

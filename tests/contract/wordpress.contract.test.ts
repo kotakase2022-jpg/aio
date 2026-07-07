@@ -185,7 +185,7 @@ describe("WordPress REST API contract", () => {
         }),
       ).rejects.toMatchObject({
         status: 401,
-        message: "Failed to search WordPress category.",
+        message: "WordPressカテゴリーの検索に失敗しました。",
         detail: "Sorry, you are not allowed to list categories.",
       });
 
@@ -227,8 +227,8 @@ describe("WordPress REST API contract", () => {
         }),
       ).rejects.toMatchObject({
         status: 502,
-        message: "Unexpected WordPress category search response.",
-        detail: "WordPress REST API returned a term without a numeric id.",
+        message: "WordPressカテゴリー検索の応答形式が不正です。",
+        detail: "WordPress REST APIが数値IDを持たないタームを返しました。",
       });
 
       const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
@@ -273,8 +273,8 @@ describe("WordPress REST API contract", () => {
         }),
       ).rejects.toMatchObject({
         status: 502,
-        message: "Unexpected WordPress category create response.",
-        detail: "WordPress REST API returned a term without a numeric id.",
+        message: "WordPressカテゴリー作成の応答形式が不正です。",
+        detail: "WordPress REST APIが数値IDを持たないタームを返しました。",
       });
 
       const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);

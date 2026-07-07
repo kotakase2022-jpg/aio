@@ -22,6 +22,9 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true });
   restoreProcessEnv(processEnvSnapshot);
+  vi.doUnmock("@/lib/server/supabase");
+  vi.doUnmock("@/lib/server/supabase-gateway");
+  vi.unstubAllGlobals();
 });
 
 describe("WordPress connection and posting", () => {
@@ -63,6 +66,29 @@ describe("WordPress connection and posting", () => {
     expect(rawStore).not.toContain("secret-app-password");
   });
 
+  test("saveWordpressConnection returns a Japanese error when Supabase saving fails", async () => {
+    mockSupabaseClient({
+      from: vi.fn(() => ({
+        insert: vi.fn(async () => ({
+          error: { message: "connection insert failed" },
+        })),
+      })),
+    });
+    const { saveWordpressConnection } = await import("@/lib/server/wordpress");
+
+    await expect(
+      saveWordpressConnection({
+        siteUrl: "https://wordpress.example.com",
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      }),
+    ).rejects.toMatchObject({
+      status: 500,
+      message: "WordPress接続情報の保存に失敗しました。",
+      detail: "connection insert failed",
+    });
+  });
+
   test("publishDraftToWordpress fails clearly when the WordPress API rejects a post", async () => {
     const { saveWordpressConnection, publishDraftToWordpress } = await import(
       "@/lib/server/wordpress"
@@ -95,7 +121,66 @@ describe("WordPress connection and posting", () => {
       }),
     ).rejects.toMatchObject({
       status: 401,
+      message: "WordPress投稿に失敗しました。",
       detail: "Invalid credentials",
+    });
+  });
+
+  test("publishDraftToWordpress returns a Japanese error when the stored connection is missing", async () => {
+    const { publishDraftToWordpress } = await import("@/lib/server/wordpress");
+    const draft = createSampleDraft({
+      status: "approved",
+      categories: [],
+      tags: [],
+      images: [],
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      publishDraftToWordpress({
+        draft,
+        connectionId: "missing-wordpress-connection",
+        status: "draft",
+        origin: "http://localhost",
+      }),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: "WordPress接続情報が見つかりません。",
+      detail: "WordPress接続情報を保存し直してから、もう一度投稿してください。",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("publishDraftToWordpress returns a Japanese error when Supabase connection loading fails", async () => {
+    const maybeSingle = vi.fn(async () => ({
+      data: null,
+      error: { message: "connection select failed" },
+    }));
+    mockSupabaseClient({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle })) })),
+      })),
+    });
+    const { publishDraftToWordpress } = await import("@/lib/server/wordpress");
+    const draft = createSampleDraft({
+      status: "approved",
+      categories: [],
+      tags: [],
+      images: [],
+    });
+
+    await expect(
+      publishDraftToWordpress({
+        draft,
+        connectionId: "wp-connection-load-failure",
+        status: "draft",
+        origin: "http://localhost",
+      }),
+    ).rejects.toMatchObject({
+      status: 500,
+      message: "WordPress接続情報の読み込みに失敗しました。",
+      detail: "connection select failed",
     });
   });
 
@@ -120,3 +205,14 @@ describe("WordPress connection and posting", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+function mockSupabaseClient(client: unknown) {
+  vi.resetModules();
+  vi.doMock("@/lib/server/supabase", () => ({
+    getSupabaseAdmin: vi.fn(() => client),
+  }));
+  vi.doMock("@/lib/server/supabase-gateway", () => ({
+    callSupabaseGateway: vi.fn(),
+    isSupabaseGatewayConfigured: vi.fn(() => false),
+  }));
+}
