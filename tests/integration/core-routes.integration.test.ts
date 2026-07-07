@@ -144,7 +144,38 @@ describe("core API route handlers", () => {
     );
     const invalidJson = await invalidResponse.json();
     expect(invalidResponse.status).toBe(400);
-    expect(invalidJson.error).toBe("Only image uploads are supported.");
+    expect(invalidJson.error).toBe("画像ファイルのみアップロードできます。");
+  });
+
+  test("upload image route returns Japanese validation errors for missing and oversized files", async () => {
+    const { POST } = await import("@/app/api/upload-image/route");
+
+    const missingResponse = await POST(
+      new Request("http://localhost/api/upload-image", {
+        method: "POST",
+        body: new FormData(),
+      }),
+    );
+    const missingJson = await missingResponse.json();
+    expect(missingResponse.status).toBe(400);
+    expect(missingJson.error).toBe("画像ファイルを選択してください。");
+
+    const oversizedFormData = new FormData();
+    oversizedFormData.append(
+      "file",
+      new File([new Uint8Array(8 * 1024 * 1024 + 1)], "large.png", {
+        type: "image/png",
+      }),
+    );
+    const oversizedResponse = await POST(
+      new Request("http://localhost/api/upload-image", {
+        method: "POST",
+        body: oversizedFormData,
+      }),
+    );
+    const oversizedJson = await oversizedResponse.json();
+    expect(oversizedResponse.status).toBe(400);
+    expect(oversizedJson.error).toBe("画像は8MB以下にしてください。");
   });
 
   test("generation jobs route creates a job and schedules background work", async () => {
