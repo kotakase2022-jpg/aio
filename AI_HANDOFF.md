@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this pass remains a narrow continuation rather than a new loop.
-- Phase: Autonomous Improvement / Nested Managed Section Hardening / Handoff
-- Last updated: 2026-07-08 03:37 +09:00
+- Phase: Autonomous Improvement / Unclosed Managed Section Recovery / Handoff
+- Last updated: 2026-07-08 03:46 +09:00
 
 ## 1. Current Goal
 
@@ -17,29 +17,30 @@ Improve the AIO article generator toward the active 100/100 goal:
 - the app feels strong enough for daily article-production work
 - generated articles feel specific, source-aware, and editorial rather than commodity AI content
 
-This Codex pass hardened publishable draft HTML rendering. Managed FAQ/source/author blocks are now removed with a small section-depth scanner instead of a non-greedy section regex, so stale managed blocks that contain nested `<section>` markup are replaced cleanly without leaving orphan HTML or deleting nearby article body sections.
+This Codex pass extended the publishable draft HTML hardening to malformed managed blocks. If a stale managed FAQ/source/author `<section>` is missing its closing tag, the renderer now removes only that stale managed block up to the next body heading/section boundary, preserving the surrounding edited article body before appending the current managed block.
 
 The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority cleanup are still open.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `323116b Handle nested managed draft sections`
-- Previous implementation commit: `031b997 Share optional text compaction helper`
-- Previous pushed handoff commit: `b30e1fa Record PR check status after helper consolidation`
-- Last known good local verification: `npm.cmd run quality` passed after `323116b`.
+- Latest implementation commit: `a4f08a2 Recover unclosed managed draft sections`
+- Previous implementation commit: `323116b Handle nested managed draft sections`
+- Previous pushed handoff commit: `9cf7d00 Update handoff after nested draft section hardening`
+- Last known good local verification: `npm.cmd run quality` passed after `a4f08a2`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `b30e1fa`.
+- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `9cf7d00`.
 - PR status after this implementation/handoff commit/push: re-check required after pushing the latest commits.
 - If this document is included in a later status-only handoff commit, re-check the latest PR head once more.
 
 ## 3. What Was Done
 
-- Read the required workflow files, current handoff, branch state, recent commits, PR status, quality-audit notes, and target draft HTML rendering code/tests before editing.
-- Confirmed PR #1 was green before this pass at head `b30e1fa`.
-- Replaced regex-only managed block removal for FAQ/source/author blocks with `removeSectionsByClass`, which tracks nested `<section>` depth.
+- Read the required workflow files, current handoff, branch state, recent commits, PR status, and target draft HTML rendering code/tests before editing.
+- Confirmed PR #1 was green before this pass at head `9cf7d00`.
+- Added fallback recovery for unclosed managed FAQ/source/author sections inside `removeSectionsByClass`.
+- The fallback skips the managed block's own heading and removes stale content only until the next body `h1`/`h2` or new `<section>` boundary.
 - Kept the implementation pure string logic because `buildDraftArticleHtml` is also imported by client-side preview/export code.
-- Added regression coverage for stale managed FAQ, source, and author blocks that contain nested sections.
+- Added regression coverage for stale unclosed FAQ, source, and author managed blocks.
 - Confirmed the replacement keeps surrounding edited article body sections intact and appends the current managed block once.
 - Ran focused checks and the full local quality gate successfully.
 - Cursor Bugbot was not run; CodeRabbit OSS remains the standard review path.
@@ -52,9 +53,9 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 ## 5. Current Status
 
-- Implementation commit `323116b` exists locally and passed focused checks plus the full local quality gate.
+- Implementation commit `a4f08a2` exists locally and passed focused checks plus the full local quality gate.
 - This handoff document records the state before the final handoff commit/push for this pass.
-- PR #1 was green at `b30e1fa` before this implementation pass.
+- PR #1 was green at `9cf7d00` before this implementation pass.
 - After pushing the implementation and handoff commits, Claude Code should confirm CodeRabbit OSS and GitHub Actions are green on the latest PR head.
 
 ## 6. Known Issues
@@ -62,22 +63,23 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Remaining low-priority deferred / cleanup items:
   - markdownlint/document formatting items remain
   - some env restore helper expansion opportunities remain
-  - malformed/unclosed generated HTML can still receive broader defensive tests if future review finds real examples
+  - broader malformed generated HTML coverage can still be expanded if future review finds real examples outside managed FAQ/source/author blocks
 - `test:live:*` was not run because sandbox credentials are required.
 - Human review of real generated article quality is still needed.
 - The active 100/100 goal is not complete.
 
 ## 7. CodeRabbit Review
 
-- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `b30e1fa`.
+- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `9cf7d00`.
 - Review status after implementation/handoff push: re-check required on the latest head.
 - Current pass:
-  - Hardens managed draft HTML block removal for nested `<section>` markup.
-  - Adds targeted regression coverage for FAQ/source/author replacement behavior.
+  - Hardens managed draft HTML block removal for unclosed stale managed sections.
+  - Adds targeted regression coverage for preserving the next body heading after unclosed FAQ/source/author managed blocks.
 - Critical findings:
   - No known open Critical findings at the time of this handoff.
 - Resolved / strengthened findings:
   - Addressed the deferred nested/irregular HTML section-removal coverage item for nested managed FAQ/source/author blocks.
+  - Added recovery coverage for unclosed managed FAQ/source/author blocks.
 - Deferred findings:
   - See `Known Issues`.
 - False positives / not applicable:
@@ -88,7 +90,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Status: Not run
 - Findings: None
 - Actions taken: None
-- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow draft HTML hardening change with CodeRabbit OSS as the standard review path.
+- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow draft HTML malformed-section recovery change with CodeRabbit OSS as the standard review path.
 
 ## 9. Verification Results
 
@@ -100,22 +102,22 @@ npm.cmd run typecheck
 npx.cmd vitest run tests/unit/draft-html.test.ts
 git diff --check
 npm.cmd run quality
-git commit -m "Handle nested managed draft sections"
+git commit -m "Recover unclosed managed draft sections"
 ```
 
 Results:
 
 - `npm.cmd run lint`: passed.
 - `npm.cmd run typecheck`: passed.
-- `npx.cmd vitest run tests/unit/draft-html.test.ts`: passed, 1 file / 35 tests.
+- `npx.cmd vitest run tests/unit/draft-html.test.ts`: passed, 1 file / 38 tests.
 - `git diff --check`: passed.
 - `npm.cmd run quality`: passed.
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
   - `npm run test:integrity`: passed, 43 files.
-  - `npm run test`: passed, 39 files / 292 tests.
+  - `npm run test`: passed, 39 files / 295 tests.
   - `npm run test:contract`: passed, 3 files / 12 tests.
-  - `npm run test:coverage`: passed, statements 87.6%, branches 75.47%, functions 91.71%, lines 88.05%.
+  - `npm run test:coverage`: passed, statements 87.68%, branches 75.5%, functions 91.72%, lines 88.13%.
   - `npm run test:e2e`: passed, 48 PC Chromium tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
 - Commit pre-commit hook: passed, `npm run lint` and `npm run test:integrity`.
@@ -136,7 +138,7 @@ Next Claude Code should:
 
 1. Confirm the latest PR #1 head after this handoff is pushed.
 2. Confirm CodeRabbit OSS and GitHub Actions are green on the latest head.
-3. Review the nested managed block replacement path:
+3. Review the malformed managed block replacement path:
    - `src/lib/draft-html.ts`
    - `tests/unit/draft-html.test.ts`
 4. If checks stay green and no major review comments appear, continue with another small high-value deferred item or a live/sandbox article-quality proof step.
@@ -144,9 +146,9 @@ Next Claude Code should:
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `removeSectionsByClass`, `sectionTagHasClass`, and `findSectionEnd` behavior for nested managed blocks.
-- Whether managed FAQ/source/author replacement still removes only stale managed blocks and preserves surrounding edited body content.
-- Whether additional malformed HTML defensive tests are needed, or whether current generated/edited HTML scope is sufficient.
+- `findUnclosedManagedSectionEnd` behavior when stale managed FAQ/source/author sections lack a closing `</section>`.
+- Whether the fallback correctly preserves the next edited body `h1`/`h2` or section boundary.
+- Whether additional malformed HTML defensive tests are needed outside managed blocks.
 
 ## 12. Risk Notes
 
