@@ -66,6 +66,12 @@ const genericPhrases = [
   "streamline",
   "enhance productivity",
   "leverage",
+  "today's digital landscape",
+  "fast-paced digital landscape",
+  "ever-evolving",
+  "game-changer",
+  "unlock the potential",
+  "empower businesses",
 ];
 
 const genericOpeningPatterns = [
@@ -82,6 +88,11 @@ const genericOpeningPatterns = [
   { label: "欠かせません", pattern: /欠かせません/ },
   { label: "in this article", pattern: /\bin this article\b/i },
   { label: "this article explains", pattern: /\bthis article explains\b/i },
+  {
+    label: "today's digital landscape",
+    pattern: /\bin today['’]?s (?:fast-paced )?digital landscape\b/i,
+  },
+  { label: "ever-evolving landscape", pattern: /\bever-evolving (?:digital )?landscape\b/i },
 ];
 
 const genericEndingPatterns = [
