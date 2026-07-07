@@ -3,6 +3,7 @@ import { articleGenerationSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
 import { evaluateArticleQuality } from "@/lib/article-quality";
 import { evaluateFaqQuality } from "@/lib/faq-quality";
+import { truncatePromptLine } from "@/lib/prompt-text";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import { truncateText } from "@/lib/utils";
 import type { ArticleGenerationResult } from "@/types/aio";
@@ -344,11 +345,6 @@ function buildPremiumImagePrompt({
     "Use abstract dashboards, process cards, geometric diagrams, data-flow shapes, source/checklist cards, or symbolic business/AI elements as appropriate.",
     "Avoid: readable text, random letters, logos, watermarks, fake brand marks, cluttered dashboards, distorted hands, unnecessary people, clip-art, cheap stock-photo look, dark blurry neon backgrounds.",
   ].join("\n");
-}
-
-function truncatePromptLine(value: string, maxLength: number) {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
 }
 
 function normalizeImageCount(value: unknown) {

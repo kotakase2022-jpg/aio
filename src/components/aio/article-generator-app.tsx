@@ -41,6 +41,7 @@ import {
 import { formatJaDateTime } from "@/lib/date";
 import { buildDraftArticleHtml } from "@/lib/draft-html";
 import { evaluateFaqQuality } from "@/lib/faq-quality";
+import { truncatePromptLine } from "@/lib/prompt-text";
 import { qualityRegenerationAction } from "@/lib/quality-regeneration-action";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import { cn, joinCsv, splitCsv } from "@/lib/utils";
@@ -3237,11 +3238,6 @@ function buildImageRegenerationPrompt(
     "Keep the regenerated image article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
     "Avoid readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, distorted hands, unnecessary people, clip-art, cheap stock-photo look, and dark blurry AI-art backgrounds.",
   ].join("\n");
-}
-
-function truncatePromptLine(value: string, maxLength: number) {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
 }
 
 function imageSrcForHtml(image: ArticleImage) {

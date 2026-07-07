@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { truncatePromptLine } from "@/lib/prompt-text";
 import { generateImageBase64 } from "@/lib/server/openai";
 import { storeAsset } from "@/lib/server/storage";
 import type { ArticleFormPayload, ArticleGenerationResult, ArticleImage } from "@/types/aio";
@@ -136,11 +137,6 @@ function buildArticleImagePrompt(
     "Make the visual article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
     "Avoid text-heavy layouts, readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, unnecessary people, and cheap stock-photo aesthetics.",
   ].join("\n");
-}
-
-function truncatePromptLine(value: string, maxLength: number) {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
 }
 
 function normalizeImageCount(value: unknown) {
