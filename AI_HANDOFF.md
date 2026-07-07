@@ -5,9 +5,9 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: Previous handoff used `Loop: 3 continuation`, and the active 100/100 goal is still not proven complete. This is another Codex continuation, now returning to Claude Code for review.
-- Phase: Autonomous Improvement / WordPress Error Localization / Handoff
-- Last updated: 2026-07-07 22:18 +09:00
+- Loop number inferred from: Previous handoff used `Loop: 3 continuation`, and the active 100/100 goal is still not proven complete. This is another Codex continuation, returning to Claude Code for review after one focused reliability improvement.
+- Phase: Autonomous Improvement / OpenAI Error Localization / Handoff
+- Last updated: 2026-07-07 22:31 +09:00
 
 ## 1. Current Goal
 
@@ -15,62 +15,66 @@
 
 AIO記事生成アプリを、機能信頼性・PCブラウザ画面遷移・日常利用UX・非commodityな記事品質の観点で100/100に近づける。
 
-今回のCodexフェーズでは、承認済み記事をWordPressへ投稿する最終業務フローのエラー表示を改善した。WordPress接続保存、接続読み込み、接続欠落、投稿失敗、カテゴリー/タグ検索・作成・応答形式不正、production暗号化キー不足の主エラーを日本語化し、元のWordPress/Supabase detailは残した。
+今回のCodexフェーズでは、記事生成・画像生成の中核であるOpenAIサーバーラッパーに残っていた英語のユーザー向け主エラーを日本語化した。あわせて、`OPENAI_API_KEY` 未設定エラーがfetch失敗として包み直される既存不具合を修正し、APIキー不足時はリトライやfetchを行わず設定ガイダンスを返すようにした。
 
 Goal全体は未完了。実OpenAI/Supabase/WordPress sandboxでのライブ契約テスト、CodeRabbit Deferredの残件、実生成記事品質の人間評価は継続課題。
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `f15d89e Localize WordPress integration errors`
-- Previous implementation commit: `7c38063 Localize generation job persistence errors`
-- Previous handoff commit: `8e68a39 Update handoff after generation job localization`
-- Last known good commit before this handoff: `f15d89e Localize WordPress integration errors`
-- Last known good verification: `npm.cmd run quality` passed after `f15d89e`.
+- Latest implementation commit: `0b16060 Localize OpenAI wrapper errors`
+- Previous implementation commit: `f15d89e Localize WordPress integration errors`
+- Previous handoff commit: `c069ee0 Update handoff after WordPress error localization`
+- Last known good commit before this handoff: `0b16060 Localize OpenAI wrapper errors`
+- Last known good verification: `npm.cmd run quality` passed after `0b16060`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status before this handoff update: SUCCESS on PR #1 at head `8e68a39`.
-- GitHub Actions status before this handoff update: `Typecheck, lint, tests, E2E, build` SUCCESS on PR #1 at head `8e68a39`.
-- Merge state before this handoff update: CLEAN.
+- CodeRabbit OSS review status before this implementation pass: SUCCESS on PR #1 at head `c069ee0`.
+- GitHub Actions status before this implementation pass: `Typecheck, lint, tests, E2E, build` SUCCESS on PR #1 at head `c069ee0`.
+- Merge state before this implementation pass: CLEAN.
 - Note: This handoff update still needs its own commit/push and post-push PR check confirmation.
 
 ## 3. What Was Done
 
 今回完了したこと：
 
-- Required workflow files, current branch, recent commits, PR checks, and CodeRabbit comments were checked before work.
+- Required workflow files, current branch, recent commits, PR checks, and PR metadata were checked before work.
 - PR #1 was green before this implementation pass.
-- WordPress連携まわりに残っていた英語のユーザー向け主エラーを日本語化した。
-  - WordPress接続情報の保存失敗。
-  - WordPress接続情報の読み込み失敗。
-  - WordPress接続情報の欠落。
-  - WordPress投稿失敗。
-  - WordPressカテゴリー/タグ検索失敗。
-  - WordPressカテゴリー/タグ作成失敗。
-  - WordPressカテゴリー/タグ検索・作成応答形式不正。
-  - 本番環境の `WORDPRESS_ENCRYPTION_KEY` 未設定。
-- `tests/integration/wordpress.integration.test.ts` にSupabase接続保存/読み込み失敗、接続欠落、投稿失敗の日本語エラー確認を追加した。
-- `tests/contract/wordpress.contract.test.ts` のWordPress REST API失敗系期待値を日本語主文へ更新した。
-- 対象テストとフル品質ゲートを実行し、成功を確認した。
-- 実装修正を `f15d89e Localize WordPress integration errors` としてコミットした。
+- OpenAIサーバーラッパーに残っていた英語のユーザー向け主エラーを日本語化した。
+  - `OPENAI_API_KEY` 未設定。
+  - OpenAI APIリクエストの最終フォールバック失敗。
+  - Responses APIの構造化出力欠落。
+  - Responses APIのJSON解析失敗。
+  - Image APIのbase64画像データ欠落。
+  - 未分類HTTPエラーのフォールバック。
+- `OPENAI_API_KEY` 未設定の `ApiError` がtransport errorとして再ラップされ、502の接続失敗に見えていた既存不具合を修正した。
+  - `getOpenAIKey()` をOpenAIリトライループの外で実行。
+  - APIキー未設定時はfetchを呼ばず、500の設定ガイダンスを返す。
+- `tests/unit/openai.test.ts` に日本語エラー確認を追加・強化した。
+  - APIキー未設定ではfetchしないこと。
+  - JSON不正時の日本語主文とdetail。
+  - 構造化出力欠落時の日本語主文。
+  - 未分類HTTPエラー時の日本語フォールバックとdetail。
+  - 画像base64欠落時の日本語主文。
+- 対象OpenAI単体/契約テストとフル品質ゲートを実行し、成功を確認した。
+- 実装修正を `0b16060 Localize OpenAI wrapper errors` としてコミットした。
 
 ## 4. Files Changed
 
 主な変更ファイル：
 
-- `src/lib/server/wordpress.ts`
-- `tests/integration/wordpress.integration.test.ts`
-- `tests/contract/wordpress.contract.test.ts`
+- `src/lib/server/openai.ts`
+- `tests/unit/openai.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
 現在の状態：
 
-- 実装commit `f15d89e` 作成済み。
+- 実装commit `0b16060` 作成済み。
 - `npm.cmd run quality` 成功済み。
 - このhandoff更新は別commit予定。
 - PR #1: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR #1 checks were green before `f15d89e`; `f15d89e` とこのhandoff commitをpushした後、CodeRabbit OSSとGitHub Actionsを再確認すること。
+- PR #1 checks were green before `0b16060`; `0b16060` とこのhandoff commitをpushした後、CodeRabbit OSSとGitHub Actionsを再確認すること。
 - Cursor Bugbotは標準レビューから外れているため未実行。
 
 ## 6. Known Issues
@@ -80,7 +84,7 @@ Goal全体は未完了。実OpenAI/Supabase/WordPress sandboxでのライブ契�
 - CodeRabbit Deferred指摘が残る。
   - `file-extraction.ts` inline rich text周辺は、既存テストでDOCX/PPTX/XLSXの連結カバー済み。まだCodeRabbitが指摘する場合は、現行テストと具体コメントを照合すること。
   - 重複コード共通化は一部対応済み。残る重複があれば個別確認。
-  - i18nメッセージ統一は段階的に改善中。WordPress画像関連、WordPress投稿/接続/ターム関連、画像アップロードAPI、URL本文抽出、ファイル添付抽出、ドラフト承認、Supabase下書き保存/読み込み、生成ジョブ保存/読み込みは対応済み。
+  - i18nメッセージ統一は段階的に改善中。WordPress画像関連、WordPress投稿/接続/ターム関連、画像アップロードAPI、URL本文抽出、ファイル添付抽出、ドラフト承認、Supabase下書き保存/読み込み、生成ジョブ保存/読み込み、OpenAI wrapperの主エラーは対応済み。
   - markdownlint系の文書整形。
   - 追加のenv復元ヘルパー適用余地。
 - 実際のOpenAI/Supabase/WordPress sandbox資格情報を使う `test:live:*` は未実行。
@@ -93,7 +97,7 @@ CodeRabbit OSSの指摘と対応状況：
 
 - Review status: PR #1 open. 作業開始時点ではCodeRabbit SUCCESS、GitHub Actions SUCCESS、mergeState CLEAN。
 - Current pass:
-  - 今回はWordPress連携エラーの日本語化とmock/contractテスト強化を実施。
+  - 今回はOpenAI wrapperエラーの日本語化とunit test強化を実施。
 - Critical findings:
   - live env precedence不一致は `6be50a9` と `tests/unit/live-test-helpers.test.ts` で対応済み。
 - Resolved / strengthened findings:
@@ -110,6 +114,7 @@ CodeRabbit OSSの指摘と対応状況：
   - Supabase draft persistence i18n: `f6006e6`
   - Generation job persistence i18n: `7c38063`
   - WordPress integration error i18n: `f15d89e`
+  - OpenAI wrapper error i18n and API-key no-fetch handling: `0b16060`
 - Deferred findings:
   - `Known Issues`を参照。
 - False positives / not applicable:
@@ -122,30 +127,30 @@ Cursor Bugbotの任意確認：
 - Status: Not run
 - Findings: なし
 - Actions taken: なし
-- Reason: 標準レビューはCodeRabbit OSS。今回の変更はWordPress連携エラー文言とmock/contractテスト更新であり、本番WordPress、本番DB、本番APIへ接続する変更ではないため、Bugbot予備確認は不要と判断。
+- Reason: 標準レビューはCodeRabbit OSS。今回の変更はOpenAI wrapperのエラーメッセージとmocked unit test更新であり、本番OpenAI、本番DB、本番WordPressへ接続する変更ではないため、Bugbot予備確認は不要と判断。
 
 ## 9. Verification Results
 
 実行した確認コマンドと結果：
 
 ```bash
-npx.cmd vitest run tests/integration/wordpress.integration.test.ts
-npx.cmd vitest run tests/contract/wordpress.contract.test.ts
+npx.cmd vitest run tests/unit/openai.test.ts
+npx.cmd vitest run tests/contract/openai.contract.test.ts
 npm.cmd run quality
-git commit -m "Localize WordPress integration errors"
+git commit -m "Localize OpenAI wrapper errors"
 ```
 
 結果：
 
-- `tests/integration/wordpress.integration.test.ts`: 成功、1 file / 7 tests passed。
-- `tests/contract/wordpress.contract.test.ts`: 成功、1 file / 7 tests passed。
+- `tests/unit/openai.test.ts`: 成功、1 file / 17 tests passed。
+- `tests/contract/openai.contract.test.ts`: 成功、1 file / 3 tests passed。
 - `npm.cmd run quality`: 成功。
   - `npm run typecheck`: 成功。
   - `npm run lint`: 成功。
   - `npm run test:integrity`: 成功、43 files。
-  - `npm run test`: 成功、39 files / 275 tests passed。
+  - `npm run test`: 成功、39 files / 279 tests passed。
   - `npm run test:contract`: 成功、3 files / 12 tests passed。
-  - `npm run test:coverage`: 成功、statements 86.54% / branches 73.38% / functions 91.52% / lines 86.97%。
+  - `npm run test:coverage`: 成功、statements 86.85% / branches 73.79% / functions 91.52% / lines 87.30%。
   - `npm run test:e2e`: 成功、48 passed。
   - `npm run build`: 成功、Next.js 16.2.9 production build passed。
 - 実装commit時pre-commit: 成功、`npm run lint` / `npm run test:integrity`。
@@ -153,15 +158,15 @@ git commit -m "Localize WordPress integration errors"
 未実行：
 
 - `npm.cmd run test:live:*` はsandbox資格情報が必要なため未実行。
-- `f15d89e` とこのhandoff commit push後のCodeRabbit/GitHub Actions再確認。
+- `0b16060` とこのhandoff commit push後のCodeRabbit/GitHub Actions再確認。
 
 ## 10. Next Recommended Action
 
 次にClaude Codeが最初にやるべきこと：
 
-1. `f15d89e Localize WordPress integration errors` とこのhandoff更新commitをレビューする。
+1. `0b16060 Localize OpenAI wrapper errors` とこのhandoff更新commitをレビューする。
 2. PR #1で最新push後のCodeRabbit OSSとGitHub Actionsの結果を確認する。
-3. `src/lib/server/wordpress.ts`、`tests/integration/wordpress.integration.test.ts`、`tests/contract/wordpress.contract.test.ts` をレビューし、WordPress投稿・接続・カテゴリー/タグ失敗時の日本語エラーが画面利用者に十分分かりやすいか確認する。
+3. `src/lib/server/openai.ts`、`tests/unit/openai.test.ts` をレビューし、OpenAI APIキー不足・構造化出力欠落・JSON不正・画像データ欠落・未知HTTP失敗時の日本語エラーが画面利用者に十分分かりやすいか確認する。
 4. 重大な新規指摘がなければ、CodeRabbit Deferredのうち高価値な1件を最小差分で対応する。
 5. 変更後は `npm.cmd run quality` を実行し、結果をこのファイルに記録する。
 
@@ -169,20 +174,18 @@ git commit -m "Localize WordPress integration errors"
 
 Claude Codeに重点レビューしてほしい範囲：
 
-- `src/lib/server/wordpress.ts`
-  - WordPress/Supabase由来のdetailを維持しつつ、主メッセージが日本語として分かりやすいか。
-  - WordPress接続欠落時の回復手順が自然か。
-  - カテゴリー/タグ関連の日本語文言が投稿フロー上で違和感ないか。
-- `tests/integration/wordpress.integration.test.ts`
-  - mock Supabaseが本番DBへ触れず、保存/読み込み失敗と接続欠落を十分に固定できているか。
-- `tests/contract/wordpress.contract.test.ts`
-  - WordPress REST API失敗時に、外部detailを残しながら主エラーが日本語化されているか。
+- `src/lib/server/openai.ts`
+  - APIキー未設定がfetch/リトライされず、設定エラーとして返ること。
+  - OpenAI由来detailを保持しつつ、主メッセージが日本語として分かりやすいこと。
+  - 既存のリトライ/HTTP status mappingが崩れていないこと。
+- `tests/unit/openai.test.ts`
+  - APIキー未設定、構造化出力欠落、JSON不正、未知HTTP、画像データ欠落のテストが過不足ないこと。
 
 ## 12. Risk Notes
 
 リスク・人間確認が必要な事項：
 
-- 今回はWordPress連携エラー文言とmock/contractテスト更新のみ。本番deploy、本番DB/API書き込み、秘密情報出力、`.env*`内容の参照/コミットは行っていない。
+- 今回はOpenAI wrapperエラー文言とmocked unit test更新のみ。本番deploy、本番DB/API書き込み、秘密情報出力、`.env*`内容の参照/コミットは行っていない。
 - 実生成記事品質の人間評価は未完了。
 - `test:live:*` はsandbox資格情報が整ってから実行すること。
 - push後のCodeRabbit/GitHub Actions再確認が必要。
