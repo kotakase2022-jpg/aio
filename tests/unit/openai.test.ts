@@ -28,6 +28,18 @@ describe("OpenAI server wrapper", () => {
     expect(getImageModel()).toBe("gpt-image-2");
   });
 
+  test("fails with Japanese setup guidance when OPENAI_API_KEY is missing", async () => {
+    delete process.env.OPENAI_API_KEY;
+    vi.stubGlobal("fetch", vi.fn());
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 500,
+      message: "OpenAI APIキーがサーバー側に設定されていません。",
+      detail: "OPENAI_API_KEYを.env.localまたはVercel Environment Variablesに設定してください。",
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   test("parses structured response output_text", async () => {
     vi.stubGlobal(
       "fetch",
@@ -58,7 +70,12 @@ describe("OpenAI server wrapper", () => {
         schemaName: "test_schema",
         schema: { type: "object" },
       }),
-    ).rejects.toMatchObject({ status: 502 });
+    ).rejects.toMatchObject({
+      status: 502,
+      message:
+        "OpenAIの応答JSONを解析できませんでした。入力量を減らして再実行してください。",
+      detail: "not-json",
+    });
 
     vi.stubGlobal(
       "fetch",
@@ -74,6 +91,23 @@ describe("OpenAI server wrapper", () => {
       detail: "rate_limit / quota exceeded",
     });
     expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("maps missing structured output to Japanese recovery guidance", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ output: [] })));
+
+    await expect(
+      createStructuredResponse({
+        instructions: "Return JSON.",
+        input: "{}",
+        schemaName: "test_schema",
+        schema: { type: "object" },
+      }),
+    ).rejects.toMatchObject({
+      status: 502,
+      message:
+        "OpenAIの応答に構造化された出力が含まれていません。入力量を減らして再実行してください。",
+    });
   });
 
   test("retries transient OpenAI rate limits before returning a structured response", async () => {
@@ -255,6 +289,24 @@ describe("OpenAI server wrapper", () => {
     },
   );
 
+  test("maps uncommon OpenAI HTTP errors to Japanese fallback guidance", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { error: { message: "unexpected upstream response", code: "teapot" } },
+          { status: 418 },
+        ),
+      ),
+    );
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 418,
+      message: "OpenAI APIへのリクエストに失敗しました。時間をおいて再実行してください。",
+      detail: "teapot / unexpected upstream response",
+    });
+  });
+
   test("returns generated image base64 when present", async () => {
     vi.stubGlobal(
       "fetch",
@@ -262,5 +314,20 @@ describe("OpenAI server wrapper", () => {
     );
 
     await expect(generateImageBase64("prompt")).resolves.toBe("aW1hZ2U=");
+  });
+
+  test("maps image responses without base64 data to Japanese recovery guidance", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ data: [{ url: "https://example.test/image.png" }] }),
+      ),
+    );
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 502,
+      message:
+        "OpenAI画像生成の応答に画像データが含まれていません。画像枚数や指示を減らして再実行してください。",
+    });
   });
 });

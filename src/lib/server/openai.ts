@@ -37,9 +37,9 @@ function getOpenAIKey() {
   const apiKey = cleanEnvValue(process.env.OPENAI_API_KEY);
   if (!apiKey) {
     throw new ApiError(
-      "OPENAI_API_KEY is not configured on the server.",
+      "OpenAI APIキーがサーバー側に設定されていません。",
       500,
-      "Set OPENAI_API_KEY in .env.local or Vercel Environment Variables.",
+      "OPENAI_API_KEYを.env.localまたはVercel Environment Variablesに設定してください。",
     );
   }
   return apiKey;
@@ -66,6 +66,7 @@ async function callOpenAIJson<T extends { error?: { message?: string; code?: str
 ) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_OPENAI_TIMEOUT_MS;
   const maxRetries = getRetryCount();
+  const apiKey = getOpenAIKey();
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     const controller = new AbortController();
@@ -77,7 +78,7 @@ async function callOpenAIJson<T extends { error?: { message?: string; code?: str
         method: "POST",
         signal: controller.signal,
         headers: {
-          Authorization: `Bearer ${getOpenAIKey()}`,
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
@@ -113,7 +114,7 @@ async function callOpenAIJson<T extends { error?: { message?: string; code?: str
     return json;
   }
 
-  throw new ApiError("OpenAI API request failed.", 502);
+  throw new ApiError("OpenAI APIへのリクエストに失敗しました。時間をおいて再実行してください。", 502);
 }
 
 export async function createStructuredResponse<T>({
@@ -154,13 +155,20 @@ export async function createStructuredResponse<T>({
 
   const text = extractOutputText(json);
   if (!text) {
-    throw new ApiError("OpenAI response did not include structured output.", 502);
+    throw new ApiError(
+      "OpenAIの応答に構造化された出力が含まれていません。入力量を減らして再実行してください。",
+      502,
+    );
   }
 
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new ApiError("OpenAI returned invalid JSON.", 502, text.slice(0, 500));
+    throw new ApiError(
+      "OpenAIの応答JSONを解析できませんでした。入力量を減らして再実行してください。",
+      502,
+      text.slice(0, 500),
+    );
   }
 }
 
@@ -177,7 +185,10 @@ export async function generateImageBase64(prompt: string) {
 
   const image = json.data?.find((item) => item.b64_json);
   if (!image?.b64_json) {
-    throw new ApiError("OpenAI image generation did not return image data.", 502);
+    throw new ApiError(
+      "OpenAI画像生成の応答に画像データが含まれていません。画像枚数や指示を減らして再実行してください。",
+      502,
+    );
   }
 
   return image.b64_json;
@@ -225,7 +236,7 @@ function formatOpenAIError(
   }
 
   return {
-    message: "OpenAI API request failed.",
+    message: "OpenAI APIへのリクエストに失敗しました。時間をおいて再実行してください。",
     detail,
   };
 }
