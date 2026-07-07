@@ -271,30 +271,65 @@ function removeBareAuthorHeading(html: string) {
 }
 
 function removeManagedFaqBlock(html: string) {
-  return html
-    .replace(
-      /<section\b[^>]*class=(["'])[^"']*\baio-faq-block\b[^"']*\1[^>]*>[\s\S]*?<\/section>/gi,
-      "",
-    )
-    .trim();
+  return removeSectionsByClass(html, "aio-faq-block");
 }
 
 function removeManagedSourceBlock(html: string) {
-  return html
-    .replace(
-      /<section\b[^>]*class=(["'])[^"']*\baio-source-block\b[^"']*\1[^>]*>[\s\S]*?<\/section>/gi,
-      "",
-    )
-    .trim();
+  return removeSectionsByClass(html, "aio-source-block");
 }
 
 function removeManagedAuthorBlock(html: string) {
-  return html
-    .replace(
-      /<section\b[^>]*class=(["'])[^"']*\baio-author-block\b[^"']*\1[^>]*>[\s\S]*?<\/section>/gi,
-      "",
-    )
+  return removeSectionsByClass(html, "aio-author-block");
+}
+
+function removeSectionsByClass(html: string, className: string) {
+  const ranges: Array<{ start: number; end: number }> = [];
+  const sectionStart = /<section\b[^>]*>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = sectionStart.exec(html))) {
+    const startTag = match[0];
+    if (!sectionTagHasClass(startTag, className)) {
+      continue;
+    }
+
+    const end = findSectionEnd(html, sectionStart.lastIndex);
+    if (end > sectionStart.lastIndex) {
+      ranges.push({ start: match.index, end });
+      sectionStart.lastIndex = end;
+    }
+  }
+
+  return ranges
+    .reverse()
+    .reduce((currentHtml, range) => `${currentHtml.slice(0, range.start)}${currentHtml.slice(range.end)}`, html)
     .trim();
+}
+
+function sectionTagHasClass(tag: string, className: string) {
+  const match = tag.match(/\bclass\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  const classes = (match?.[1] ?? match?.[2] ?? match?.[3] ?? "").split(/\s+/);
+  return classes.includes(className);
+}
+
+function findSectionEnd(html: string, fromIndex: number) {
+  const sectionTag = /<\/?section\b[^>]*>/gi;
+  sectionTag.lastIndex = fromIndex;
+  let depth = 1;
+  let match: RegExpExecArray | null;
+
+  while ((match = sectionTag.exec(html))) {
+    if (match[0].startsWith("</")) {
+      depth -= 1;
+      if (depth === 0) {
+        return sectionTag.lastIndex;
+      }
+    } else {
+      depth += 1;
+    }
+  }
+
+  return fromIndex;
 }
 
 function collectRenderableSources(draft: ArticleDraft) {

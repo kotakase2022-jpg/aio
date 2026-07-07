@@ -80,6 +80,33 @@ describe("draft HTML rendering", () => {
     expect(html).toContain("The current edited answer should replace the stale managed block.");
   });
 
+  test("replaces a stale managed FAQ block that contains nested sections", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<h2>Main body</h2><p>Editorially approved body.</p>",
+          '<section class="aio-faq-block" aria-label="FAQ"><h2>FAQ</h2>',
+          '<section class="legacy-faq-layout"><p>Old nested FAQ answer.</p></section>',
+          "</section>",
+          "<h2>Next body section</h2><p>Body continues after FAQ.</p>",
+        ].join("\n"),
+        faqItems: [
+          {
+            question: "Which nested FAQ answer should be published?",
+            answer: "The current edited nested answer should replace the stale managed block.",
+          },
+        ],
+      }),
+    );
+
+    expect(html.match(/class="aio-faq-block"/g)).toHaveLength(1);
+    expect(html).toContain("Editorially approved body.");
+    expect(html).toContain("Body continues after FAQ.");
+    expect(html).not.toContain("Old nested FAQ answer.");
+    expect(html).toContain("Which nested FAQ answer should be published?");
+    expect(html).toContain("The current edited nested answer should replace the stale managed block.");
+  });
+
   test("resolves placeholder and relative image URLs through the supplied resolver", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
@@ -380,6 +407,36 @@ describe("draft HTML rendering", () => {
     expect(html).not.toContain("<script>alert");
   });
 
+  test("replaces a managed author block that contains nested sections", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<h2>Main body</h2><p>Editorially approved body.</p>",
+          '<section class="aio-author-block" aria-label="Author"><h2>Author</h2>',
+          '<section class="legacy-author-layout"><p>Old nested author copy.</p></section>',
+          "</section>",
+          "<h2>Next body section</h2><p>Body continues after author.</p>",
+        ].join("\n"),
+        author: {
+          name: "Test Author",
+          title: "Content Strategist",
+          bio: "Writes practical B2B content operations guides.",
+          imageUrl: "/uploads/authors/test-author.png",
+        },
+      }),
+      {
+        imageUrlResolver: (url) => `https://app.example.com${url}`,
+      },
+    );
+
+    expect(html.match(/class="aio-author-block"/g)).toHaveLength(1);
+    expect(html).toContain("Editorially approved body.");
+    expect(html).toContain("Body continues after author.");
+    expect(html).not.toContain("Old nested author copy.");
+    expect(html).toContain("Test Author");
+    expect(html).toContain('src="https://app.example.com/uploads/authors/test-author.png"');
+  });
+
   test("appends source URLs from the AI result to publishable article HTML", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
@@ -453,6 +510,26 @@ describe("draft HTML rendering", () => {
     expect(html).toContain("Reference &quot;quoted&quot; &lt;unsafe&gt;");
     expect(html).toContain("&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;");
     expect(html).not.toContain("<script>alert");
+  });
+
+  test("replaces a managed source block that contains nested sections", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<h2>Main body</h2><p>Editorially approved body.</p>",
+          '<section class="aio-source-block" aria-label="Sources"><h2>Sources</h2>',
+          '<section class="legacy-source-layout"><p>Old nested source note.</p></section>',
+          "</section>",
+          "<h2>Next body section</h2><p>Body continues after sources.</p>",
+        ].join("\n"),
+      }),
+    );
+
+    expect(html.match(/class="aio-source-block"/g)).toHaveLength(1);
+    expect(html).toContain("Editorially approved body.");
+    expect(html).toContain("Body continues after sources.");
+    expect(html).not.toContain("Old nested source note.");
+    expect(html).toContain('href="https://example.com/reference"');
   });
 
   test("falls back to fetched and input reference URLs when AI sources are empty", () => {
