@@ -29,7 +29,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Last known good local verification: `npm.cmd run quality` passed after `4be764c`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `e95560518d833a434fb996669ea156633b13cb1e`.
-- PR status after this implementation pass: not yet re-checked on GitHub until this handoff commit is pushed.
+- PR status after implementation/handoff push at head `2142e47911a610911adb82e8f41f8da46e3658cb`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS.
 
 ## 3. What Was Done
 
@@ -55,8 +55,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 - Implementation commit `4be764c` exists locally and passed focused checks plus the full local quality gate.
 - This handoff document records the implementation commit and local quality gate.
-- Branch is expected to be ahead of origin until the handoff/docs commit is created and pushed.
-- PR #1 was green before this pass at `e955605`; Claude Code should re-check the latest PR head after push.
+- Implementation and handoff/docs commits were pushed through `2142e47`.
+- PR #1 is green at head `2142e47`: CodeRabbit SUCCESS and GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS.
 
 ## 6. Known Issues
 
@@ -70,7 +70,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `e955605`.
-- Review status after this pass: pending until the latest commits are pushed and checked.
+- Review status after implementation/handoff push at head `2142e47`: CodeRabbit SUCCESS and GitHub Actions SUCCESS.
 - Current pass:
   - Syncs edited/generated image alt text into publishable article HTML and WordPress post content.
   - Adds regression tests for the HTML export path and WordPress contract payload.
@@ -127,7 +127,7 @@ Results:
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials are required.
-- Post-push `gh pr checks --watch` is still pending until this handoff/docs commit is created and pushed.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 10`: CodeRabbit passed; `Typecheck, lint, tests, E2E, build` passed in 3m45s.
 
 ## 10. Next Recommended Action
 

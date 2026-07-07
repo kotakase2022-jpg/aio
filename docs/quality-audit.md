@@ -54,8 +54,11 @@ The latest verified pushed PR head before the image-alt HTML sync pass was:
 - GitHub Actions `Typecheck, lint, tests, E2E, build`: success
 - Merge state: clean
 
-The current local branch includes implementation commit `4be764c`. Hosted CodeRabbit and Actions
-must be re-checked after the handoff/docs update is pushed.
+The latest pushed PR head after the image-alt HTML sync pass is also green:
+
+- Commit: `2142e47`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m45s
 
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
@@ -113,7 +116,7 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  were green through `e955605`; latest local commits after that must be checked after push.
+  are green through `2142e47`.
 
 ## Current Self Score
 
@@ -121,16 +124,14 @@ These gaps prevent a true 100/100 completion claim:
 - Daily-use article tool UX: 99 / 100.
 - Non-commodity generated article quality: 99 / 100.
 
-The scores remain below 100 because latest hosted checks must be re-read after push, live sandbox
-checks, live WordPress recovery verification, and human review of real generated-output quality are
-not yet complete.
+The scores remain below 100 because live sandbox checks, live WordPress recovery verification, and
+human review of real generated-output quality are not yet complete.
 
 ## Next Improvement Targets
 
 Highest-value next actions:
 
-1. Push the latest local handoff/docs update, then re-check hosted Actions for the current branch
-   head using authenticated `gh` or the GitHub UI.
+1. Re-check hosted Actions and CodeRabbit if a new commit is pushed after `2142e47`.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
