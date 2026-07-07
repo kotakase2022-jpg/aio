@@ -32,17 +32,17 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 06:05 +09:00 after adding WordPress post route
-failure-response coverage:
+The latest local full gate passed on 2026-07-08 06:20 +09:00 after adding article-quality
+coverage for repeated "必要があります" style necessity phrasing:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 46 files
-  - `npm run test`: passed, 42 files / 314 tests
+  - `npm run test`: passed, 42 files / 315 tests
   - `npm run test:contract`: passed, 3 files / 13 tests
-  - `npm run test:coverage`: passed, statements 88.18%, branches 76.10%, functions 92.13%,
-    lines 88.61%
+  - `npm run test:coverage`: passed, statements 88.21%, branches 76.19%, functions 92.13%,
+    lines 88.65%
   - `npm run test:e2e`: passed, 48 Chromium PC tests
   - `npm run build`: passed, Next.js 16.2.9 production build
 
@@ -86,14 +86,27 @@ The latest pushed head containing that route coverage and handoff update was als
 - CodeRabbit: success
 - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m46s
 
+The latest pushed status-only head before this pass was also checked:
+
+- Commit: `847ad77`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m37s
+
+The current local branch also includes implementation commit `c4d81ed`, which detects repeated
+"必要があります" / "必要です" style phrasing in generated articles, wires that quality check into
+edit guidance and regeneration instructions, and adds regression coverage. Hosted CodeRabbit and
+Actions must be re-checked after the handoff/docs update is pushed.
+
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
 input reuse.
 
 Article-quality coverage checks that supplied first-party/primary information appears in the opening
-decision frame, not only later in the body. This prevents drafts from passing quality checks when
-they read like generic AI copy until a late paragraph briefly mentions the user's own field evidence.
+decision frame, not only later in the body. It also checks common AI-ish commodity patterns,
+including generic openings, English boilerplate, repeated formulaic sentence frames, thin sections,
+mechanical headings, and repeated "necessary" phrasing such as "必要があります". This prevents
+drafts from passing quality checks when they read like generic AI copy.
 
 Publishing-readiness coverage now also checks meta descriptions, image alt quality, source URL
 deduplication, author block preservation, edited image alt text in publishable HTML / WordPress post
@@ -143,8 +156,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  are green through implementation/handoff head `a7f8f5b`; re-check any later status-only handoff
-  commits on the current PR head.
+  are green through status-only handoff head `847ad77`; re-check the current article-quality
+  implementation/handoff commits after they are pushed.
 
 ## Current Self Score
 
@@ -159,7 +172,7 @@ human review of real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit if a new commit is pushed after `2142e47`.
+1. Re-check hosted Actions and CodeRabbit after the `c4d81ed` article-quality pass is pushed.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
