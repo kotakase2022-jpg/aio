@@ -32,14 +32,15 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 06:20 +09:00 after adding article-quality
-coverage for repeated "必要があります" style necessity phrasing:
+The latest local full gate passed on 2026-07-08 06:36 +09:00 after expanding article-quality
+coverage for alternate Japanese commodity phrases such as "求められています", "欠かせない",
+and "と言えます":
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 46 files
-  - `npm run test`: passed, 42 files / 315 tests
+  - `npm run test`: passed, 42 files / 316 tests
   - `npm run test:contract`: passed, 3 files / 13 tests
   - `npm run test:coverage`: passed, statements 88.21%, branches 76.19%, functions 92.13%,
     lines 88.65%
@@ -104,6 +105,16 @@ The latest pushed head containing that article-quality pass and handoff update w
   during Playwright Chromium dependency installation due to a transient Microsoft apt repository
   signature fetch error; rerun succeeded in 3m44s.
 
+The latest pushed status-only head before this pass was also checked:
+
+- Commit: `4d4b5a2`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m33s
+
+The current local branch also includes implementation commit `19e3290`, which expands the existing
+generic phrase dictionary for Japanese AI-ish variants and adds regression coverage. Hosted
+CodeRabbit and Actions must be re-checked after the handoff/docs update is pushed.
+
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -112,8 +123,9 @@ input reuse.
 Article-quality coverage checks that supplied first-party/primary information appears in the opening
 decision frame, not only later in the body. It also checks common AI-ish commodity patterns,
 including generic openings, English boilerplate, repeated formulaic sentence frames, thin sections,
-mechanical headings, and repeated "necessary" phrasing such as "必要があります". This prevents
-drafts from passing quality checks when they read like generic AI copy.
+mechanical headings, repeated "necessary" phrasing such as "必要があります", and alternate Japanese
+commodity phrases such as "求められています" and "と言えます". This prevents drafts from passing
+quality checks when they read like generic AI copy.
 
 Publishing-readiness coverage now also checks meta descriptions, image alt quality, source URL
 deduplication, author block preservation, edited image alt text in publishable HTML / WordPress post
@@ -163,8 +175,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  are green through implementation/handoff head `1438ebc`; re-check any later status-only handoff
-  commits on the current PR head.
+  are green through status-only head `4d4b5a2`; re-check the current article-quality implementation
+  and handoff commits after they are pushed.
 
 ## Current Self Score
 
@@ -179,8 +191,8 @@ human review of real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit if a new status-only handoff commit is pushed after
-   `1438ebc`.
+1. Re-check hosted Actions and CodeRabbit after the `19e3290` article-quality dictionary pass is
+   pushed.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
