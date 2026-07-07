@@ -98,6 +98,26 @@ describe("evaluateTitleQuality", () => {
     );
   });
 
+  test("counts English input terms in slash and colon separated title phrases", () => {
+    const result = evaluateTitleQuality({
+      selectedTitle: "AI/Search title review: form approval workflow",
+      titleCandidates: [
+        "AI/Search title review: form approval workflow",
+        "Form: approval workflow for editorial teams",
+        "Search/title quality for approval workflows",
+      ],
+      themeText: "AI search editorial review",
+      primaryInfo: "Our form alpha beta",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-input-signal", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-specificity", passed: true }),
+    );
+  });
+
   test("flags short topic plus generic English BtoB title suffixes", () => {
     const result = evaluateTitleQuality({
       selectedTitle: "AIO Best Practices",
