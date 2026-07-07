@@ -868,6 +868,9 @@ test("theme candidate failure can be retried and then applied", async ({ page })
 
   await login(page);
   await page.getByTestId("reference-text-0").fill("Reference text for theme retry handling.");
+  await page
+    .getByTestId("primary-info-textarea")
+    .fill("Primary field observation for theme retry handling.");
   await page.getByTestId("theme-candidates-button").click();
 
   expect(calls.themeCandidates).toBe(1);
@@ -877,6 +880,7 @@ test("theme candidate failure can be retried and then applied", async ({ page })
   await page.getByTestId("theme-candidates-button").click();
 
   expect(calls.themeCandidates).toBe(2);
+  expect(calls.themeCandidatePrimaryInfo).toContain("Primary field observation");
   await expect(page.getByTestId("theme-candidates-error")).toHaveCount(0);
   await expect(page.getByTestId("theme-candidate-card-0")).toContainText(
     "AIO Content Operations Guide",
@@ -3043,6 +3047,7 @@ async function mockCommonApiRoutes(
     extractFile: 0,
     themeCandidates: 0,
     themeCandidateCompetitorSummary: "",
+    themeCandidatePrimaryInfo: "",
     articleGenerationJobs: 0,
     articlePrimaryInfo: "",
     articleClosingText: "",
@@ -3120,8 +3125,10 @@ async function mockCommonApiRoutes(
 
     const body = route.request().postDataJSON() as {
       competitorResearch?: { summary?: string };
+      primaryInfo?: string;
     };
     calls.themeCandidateCompetitorSummary = body.competitorResearch?.summary ?? "";
+    calls.themeCandidatePrimaryInfo = body.primaryInfo ?? "";
     await route.fulfill({
       json: {
         ...themeCandidates,

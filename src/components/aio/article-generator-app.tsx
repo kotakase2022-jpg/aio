@@ -368,6 +368,7 @@ export function ArticleGeneratorApp() {
         competitorFiles,
         competitorResearch: editableResearch,
         currentTheme: theme,
+        primaryInfo,
       });
       setThemeCandidates(result.result);
     } catch (error) {

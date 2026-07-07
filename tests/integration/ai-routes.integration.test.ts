@@ -40,6 +40,7 @@ describe("AI route handlers", () => {
           competitorFiles: [],
           competitorResearch: null,
           currentTheme: "theme ".repeat(300),
+          primaryInfo: "field observation ".repeat(200),
         }),
       }),
     );
@@ -50,6 +51,7 @@ describe("AI route handlers", () => {
         references: Array<{ text?: string }>;
         referenceFiles: Array<{ text?: string }>;
         currentTheme: string;
+        primaryInfo: string;
       };
     };
 
@@ -61,6 +63,11 @@ describe("AI route handlers", () => {
     expect(input.payload.references[0].text).toContain("[truncated]");
     expect(input.payload.referenceFiles[0].text).toContain("[truncated]");
     expect(input.payload.currentTheme).toContain("[truncated]");
+    expect(input.payload.primaryInfo).toContain("[truncated]");
+    expect(input.payload.primaryInfo).toContain("field observation");
+    expect(call?.instructions).toContain("primary first-party information");
+    expect(call?.instructions).toContain("original angles");
+    expect(call?.instructions).toContain("Do not paste it verbatim");
   });
 
   test("competitor research route limits payload size before web search", async () => {
