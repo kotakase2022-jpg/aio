@@ -89,7 +89,7 @@ describe("draft persistence route handlers", () => {
       ok: false,
       error: "入力内容が不正です。",
     });
-    expect(json.detail).toContain("draftId or draft is required.");
+    expect(json.detail).toContain("承認する下書き情報が見つかりません。");
   });
 
   test("approve-draft returns 404 for missing persisted drafts", async () => {
@@ -106,7 +106,9 @@ describe("draft persistence route handlers", () => {
     expect(response.status).toBe(404);
     expect(json).toMatchObject({
       ok: false,
-      error: "Draft not found.",
+      error: "下書きが見つかりません。",
+      detail:
+        "生成ログから下書きを開き直すか、編集内容を保存してからもう一度承認してください。",
     });
   });
 

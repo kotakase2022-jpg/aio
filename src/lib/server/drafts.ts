@@ -99,7 +99,11 @@ export async function getDraft(id: string) {
 export async function approveDraft(id: string) {
   const draft = await getDraft(id);
   if (!draft) {
-    throw new ApiError("Draft not found.", 404);
+    throw new ApiError(
+      "下書きが見つかりません。",
+      404,
+      "生成ログから下書きを開き直すか、編集内容を保存してからもう一度承認してください。",
+    );
   }
 
   const updated: ArticleDraft = {
