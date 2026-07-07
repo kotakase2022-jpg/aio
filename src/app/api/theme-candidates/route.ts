@@ -69,7 +69,7 @@ function compactPayload(payload: z.infer<typeof inputSchema>) {
     competitorFiles: compactFiles(payload.competitorFiles),
     competitorResearch: payload.competitorResearch,
     currentTheme: payload.currentTheme ? truncateText(payload.currentTheme, 800) : "",
-    primaryInfo: payload.primaryInfo ? truncateText(payload.primaryInfo, 1200) : "",
+    primaryInfo: compactOptionalText(payload.primaryInfo, 1200),
   };
 }
 
@@ -81,4 +81,10 @@ function compactFiles(files: z.infer<typeof fileSchema>[] | undefined) {
     text: file.text ? truncateText(file.text, 1500) : undefined,
     error: file.error,
   }));
+}
+
+function compactOptionalText(value: string | undefined, maxLength: number): string {
+  const trimmed = value?.trim();
+
+  return trimmed ? truncateText(trimmed, maxLength) : "";
 }

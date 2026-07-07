@@ -40,7 +40,7 @@ describe("AI route handlers", () => {
           competitorFiles: [],
           competitorResearch: null,
           currentTheme: "theme ".repeat(300),
-          primaryInfo: "field observation ".repeat(200),
+          primaryInfo: `  ${"field observation ".repeat(200)}  `,
         }),
       }),
     );
@@ -65,9 +65,50 @@ describe("AI route handlers", () => {
     expect(input.payload.currentTheme).toContain("[truncated]");
     expect(input.payload.primaryInfo).toContain("[truncated]");
     expect(input.payload.primaryInfo).toContain("field observation");
+    expect(input.payload.primaryInfo.startsWith(" ")).toBe(false);
     expect(call?.instructions).toContain("primary first-party information");
     expect(call?.instructions).toContain("original angles");
     expect(call?.instructions).toContain("Do not paste it verbatim");
+  });
+
+  test("theme candidates route treats whitespace-only primary info as missing", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const result: ThemeCandidateResult = {
+      summary: "No primary info was provided.",
+      candidates: [
+        {
+          title: "Reference-led AIO article plan",
+          keywords: ["AIO"],
+          targetReader: "BtoB content owner",
+          searchIntent: "Find a practical article angle from reference material.",
+          angle: "Use source material without inventing first-party evidence.",
+        },
+      ],
+    };
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce(result);
+    const { POST } = await import("@/app/api/theme-candidates/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/theme-candidates", {
+        method: "POST",
+        body: JSON.stringify({
+          references: [{ text: "Reference note" }],
+          competitors: [],
+          competitorResearch: null,
+          currentTheme: "",
+          primaryInfo: " \n\t ",
+        }),
+      }),
+    );
+    const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
+    const input = JSON.parse(String(call?.input)) as {
+      payload: {
+        primaryInfo: string;
+      };
+    };
+
+    expect(response.status).toBe(200);
+    expect(input.payload.primaryInfo).toBe("");
   });
 
   test("competitor research route limits payload size before web search", async () => {
