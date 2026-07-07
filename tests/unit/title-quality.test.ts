@@ -60,6 +60,24 @@ describe("evaluateTitleQuality", () => {
     expect(result.score).toBeLessThan(90);
   });
 
+  test("does not count English input terms inside longer title words", () => {
+    const result = evaluateTitleQuality({
+      selectedTitle: "Platform workflow for approval teams",
+      titleCandidates: [
+        "Platform workflow for approval teams",
+        "Platform operating timing for approval teams",
+        "Approval teams and platform operations",
+      ],
+      themeText: "AI search editorial review",
+      primaryInfo: "Our form alpha beta",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-input-signal", passed: false }),
+    );
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("flags short topic plus generic English BtoB title suffixes", () => {
     const result = evaluateTitleQuality({
       selectedTitle: "AIO Best Practices",

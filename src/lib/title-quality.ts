@@ -194,14 +194,14 @@ function extractTitleSignalTerms(value: string) {
 }
 
 function titleContainsTerm(titleText: string, term: string) {
-  if (titleText.includes(term)) {
-    return true;
-  }
-
   const normalizedTitle = titleText.toLowerCase();
   const normalizedTerm = term.toLowerCase();
   if (/^[a-z0-9_-]+$/i.test(term)) {
-    return normalizedTitle.includes(normalizedTerm);
+    return titleEnglishTokenAppearsInText(normalizedTerm, normalizedTitle);
+  }
+
+  if (titleText.includes(term)) {
+    return true;
   }
 
   if (term.length < 5) {
@@ -211,6 +211,11 @@ function titleContainsTerm(titleText: string, term: string) {
   return Array.from({ length: Math.max(0, term.length - 3) }, (_, index) =>
     term.slice(index, index + 4),
   ).some((part) => titleText.includes(part));
+}
+
+function titleEnglishTokenAppearsInText(term: string, titleText: string) {
+  const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![a-z0-9_-])${escapedTerm}(?![a-z0-9_-])`, "i").test(titleText);
 }
 
 function uniqueItems(items: string[]) {
