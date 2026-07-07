@@ -3,9 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createSampleDraft } from "../fixtures/article";
+import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 import { createMockHttpServer, sendJson } from "../helpers/mock-http-server";
 
 let tempDir = "";
+const processEnvSnapshot = snapshotProcessEnv();
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "aio-wp-contract-"));
@@ -20,7 +22,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true });
-  delete process.env.AIO_LOCAL_DATA_DIR;
+  restoreProcessEnv(processEnvSnapshot);
 });
 
 describe("WordPress REST API contract", () => {

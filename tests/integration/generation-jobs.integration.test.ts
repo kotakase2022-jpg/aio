@@ -3,8 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { sampleFormPayload } from "../fixtures/article";
+import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 
 let tempDir = "";
+const processEnvSnapshot = snapshotProcessEnv();
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "aio-job-tests-"));
@@ -18,7 +20,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true });
-  delete process.env.AIO_LOCAL_DATA_DIR;
+  restoreProcessEnv(processEnvSnapshot);
 });
 
 describe("generation job cancellation and restoration", () => {
