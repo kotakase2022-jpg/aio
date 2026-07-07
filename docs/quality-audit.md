@@ -32,17 +32,17 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 05:29 +09:00 after syncing edited image alt text
-into publishable article HTML:
+The latest local full gate passed on 2026-07-08 05:50 +09:00 after adding WordPress featured media
+alt metadata updates:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 46 files
-  - `npm run test`: passed, 42 files / 312 tests
-  - `npm run test:contract`: passed, 3 files / 12 tests
-  - `npm run test:coverage`: passed, statements 88.17%, branches 76.08%, functions 92.28%,
-    lines 88.57%
+  - `npm run test`: passed, 42 files / 313 tests
+  - `npm run test:contract`: passed, 3 files / 13 tests
+  - `npm run test:coverage`: passed, statements 88.18%, branches 76.10%, functions 92.13%,
+    lines 88.61%
   - `npm run test:e2e`: passed, 48 Chromium PC tests
   - `npm run build`: passed, Next.js 16.2.9 production build
 
@@ -63,6 +63,10 @@ The latest code-bearing PR head after the image-alt HTML sync pass is also green
 Later status-only handoff commits should be re-checked on the current PR head; they do not change
 runtime code.
 
+The current local branch also includes implementation commit `d80a080`, which writes featured image
+`altText` to WordPress media `alt_text` metadata after upload. Hosted CodeRabbit and Actions must be
+re-checked after the handoff/docs update is pushed.
+
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -73,8 +77,8 @@ decision frame, not only later in the body. This prevents drafts from passing qu
 they read like generic AI copy until a late paragraph briefly mentions the user's own field evidence.
 
 Publishing-readiness coverage now also checks meta descriptions, image alt quality, source URL
-deduplication, author block preservation, and that edited image alt text is reflected in publishable
-HTML / WordPress post content instead of stale generated alt text.
+deduplication, author block preservation, edited image alt text in publishable HTML / WordPress post
+content, and featured image alt text in WordPress media metadata.
 
 Additional manual PC browser smoke on 2026-07-06:
 
