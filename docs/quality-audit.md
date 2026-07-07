@@ -32,55 +32,43 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-06 11:33 +09:00 after addressing
-three additional P2 review findings:
+The latest local full gate passed on 2026-07-08 05:29 +09:00 after syncing edited image alt text
+into publishable article HTML:
 
-- `npm run typecheck`
-- `npm run lint`
-- `npm run test:integrity`
-- `npm run test`
-- `npm run test:contract`
-- `npm run test:coverage`
-- `npm run test:e2e`
-- `npm run build`
+- `npm.cmd run quality`
+  - `npm run typecheck`: passed
+  - `npm run lint`: passed
+  - `npm run test:integrity`: passed, 46 files
+  - `npm run test`: passed, 42 files / 312 tests
+  - `npm run test:contract`: passed, 3 files / 12 tests
+  - `npm run test:coverage`: passed, statements 88.17%, branches 76.08%, functions 92.28%,
+    lines 88.57%
+  - `npm run test:e2e`: passed, 48 Chromium PC tests
+  - `npm run build`: passed, Next.js 16.2.9 production build
 
-The latest previously verified pushed GitHub Actions run also passed:
+The latest verified pushed PR head before the image-alt HTML sync pass was:
 
-- Commit: `51c518c`
-- Workflow: `quality-gate`
-- Job: `Typecheck, lint, tests, E2E, build`
-- Run: `28763865925`
-- Result: success across setup, dependency install, typecheck, lint, test integrity, unit/integration
-  tests, external contract tests, coverage, Playwright E2E, production build, and artifact upload.
+- Commit: `e955605`
+- PR: https://github.com/kotakase2022-jpg/aio/pull/1
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success
+- Merge state: clean
 
-The latest pushed GitHub Actions run for this branch also passed after the review-finding fixes:
+The current local branch includes implementation commit `4be764c`. Hosted CodeRabbit and Actions
+must be re-checked after the handoff/docs update is pushed.
 
-- Commit: `0865661`
-- Workflow: `quality-gate`
-- Job: `Typecheck, lint, tests, E2E, build`
-- Run: `28764371615`
-- Result: success.
-
-The current PR branch contains handoff/status documentation commits after `0865661`. The PR is open,
-non-draft, and mergeable according to the GitHub connector. The latest hosted Actions conclusion for
-the current branch head could not be re-read during the 2026-07-06 11:57 +09:00 pass because
-unauthenticated GitHub REST requests were rate-limited. Use GitHub UI, authenticated `gh`, or a later
-connector/API check for that final hosted-CI proof.
-
-Current E2E coverage includes 45 Chromium PC tests across the core article workflow, required-input
+Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
 input reuse.
 
-Article-quality coverage now also checks that supplied first-party/primary information appears in
-the opening decision frame, not only later in the body. This prevents drafts from passing quality
-checks when they read like generic AI copy until a late paragraph briefly mentions the user's own
-field evidence.
+Article-quality coverage checks that supplied first-party/primary information appears in the opening
+decision frame, not only later in the body. This prevents drafts from passing quality checks when
+they read like generic AI copy until a late paragraph briefly mentions the user's own field evidence.
 
-The latest review-finding regression coverage also checks that newsletter-related article evidence
-is not stripped as HTML noise, uploaded author portraits survive even when the AI wrote an author
-section, and `.env.live.local` overrides production-like shell app env during live sandbox readiness
-checks.
+Publishing-readiness coverage now also checks meta descriptions, image alt quality, source URL
+deduplication, author block preservation, and that edited image alt text is reflected in publishable
+HTML / WordPress post content instead of stale generated alt text.
 
 Additional manual PC browser smoke on 2026-07-06:
 
@@ -122,31 +110,27 @@ These gaps prevent a true 100/100 completion claim:
   initial form, sticky CTA, generation logs, primary-information input, left-card anchor movement,
   generated draft preview/editing, fullscreen preview, copy recovery, HTML export messaging, and
   WordPress section visibility. A live WordPress recovery pass still remains for sandbox credentials.
-- CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It resolved
-  `.coderabbit.yaml`, accepted `@coderabbitai review`, posted a review-in-progress walkthrough, and
-  added a generated PR summary to the PR body. Codex automated review surfaced additional P2 findings
-  after commit `984decc`; pushed commit `3a43b96` addresses the remaining newsletter, author
-  portrait, and live-env findings. CodeRabbit's latest inline findings should still be checked if a
-  later CodeRabbit review appears.
-- The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. The current remaining
-  review-finding fixes have also been pushed as `3a43b96`, and hosted CI confirmation is green
-  through docs commit `0865661`.
+- CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
+  PR review path. Cursor Bugbot is optional/backup only.
+- The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
+  were green through `e955605`; latest local commits after that must be checked after push.
 
 ## Current Self Score
 
 - Functional reliability and screen transitions: 99 / 100.
-- Daily-use article tool UX: 98 / 100.
-- Non-commodity generated article quality: 98 / 100.
+- Daily-use article tool UX: 99 / 100.
+- Non-commodity generated article quality: 99 / 100.
 
-The scores remain below 100 because live sandbox checks, hosted CodeRabbit PR review, live WordPress
-recovery verification, and live generated-output quality review are not yet complete.
+The scores remain below 100 because latest hosted checks must be re-read after push, live sandbox
+checks, live WordPress recovery verification, and human review of real generated-output quality are
+not yet complete.
 
 ## Next Improvement Targets
 
 Highest-value next actions:
 
-1. Re-check the latest hosted Actions result for the current branch head using GitHub UI,
-   authenticated `gh`, or a later connector/API call.
+1. Push the latest local handoff/docs update, then re-check hosted Actions for the current branch
+   head using authenticated `gh` or the GitHub UI.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.

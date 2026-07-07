@@ -5,9 +5,9 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this pass remains a narrow continuation rather than a new loop.
-- Phase: Autonomous Improvement / Image Alt Quality Checks / Handoff
-- Last updated: 2026-07-08 05:15 +09:00
+- Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this remains a narrow continuation rather than a new loop.
+- Phase: Autonomous Improvement / Image Alt HTML Export Sync / Handoff
+- Last updated: 2026-07-08 05:31 +09:00
 
 ## 1. Current Goal
 
@@ -17,54 +17,46 @@ Improve the AIO article generator toward the active 100/100 goal:
 - the app feels strong enough for daily article-production work
 - generated articles feel specific, source-aware, accessible, and editorial rather than commodity AI content
 
-This Codex pass added image alt quality checks. The editor quality panel and server-side post-generation self-evaluation now catch missing, too-short/too-long, generic, or context-poor image alt text. Failed image-alt checks route the user back to the generated image editing section and include concrete regeneration/edit guidance.
+This Codex pass fixed a narrow publishing-quality gap: edited or regenerated image `altText` now syncs into existing article `<img>` tags when publishable HTML is built. Before this pass, image URLs were resolved, but stale `alt` attributes already present in the edited body could survive into HTML export / WordPress post content.
 
 The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority cleanup are still open.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `4e8510d Add image alt quality checks`
-- Previous implementation commit: `5385b62 Add meta description quality checks`
-- Previous pushed handoff commit: `7177ef7 Update handoff after meta description quality checks`
-- Last known good local verification: `npm.cmd run quality` passed after `4e8510d`.
+- Latest implementation commit: `4be764c Sync edited image alt text in article HTML`
+- Previous pushed handoff commit: `e955605 Record PR checks after image alt quality handoff`
+- Last known good local verification: `npm.cmd run quality` passed after `4be764c`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `7177ef7`.
-- PR status after implementation/handoff push at head `091d6a5`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS.
-- If this document is included in a later status-only handoff commit, re-check the latest PR head once more.
+- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `e95560518d833a434fb996669ea156633b13cb1e`.
+- PR status after this implementation pass: not yet re-checked on GitHub until this handoff commit is pushed.
 
 ## 3. What Was Done
 
-- Read the required workflow files, current handoff, branch state, recent commits, PR status, README, package scripts, and relevant quality tests before editing.
-- Confirmed PR #1 was green before this pass at head `7177ef7`.
-- Added `evaluateImageAltQuality` for image alt presence, practical length, generic-label avoidance, and article-context signal checks.
-- Integrated image alt quality into server-side article generation self-evaluation score, strengths, and improvements.
-- Integrated image alt quality into the PC editor quality panel.
-- Added image-alt-specific edit guidance, regeneration guidance, and editor focus routing to the generated image section.
-- Added unit and E2E coverage for image alt checks and the edit button focus flow.
-- Kept the change scoped to quality evaluation, quality guidance, and tests; no persistence, auth, route contract, external API client, or database behavior changed.
+- Read the required workflow files, current handoff, branch state, recent commits, PR status, README, package scripts, and relevant draft HTML / WordPress contract tests before editing.
+- Confirmed PR #1 was green before this pass at head `e955605`.
+- Updated draft HTML image replacement so matched `<img>` tags receive the current `ArticleImage.altText` while their `src` is resolved.
+- Preserved existing behavior for empty `altText`: URL replacement still happens and any existing alt text is left untouched.
+- Escaped synced alt text for safe HTML attributes.
+- Added unit coverage proving stale alt text is replaced and missing alt text is inserted during image-reference replacement.
+- Strengthened the WordPress contract test so posted content must include the current inline image alt text and must not retain stale duplicate alt text.
+- Kept the change scoped to publishable HTML generation and tests; no persistence, auth, route contract, external API client, or database behavior changed.
 - Cursor Bugbot was not run; CodeRabbit OSS remains the standard review path.
 
 ## 4. Files Changed
 
-- `src/lib/image-alt-quality.ts`
-- `src/lib/server/article-generation.ts`
-- `src/components/aio/article-generator-app.tsx`
-- `src/lib/quality-edit-guidance.ts`
-- `src/lib/quality-regeneration-action.ts`
-- `tests/unit/image-alt-quality.test.ts`
-- `tests/unit/article-generation.test.ts`
-- `tests/unit/quality-edit-guidance.test.ts`
-- `tests/unit/quality-regeneration-action-coverage.test.ts`
-- `tests/e2e/aio-workflow.spec.ts`
+- `src/lib/draft-html.ts`
+- `tests/unit/draft-html.test.ts`
+- `tests/contract/wordpress.contract.test.ts`
+- `docs/quality-audit.md`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
-- Implementation commit `4e8510d` exists locally and passed focused checks plus the full local quality gate.
-- This handoff document records the implementation commit, local quality gate, and PR checks observed after the implementation/handoff push.
-- PR #1 was green at `7177ef7` before this implementation pass.
-- After pushing the implementation and handoff commits, PR #1 was green on CodeRabbit and GitHub Actions at head `091d6a5`; Claude Code should re-check the latest PR head if this status-only handoff update is pushed after that.
+- Implementation commit `4be764c` exists locally and passed focused checks plus the full local quality gate.
+- This handoff document records the implementation commit and local quality gate.
+- Branch is expected to be ahead of origin until the handoff/docs commit is created and pushed.
+- PR #1 was green before this pass at `e955605`; Claude Code should re-check the latest PR head after push.
 
 ## 6. Known Issues
 
@@ -77,15 +69,15 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 ## 7. CodeRabbit Review
 
-- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `7177ef7`.
-- Review status after implementation/handoff push at head `091d6a5`: CodeRabbit SUCCESS and GitHub Actions SUCCESS.
+- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `e955605`.
+- Review status after this pass: pending until the latest commits are pushed and checked.
 - Current pass:
-  - Adds image alt quality checks to server self-evaluation and the editor quality panel.
-  - Confirms generic image alt text is flagged and the edit action focuses `draft-images-section`.
+  - Syncs edited/generated image alt text into publishable article HTML and WordPress post content.
+  - Adds regression tests for the HTML export path and WordPress contract payload.
 - Critical findings:
   - No known open Critical findings at the time of this handoff.
 - Resolved / strengthened findings:
-  - Strengthened accessibility, SEO/AIO publishing readiness, and WordPress handoff quality by making image alt quality visible and actionable.
+  - Strengthened accessibility and publishing readiness by preventing stale image alt text from surviving into exported / posted HTML.
 - Deferred findings:
   - See `Known Issues`.
 - False positives / not applicable:
@@ -96,78 +88,72 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Status: Not run
 - Findings: None
 - Actions taken: None
-- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow article-quality/accessibility guidance addition with CodeRabbit OSS as the standard review path.
+- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow HTML export / accessibility regression fix with CodeRabbit OSS as the standard review path.
 
 ## 9. Verification Results
 
 Commands run in this pass:
 
 ```bash
-npx.cmd vitest run tests/unit/image-alt-quality.test.ts tests/unit/article-generation.test.ts tests/unit/quality-regeneration-action-coverage.test.ts tests/unit/quality-edit-guidance.test.ts
+npx.cmd vitest run tests/unit/draft-html.test.ts tests/contract/wordpress.contract.test.ts
 git diff --check
-npx.cmd playwright test tests/e2e/aio-workflow.spec.ts -g "editing the title to a generic label updates the quality checklist"
 npm.cmd run lint
 npm.cmd run typecheck
-npm.cmd run test:integrity
+npm.cmd run test
+npm.cmd run build
 npm.cmd run quality
-git commit -m "Add image alt quality checks"
+git commit -m "Sync edited image alt text in article HTML"
 ```
 
 Results:
 
-- `npx.cmd vitest run tests/unit/image-alt-quality.test.ts tests/unit/article-generation.test.ts tests/unit/quality-regeneration-action-coverage.test.ts tests/unit/quality-edit-guidance.test.ts`: passed, 4 files / 40 tests.
+- `npx.cmd vitest run tests/unit/draft-html.test.ts tests/contract/wordpress.contract.test.ts`: passed, 2 files / 46 tests.
 - `git diff --check`: passed.
-- `npx.cmd playwright test tests/e2e/aio-workflow.spec.ts -g "editing the title to a generic label updates the quality checklist"`: passed, 1 PC Chromium test.
 - `npm.cmd run lint`: passed.
 - `npm.cmd run typecheck`: passed.
-- `npm.cmd run test:integrity`: passed, 46 files.
+- `npm.cmd run test`: passed, 42 files / 312 tests.
+- `npm.cmd run build`: passed, Next.js 16.2.9 production build.
 - `npm.cmd run quality`: passed.
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
   - `npm run test:integrity`: passed, 46 files.
-  - `npm run test`: passed, 42 files / 311 tests.
+  - `npm run test`: passed, 42 files / 312 tests.
   - `npm run test:contract`: passed, 3 files / 12 tests.
-  - `npm run test:coverage`: passed, statements 88.15%, branches 76.08%, functions 92.25%, lines 88.55%.
+  - `npm run test:coverage`: passed, statements 88.17%, branches 76.08%, functions 92.28%, lines 88.57%.
   - `npm run test:e2e`: passed, 48 PC Chromium tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
-- Commit pre-commit hook for `4e8510d`: passed, `npm run lint` and `npm run test:integrity`.
-
-Push / PR result recorded in this handoff:
-
-- Implementation and handoff commits were pushed through `091d6a5`.
-- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 10`: CodeRabbit passed; `Typecheck, lint, tests, E2E, build` passed in 3m48s.
-- If a later status-only handoff commit is pushed, re-check that newer head.
+- Commit pre-commit hook for `4be764c`: passed, `npm run lint` and `npm run test:integrity`.
 
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials are required.
+- Post-push `gh pr checks --watch` is still pending until this handoff/docs commit is created and pushed.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Confirm the latest PR #1 head after this handoff is pushed.
+1. Confirm the latest PR #1 head after this handoff/docs update is pushed.
 2. Confirm CodeRabbit OSS and GitHub Actions are green on the latest head.
-3. Review the image alt quality path:
-   - `src/lib/image-alt-quality.ts`
-   - `src/lib/server/article-generation.ts`
-   - `src/components/aio/article-generator-app.tsx`
-   - `tests/unit/image-alt-quality.test.ts`
-   - `tests/unit/article-generation.test.ts`
-   - `tests/e2e/aio-workflow.spec.ts`
-4. If checks stay green and no major review comments appear, continue with another small high-value deferred item or a live/sandbox article-quality proof step.
-5. Run `npm.cmd run quality` after any code changes and record the result here.
+3. Review the image alt HTML export path:
+   - `src/lib/draft-html.ts`
+   - `tests/unit/draft-html.test.ts`
+   - `tests/contract/wordpress.contract.test.ts`
+4. Check whether WordPress featured media alt metadata should be added in a future narrow pass. This pass only syncs inline article HTML, not WordPress media library metadata.
+5. If checks stay green and no major review comments appear, continue with another small high-value deferred item or a live/sandbox article-quality proof step.
+6. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- Whether the image alt thresholds are strict enough for publication accessibility without creating excessive false positives.
-- Whether the quality panel edit focus to `draft-images-section` feels natural in the PC editor.
-- Whether image-alt improvements should be displayed earlier than body-level improvements in any future UX iteration.
+- Whether `replaceImageReference` handles the expected generated/editor HTML shapes without overreaching into unrelated attributes.
+- Whether preserving an existing alt when `ArticleImage.altText` is empty is the right behavior.
+- Whether WordPress media upload alt metadata deserves a separate follow-up contract test and implementation.
 
 ## 12. Risk Notes
 
-- This change does not alter DB persistence, OpenAI model wrappers, image generation, WordPress calls, auth, route handlers, or saved draft schema.
-- It affects quality evaluation, editor quality guidance, and tests.
+- This change does not alter DB persistence, OpenAI model wrappers, image generation, WordPress authentication, route handlers, auth, or saved draft schema.
+- It affects publishable HTML generation and tests.
+- It intentionally does not write alt metadata to WordPress media library entries; only the article body HTML is updated.
 - Real article-quality and image-alt benefit still requires human review with real OpenAI output.
 - Live external-service proof is still missing.
 
