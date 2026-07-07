@@ -1,12 +1,7 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { qualityCheckEditGuidance } from "@/components/aio/article-generator-app";
-
-function extractQualityCheckIds(path: string) {
-  const source = readFileSync(path, "utf8");
-  return Array.from(source.matchAll(/id:\s*"([^"]+)"/g), (match) => match[1]);
-}
+import { extractQualityCheckIds } from "../helpers/quality-check-ids";
 
 describe("qualityCheckEditGuidance", () => {
   it("does not fall back to generic guidance for current quality check IDs", () => {

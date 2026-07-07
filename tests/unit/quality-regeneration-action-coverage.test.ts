@@ -1,18 +1,9 @@
-import { readFileSync } from "node:fs";
 import {
   qualityRegenerationAction,
   UNKNOWN_QUALITY_REGENERATION_ACTION,
 } from "@/lib/quality-regeneration-action";
 import { describe, expect, test } from "vitest";
-
-function readProjectFile(path: string) {
-  return readFileSync(path, "utf8");
-}
-
-function extractQualityCheckIds(path: string) {
-  const source = readProjectFile(path);
-  return Array.from(source.matchAll(/id:\s*"([^"]+)"/g), (match) => match[1]);
-}
+import { extractQualityCheckIds } from "../helpers/quality-check-ids";
 
 function duplicateIds(ids: string[]) {
   const seen = new Set<string>();
@@ -58,6 +49,12 @@ describe("quality regeneration action coverage", () => {
         [],
       );
     }
+  });
+
+  test("ignores unrelated id properties outside quality-check objects", () => {
+    const ids = extractQualityCheckIds("src/lib/server/article-generation.ts");
+
+    expect(ids).toEqual([]);
   });
 
   test("covers every article quality check with a concrete regeneration action", () => {
