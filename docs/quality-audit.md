@@ -54,11 +54,14 @@ The latest verified pushed PR head before the image-alt HTML sync pass was:
 - GitHub Actions `Typecheck, lint, tests, E2E, build`: success
 - Merge state: clean
 
-The latest pushed PR head after the image-alt HTML sync pass is also green:
+The latest code-bearing PR head after the image-alt HTML sync pass is also green:
 
 - Commit: `2142e47`
 - CodeRabbit: success
 - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m45s
+
+Later status-only handoff commits should be re-checked on the current PR head; they do not change
+runtime code.
 
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
@@ -116,7 +119,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  are green through `2142e47`.
+  are green through the latest code-bearing head `2142e47`; re-check any later status-only handoff
+  commits on the current PR head.
 
 ## Current Self Score
 

@@ -30,6 +30,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `e95560518d833a434fb996669ea156633b13cb1e`.
 - PR status after implementation/handoff push at head `2142e47911a610911adb82e8f41f8da46e3658cb`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS.
+- Later status-only handoff commits should be re-checked on the current PR head; they do not change runtime code.
 
 ## 3. What Was Done
 
@@ -55,8 +56,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 - Implementation commit `4be764c` exists locally and passed focused checks plus the full local quality gate.
 - This handoff document records the implementation commit and local quality gate.
-- Implementation and handoff/docs commits were pushed through `2142e47`.
-- PR #1 is green at head `2142e47`: CodeRabbit SUCCESS and GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS.
+- Implementation and handoff/docs commits were pushed through `2142e47`, which was green on CodeRabbit and GitHub Actions.
+- If this file is included in a later status-only commit, Claude Code should re-check the latest PR head. Status-only handoff commits do not change runtime code.
 
 ## 6. Known Issues
 
