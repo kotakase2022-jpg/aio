@@ -54,6 +54,32 @@ describe("draft HTML rendering", () => {
     expect(html).toContain("Edited answer approved by the reviewer.");
   });
 
+  test("replaces a stale managed FAQ block with the current edited FAQ items", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<h2>Main body</h2><p>Editorially approved body.</p>",
+          '<section class="aio-faq-block" aria-label="FAQ"><h2>FAQ</h2>',
+          '<div class="aio-faq-item"><h3>Old managed question?</h3><p>Old managed answer.</p></div>',
+          "</section>",
+        ].join("\n"),
+        faqItems: [
+          {
+            question: "Which FAQ answer should be published?",
+            answer: "The current edited answer should replace the stale managed block.",
+          },
+        ],
+      }),
+    );
+
+    expect(html.match(/class="aio-faq-block"/g)).toHaveLength(1);
+    expect(html).toContain("Editorially approved body.");
+    expect(html).not.toContain("Old managed question?");
+    expect(html).not.toContain("Old managed answer.");
+    expect(html).toContain("Which FAQ answer should be published?");
+    expect(html).toContain("The current edited answer should replace the stale managed block.");
+  });
+
   test("resolves placeholder and relative image URLs through the supplied resolver", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
