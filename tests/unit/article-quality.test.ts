@@ -106,6 +106,46 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
+  test("counts English first-party signal terms in hyphenated article phrases", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article operations require attributed operational evidence</h2>
+        <p>Our editors use form-based alpha and beta evidence before publication so the article keeps the original field signal visible.</p>
+        <table><tr><th>Decision point</th><td>Alpha, beta, and form-based evidence are checked before approval.</td></tr></table>
+        <ul><li>Failure pattern: teams remove the specific input term during rewriting.</li><li>Review note: keep exact operational terms visible when they matter.</li></ul>
+        <h2>Form-based wording can preserve original evidence</h2>
+        <p>FAQ: editors separate source evidence from first-party claims. Source: https://example.com/reference</p>
+      `,
+      {
+        primaryInfo: "Our form alpha beta",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-reflection", passed: true }),
+    );
+  });
+
+  test("does not count English first-party signal terms inside underscore joined article tokens", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO article operations require attributed operational evidence</h2>
+        <p>Our editors use platform_form alpha and beta evidence before publication, but this wording keeps the document term hidden inside a joined token.</p>
+        <table><tr><th>Decision point</th><td>Alpha and beta evidence are checked before approval.</td></tr></table>
+        <ul><li>Failure pattern: teams treat joined technical labels as if they reflected the original field input.</li><li>Review note: keep exact operational terms visible when they matter.</li></ul>
+        <h2>Platform_form wording is not enough for original evidence</h2>
+        <p>FAQ: editors separate source evidence from first-party claims. Source: https://example.com/reference</p>
+      `,
+      {
+        primaryInfo: "Our form alpha beta",
+      },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-reflection", passed: false }),
+    );
+  });
+
   test("flags first-party information that is only mentioned after a generic opening", () => {
     const result = evaluateArticleQuality(
       `
