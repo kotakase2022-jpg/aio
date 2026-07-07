@@ -1093,6 +1093,23 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("flags alternate Japanese commodity phrases that avoid the base phrase list", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元、一次情報、競合差分を分けて確認します。品質管理が求められています。継続的な改善は欠かせないと言えます。こうした取り組みは有効といえるでしょう。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+      <h2>承認担当が決まらない記事で起きる公開直前の手戻り</h2>
+      <p>当社の支援現場では、12件の相談で承認担当と出典確認の手順が曖昧でした。FAQとして、未確認情報は断定せず、出典と条件を本文に残します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-phrases", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("凡庸表現候補");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("flags repeated formulaic sentence frames that make copy feel templated", () => {
     const result = evaluateArticleQuality(`
       <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
