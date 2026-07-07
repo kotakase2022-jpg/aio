@@ -1,4 +1,5 @@
 import type { ArticleQualityEvaluation } from "@/lib/article-quality";
+import { englishTokenAppearsInText } from "@/lib/english-token";
 
 export type TitleQualityInput = {
   selectedTitle: string;
@@ -194,10 +195,8 @@ function extractTitleSignalTerms(value: string) {
 }
 
 function titleContainsTerm(titleText: string, term: string) {
-  const normalizedTitle = titleText.toLowerCase();
-  const normalizedTerm = term.toLowerCase();
   if (/^[a-z0-9_-]+$/i.test(term)) {
-    return titleEnglishTokenAppearsInText(normalizedTerm, normalizedTitle);
+    return englishTokenAppearsInText(term, titleText);
   }
 
   if (titleText.includes(term)) {
@@ -211,11 +210,6 @@ function titleContainsTerm(titleText: string, term: string) {
   return Array.from({ length: Math.max(0, term.length - 3) }, (_, index) =>
     term.slice(index, index + 4),
   ).some((part) => titleText.includes(part));
-}
-
-function titleEnglishTokenAppearsInText(term: string, titleText: string) {
-  const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?<![a-z0-9_])${escapedTerm}(?![a-z0-9_])`, "i").test(titleText);
 }
 
 function uniqueItems(items: string[]) {

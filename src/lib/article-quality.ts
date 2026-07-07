@@ -4,6 +4,7 @@ import {
   normalizeSourceUrls,
   sourceUrlCandidates,
 } from "@/lib/source-url";
+import { englishTokenAppearsInText } from "@/lib/english-token";
 
 export type ArticleQualityCheck = {
   id: string;
@@ -1056,11 +1057,6 @@ function termAppearsInText(term: string, text: string) {
   }
 
   return slidingWindows(term, 4).some((part) => text.includes(part));
-}
-
-function englishTokenAppearsInText(term: string, text: string) {
-  const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?<![A-Za-z0-9_])${escapedTerm}(?![A-Za-z0-9_])`, "i").test(text);
 }
 
 function includesLongVerbatimClause(source: string | undefined, targetText: string) {
