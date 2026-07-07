@@ -1,4 +1,5 @@
 import type { ArticleQualityEvaluation } from "@/lib/article-quality";
+import { englishTokenAppearsInText } from "@/lib/english-token";
 import type { FaqItem } from "@/types/aio";
 
 export type FaqQualityInput = {
@@ -216,12 +217,12 @@ function extractSignalTerms(values: string[]) {
 }
 
 function termAppearsInText(term: string, text: string) {
-  if (text.includes(term)) {
-    return true;
+  if (/^[A-Za-z0-9_-]+$/.test(term)) {
+    return englishTokenAppearsInText(term, text);
   }
 
-  if (/^[A-Za-z0-9_-]+$/.test(term)) {
-    return text.toLowerCase().includes(term.toLowerCase());
+  if (text.includes(term)) {
+    return true;
   }
 
   if (term.length < 5) {

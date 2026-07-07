@@ -179,4 +179,58 @@ describe("evaluateFaqQuality", () => {
     );
     expect(result.improvements.join(" ")).toContain("入力情報の固有語彙");
   });
+
+  test("counts English input terms across natural FAQ separators", () => {
+    const result = evaluateFaqQuality({
+      faqItems: [
+        {
+          question: "Which evidence should editors keep before publication?",
+          answer:
+            "Editors should keep form-based alpha evidence beside the source note so reviewers can trace the original field signal.",
+        },
+        {
+          question: "How should approval teams compare the draft?",
+          answer:
+            "The team should compare beta timing, source status, and approval owner before publishing the FAQ.",
+        },
+        {
+          question: "Where should the first-party observation appear?",
+          answer:
+            "Place the field example near the answer condition, then cite Source: https://example.com/reference for the supporting reference.",
+        },
+      ],
+      primaryInfo: "form alpha beta",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "faq-input-reflection", passed: true }),
+    );
+  });
+
+  test("does not count English input terms inside underscore-joined FAQ tokens", () => {
+    const result = evaluateFaqQuality({
+      faqItems: [
+        {
+          question: "Which evidence should editors keep before publication?",
+          answer:
+            "Editors should keep platform_form alpha evidence beside the source note so reviewers can trace the technical label.",
+        },
+        {
+          question: "How should approval teams compare the draft?",
+          answer:
+            "The team should compare beta timing, source status, and approval owner before publishing the FAQ.",
+        },
+        {
+          question: "Where should the field observation appear?",
+          answer:
+            "Place the field example near the answer condition, then cite Source: https://example.com/reference for the supporting reference.",
+        },
+      ],
+      primaryInfo: "form alpha beta",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "faq-input-reflection", passed: false }),
+    );
+  });
 });
