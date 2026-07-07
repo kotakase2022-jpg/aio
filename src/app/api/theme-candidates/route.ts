@@ -2,7 +2,7 @@ import { z } from "zod";
 import { themeCandidateSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
 import { errorJson, okJson } from "@/lib/server/http";
-import { truncateText } from "@/lib/utils";
+import { compactOptionalText, truncateText } from "@/lib/utils";
 import type { ThemeCandidateResult } from "@/types/aio";
 
 export const runtime = "nodejs";
@@ -81,10 +81,4 @@ function compactFiles(files: z.infer<typeof fileSchema>[] | undefined) {
     text: file.text ? truncateText(file.text, 1500) : undefined,
     error: file.error,
   }));
-}
-
-function compactOptionalText(value: string | undefined, maxLength: number): string {
-  const trimmed = value?.trim();
-
-  return trimmed ? truncateText(trimmed, maxLength) : "";
 }

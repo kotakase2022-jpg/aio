@@ -5,7 +5,7 @@ import { evaluateArticleQuality } from "@/lib/article-quality";
 import { evaluateFaqQuality } from "@/lib/faq-quality";
 import { truncatePromptLine } from "@/lib/prompt-text";
 import { evaluateTitleQuality } from "@/lib/title-quality";
-import { truncateText } from "@/lib/utils";
+import { compactOptionalText, truncateText } from "@/lib/utils";
 import type { ArticleGenerationResult } from "@/types/aio";
 
 export type ArticleGenerationPayload = {
@@ -205,12 +205,6 @@ function compactFileInput(value: unknown) {
     text: typeof value.text === "string" ? truncateText(value.text, 2200) : undefined,
     error: typeof value.error === "string" ? truncateText(value.error, 220) : undefined,
   };
-}
-
-function compactOptionalText(value: string, maxLength: number): string {
-  const trimmed = value.trim();
-
-  return trimmed ? truncateText(trimmed, maxLength) : "";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
