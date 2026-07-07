@@ -5,9 +5,9 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The previous handoff kept `Loop: 3 continuation`, the active 100/100 objective remains unproven by live sandbox tests and human article-quality review, and this pass continued with one focused maintainability improvement from the remaining Deferred cleanup set.
-- Phase: Autonomous Improvement / Quality Guidance Maintainability / Handoff
-- Last updated: 2026-07-08 02:24 +09:00
+- Loop number inferred from: The previous handoff kept `Loop: 3 continuation`, the active 100/100 objective remains unproven by live sandbox tests and human article-quality review, and this pass continued with one focused regression fix for publishable article HTML.
+- Phase: Autonomous Improvement / Draft HTML Section Preservation / Handoff
+- Last updated: 2026-07-08 02:32 +09:00
 
 ## 1. Current Goal
 
@@ -17,53 +17,49 @@ Improve the AIO article generator toward the active 100/100 goal:
 - the app feels strong enough for daily article-production work
 - generated articles feel specific, source-aware, and editorial rather than commodity AI content
 
-This Codex pass reduced test and UI coupling around the article-quality editing guidance. The pure `qualityCheckEditGuidance` mapping was moved out of the large React component into `src/lib/quality-edit-guidance.ts`, and its unit test now imports the helper directly. This addresses one of the remaining Deferred cleanup items: unit tests no longer need to import the full article generator component just to validate guidance text.
+This Codex pass fixed another author-block replacement edge case in publishable article HTML. When an AI-written author section had to be replaced to preserve an uploaded portrait, the removal boundary stopped at the next `h1`/`h2` or `section`. If the next real article section began with an `h3`, that section could be removed together with the old author block. The boundary now also stops at `h3`, and a regression test proves the following `h3` article section and paragraph are preserved.
 
 The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority CodeRabbit Deferred cleanup are still open.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `0c51575 Move quality edit guidance into lib helper`
-- Previous implementation commit: `3d1d14d Fill missing article image prompts before generation`
-- Previous pushed handoff commit: `773a48c Refresh final image prompt fallback handoff status`
-- Last known good local verification: `npm.cmd run quality` passed after `0c51575`.
+- Latest implementation commit: `f1a8e0d Preserve h3 sections after author block replacement`
+- Previous implementation commit: `0c51575 Move quality edit guidance into lib helper`
+- Previous pushed handoff commit: `ea7f34a Refresh final quality guidance handoff status`
+- Last known good local verification: `npm.cmd run quality` passed after `f1a8e0d`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `773a48c`.
-- PR status after implementation/handoff push: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `bfae084`.
-- Note: this final status refresh is documentation-only. If pushed as a newer commit after `bfae084`, re-check PR #1 once more.
+- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `ea7f34a`.
+- PR status after this local implementation pass: not checked yet until the new implementation and handoff commits are pushed.
 
 ## 3. What Was Done
 
 - Read required workflow files, current handoff, branch status, recent commits, and PR status before editing.
 - Confirmed PR #1 was green before this pass.
-- Verified the only remaining references to `qualityCheckEditGuidance` were the UI display and its unit test.
-- Added `src/lib/quality-edit-guidance.ts` with the existing Japanese guidance mapping preserved.
-- Updated `src/components/aio/article-generator-app.tsx` to import `qualityCheckEditGuidance` from the lib helper instead of exporting the helper from the large React component.
-- Updated `tests/unit/quality-edit-guidance.test.ts` to import the helper directly from `src/lib`.
-- Verified the new helper file is readable as UTF-8 and includes the expected Japanese strings.
+- Inspected the draft HTML author-block replacement helper and existing regression tests.
+- Updated `src/lib/draft-html.ts` so the old AI-written author section removal boundary stops before `h3` article sections as well as `h1`/`h2` and `<section>`.
+- Updated `tests/unit/draft-html.test.ts` with a regression test proving an `h3` article section after the old author block is preserved when the managed author block is inserted.
 - Ran focused and full verification successfully.
 - Cursor Bugbot was not run; CodeRabbit OSS remains the standard review path.
 
 ## 4. Files Changed
 
-- `src/lib/quality-edit-guidance.ts`
-- `src/components/aio/article-generator-app.tsx`
-- `tests/unit/quality-edit-guidance.test.ts`
+- `src/lib/draft-html.ts`
+- `tests/unit/draft-html.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
-- Implementation commit `0c51575` is pushed.
-- Handoff commit `bfae084` is pushed.
+- Implementation commit `f1a8e0d` is local and should be pushed with this handoff.
 - Local full quality gate is green after the implementation commit.
-- PR #1 is green at head `bfae084`; re-check if this final documentation-only status refresh is committed/pushed as a newer head.
+- PR #1 was green at the previous pushed head `ea7f34a`.
+- Re-check PR #1 after pushing this handoff commit.
 
 ## 6. Known Issues
 
 - Remaining low-priority CodeRabbit Deferred / cleanup items:
   - Some duplication/commonization opportunities remain.
-  - Broader section-removal regression coverage can still be expanded.
+  - Broader nested/irregular HTML section-removal regression coverage can still be expanded.
   - markdownlint/document formatting items remain.
   - Some env restore helper expansion opportunities remain.
 - FAQ generic-question detection may still be slightly strict for definition-style FAQs. This is currently aligned with the editorial policy that definitions belong in the body and FAQ should focus on practical decisions, but real generated data should be monitored.
@@ -73,13 +69,13 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 ## 7. CodeRabbit Review
 
-- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `773a48c`.
+- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `ea7f34a`.
 - Current pass:
-  - Extracts `qualityCheckEditGuidance` into a pure lib helper and removes a direct unit-test dependency on the large React component.
+  - Fixes an author-block replacement boundary so a following `h3` article section is not removed with the old author block.
 - Critical findings:
   - No known open Critical findings at the time of this handoff.
 - Resolved / strengthened findings:
-  - Quality edit guidance tests are now focused on a pure helper instead of importing `article-generator-app.tsx`.
+  - Draft HTML tests now cover preservation of `h3` article sections after AI-written author block replacement.
 - Deferred findings:
   - See `Known Issues`.
 - False positives / not applicable:
@@ -90,29 +86,24 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Status: Not run
 - Findings: None
 - Actions taken: None
-- Reason: Cursor Bugbot is optional/backup only. This pass is a low-risk maintainability extraction with full local quality passing and CodeRabbit OSS as the standard review path.
+- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow server-side HTML rendering regression fix with full local quality passing and CodeRabbit OSS as the standard review path.
 
 ## 9. Verification Results
 
 Commands run in this pass:
 
 ```bash
-node -e "const fs=require('fs'); const s=fs.readFileSync('src/lib/quality-edit-guidance.ts','utf8'); console.log(JSON.stringify({hasTitle:s.includes('修正先: タイトル'), hasFallback:s.includes('一般論を減らし'), length:s.length}));"
-npx.cmd vitest run tests/unit/quality-edit-guidance.test.ts
+npx.cmd vitest run tests/unit/draft-html.test.ts
 git diff --check
 npm.cmd run lint
 npm.cmd run typecheck
 npm.cmd run quality
-git commit -m "Move quality edit guidance into lib helper"
-git commit -m "Update handoff after quality guidance extraction"
-git push origin codex/persistent-quality-gate-operations
-gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
+git commit -m "Preserve h3 sections after author block replacement"
 ```
 
 Results:
 
-- UTF-8 helper check: passed, expected Japanese strings were present.
-- `npx.cmd vitest run tests/unit/quality-edit-guidance.test.ts`: passed, 1 file / 2 tests.
+- `npx.cmd vitest run tests/unit/draft-html.test.ts`: passed, 1 file / 32 tests.
 - `git diff --check`: passed.
 - `npm.cmd run lint`: passed.
 - `npm.cmd run typecheck`: passed.
@@ -120,44 +111,41 @@ Results:
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
   - `npm run test:integrity`: passed, 43 files.
-  - `npm run test`: passed, 39 files / 284 tests.
+  - `npm run test`: passed, 39 files / 285 tests.
   - `npm run test:contract`: passed, 3 files / 12 tests.
   - `npm run test:coverage`: passed, statements 87.49%, branches 75.17%, functions 91.63%, lines 87.94%.
   - `npm run test:e2e`: passed, 48 PC Chromium tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
 - Commit pre-commit hook: passed, `npm run lint` and `npm run test:integrity`.
-- `git push origin codex/persistent-quality-gate-operations`: passed. Pre-push ran `npm run lint`, `npm run typecheck`, `npm run test:integrity`, `npm run test`, and `npm run test:contract`; all passed.
-- PR #1 at head `bfae084`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN.
 
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials are required.
-- Post-push CodeRabbit/GitHub Actions for this final documentation-only status refresh if it is pushed as a newer head.
+- Post-push CodeRabbit/GitHub Actions for the new implementation/handoff commits; re-check after push.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Review `0c51575 Move quality edit guidance into lib helper` and this handoff.
+1. Review `f1a8e0d Preserve h3 sections after author block replacement` and this handoff.
 2. Confirm PR #1 checks after the latest push: CodeRabbit OSS and GitHub Actions should become green.
-3. Review `src/lib/quality-edit-guidance.ts` against the removed function in `src/components/aio/article-generator-app.tsx` to confirm behavior was preserved exactly.
+3. Review `src/lib/draft-html.ts` to confirm the author-section boundary change preserves following `h3` article sections without keeping stale author copy.
 4. If checks stay green and no major review comments appear, continue with another small high-value Deferred item or a live/sandbox article-quality proof step.
 5. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `src/lib/quality-edit-guidance.ts`
-  - guidance mapping parity with the previous component-local helper
-  - Japanese text encoding and fallback behavior
-- `src/components/aio/article-generator-app.tsx`
-  - import-only change and no UI behavior drift
-- `tests/unit/quality-edit-guidance.test.ts`
-  - test now validates the pure helper without importing the full component
+- `src/lib/draft-html.ts`
+  - `removeExistingAuthorProfileBlock`
+  - old author block removal boundary for `h2`/`h3` headings
+- `tests/unit/draft-html.test.ts`
+  - new `h3` preservation regression
+  - existing `h2`/section preservation regressions
 
 ## 12. Risk Notes
 
 - This change is intentionally narrow and does not alter API routes, DB persistence, OpenAI wrappers, WordPress calls, auth, or UI layout.
-- Japanese strings were moved between files, so reviewers should check for accidental text changes or encoding issues. A Node UTF-8 check passed locally.
+- The fix makes author section removal less destructive by stopping before `h3`. If a future AI-written author block uses an `h3` inside the old author area before the next article section, that stale fragment could be preserved; current generated/managed author blocks do not use that pattern, and the safer behavior is to avoid deleting article body sections.
 - Live external-service proof is still missing.
 
 ## 13. Do Not Touch
