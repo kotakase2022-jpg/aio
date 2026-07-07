@@ -348,12 +348,88 @@ describe("WordPress REST API contract", () => {
         }),
       ).rejects.toMatchObject({
         status: 503,
-        message: "WordPress media upload failed.",
+        message: "WordPressのメディアアップロードに失敗しました。",
         detail: "Featured media storage is unavailable.",
       });
 
       const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
       expect(requestNames).toContain("POST /wp-json/wp/v2/media");
+      expect(requestNames).not.toContain("POST /wp-json/wp/v2/posts");
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("reports featured image fetch failures in Japanese before creating a post", async () => {
+    const server = await createMockHttpServer((request, response) => {
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, []);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, { id: 11, name: (request.json as { name: string }).name }, 201);
+        return;
+      }
+
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/tags") {
+        sendJson(response, []);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/tags") {
+        sendJson(response, { id: 21, name: (request.json as { name: string }).name }, 201);
+        return;
+      }
+
+      if (request.method === "GET" && request.pathname === "/missing-featured.png") {
+        sendJson(response, { message: "not found" }, 404);
+        return;
+      }
+
+      sendJson(response, { message: `Unexpected route ${request.method} ${request.pathname}` }, 500);
+    });
+
+    try {
+      const { saveWordpressConnection, publishDraftToWordpress } = await import(
+        "@/lib/server/wordpress"
+      );
+      const connection = await saveWordpressConnection({
+        siteUrl: server.origin,
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      });
+      const draft = createSampleDraft({
+        status: "approved",
+        images: [
+          {
+            id: "featured-fetch-failure",
+            slot: "featured",
+            url: `${server.origin}/missing-featured.png`,
+            path: "generated/missing-featured.png",
+            prompt: "contract image",
+            altText: "Missing featured image",
+            source: "generated",
+          },
+        ],
+      });
+
+      await expect(
+        publishDraftToWordpress({
+          draft,
+          connectionId: connection.id,
+          status: "draft",
+          origin: "http://localhost",
+        }),
+      ).rejects.toMatchObject({
+        status: 502,
+        message: "WordPress投稿用のアイキャッチ画像を取得できませんでした。",
+        detail:
+          "画像URLの取得に失敗しました（HTTP 404）。画像を再生成するか、画像なしで投稿してください。",
+      });
+
+      const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
+      expect(requestNames).toContain("GET /missing-featured.png");
       expect(requestNames).not.toContain("POST /wp-json/wp/v2/posts");
     } finally {
       await server.close();

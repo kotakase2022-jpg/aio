@@ -406,14 +406,18 @@ async function uploadMedia(
   if (resolvedUrl.startsWith("data:")) {
     const match = /^data:(.+);base64,(.+)$/.exec(resolvedUrl);
     if (!match) {
-      throw new ApiError("Featured image data URL is invalid.", 400);
+      throw new ApiError("アイキャッチ画像のデータURLが不正です。", 400);
     }
     contentType = match[1];
     buffer = Buffer.from(match[2], "base64");
   } else {
     const imageResponse = await fetch(resolvedUrl);
     if (!imageResponse.ok) {
-      throw new ApiError("Failed to fetch featured image for WordPress upload.", 502);
+      throw new ApiError(
+        "WordPress投稿用のアイキャッチ画像を取得できませんでした。",
+        502,
+        `画像URLの取得に失敗しました（HTTP ${imageResponse.status}）。画像を再生成するか、画像なしで投稿してください。`,
+      );
     }
     contentType = imageResponse.headers.get("content-type") ?? contentType;
     buffer = Buffer.from(await imageResponse.arrayBuffer());
@@ -436,7 +440,7 @@ async function uploadMedia(
   };
 
   if (!response.ok || !json.id) {
-    throw new ApiError("WordPress media upload failed.", response.status, json.message);
+    throw new ApiError("WordPressのメディアアップロードに失敗しました。", response.status, json.message);
   }
 
   return json.id;
