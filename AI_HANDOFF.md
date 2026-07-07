@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 3 continuation
 - Loop number inferred from: Previous handoff used `Loop: 3 continuation`, and the active 100/100 goal is still not proven complete. This is another Codex continuation, now returning to Claude Code for review.
-- Phase: Autonomous Improvement / Generation Job Error Localization / Handoff
-- Last updated: 2026-07-07 22:08 +09:00
+- Phase: Autonomous Improvement / WordPress Error Localization / Handoff
+- Last updated: 2026-07-07 22:18 +09:00
 
 ## 1. Current Goal
 
@@ -15,21 +15,21 @@
 
 AIO記事生成アプリを、機能信頼性・PCブラウザ画面遷移・日常利用UX・非commodityな記事品質の観点で100/100に近づける。
 
-今回のCodexフェーズでは、タブ復元・生成ログ・長時間生成に関わる生成ジョブ永続化のエラー表示を改善した。Supabase利用時に生成ジョブの保存、読み込み、生成ログ読み込み、停止済みジョブ再実行ガードが失敗した場合でも、画面上に日本語の主エラーが返るようにした。
+今回のCodexフェーズでは、承認済み記事をWordPressへ投稿する最終業務フローのエラー表示を改善した。WordPress接続保存、接続読み込み、接続欠落、投稿失敗、カテゴリー/タグ検索・作成・応答形式不正、production暗号化キー不足の主エラーを日本語化し、元のWordPress/Supabase detailは残した。
 
 Goal全体は未完了。実OpenAI/Supabase/WordPress sandboxでのライブ契約テスト、CodeRabbit Deferredの残件、実生成記事品質の人間評価は継続課題。
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `7c38063 Localize generation job persistence errors`
-- Previous handoff commits: `601233e Clarify handoff restoration status`, `0266701 Restore readable handoff document`
-- Previous implementation commit: `f6006e6 Localize Supabase draft persistence errors`
-- Last known good commit before this handoff: `7c38063 Localize generation job persistence errors`
-- Last known good verification: `npm.cmd run quality` passed after `7c38063`.
+- Latest implementation commit: `f15d89e Localize WordPress integration errors`
+- Previous implementation commit: `7c38063 Localize generation job persistence errors`
+- Previous handoff commit: `8e68a39 Update handoff after generation job localization`
+- Last known good commit before this handoff: `f15d89e Localize WordPress integration errors`
+- Last known good verification: `npm.cmd run quality` passed after `f15d89e`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status before this handoff update: SUCCESS on PR #1 at head `601233e`.
-- GitHub Actions status before this handoff update: `Typecheck, lint, tests, E2E, build` SUCCESS on PR #1 at head `601233e`.
+- CodeRabbit OSS review status before this handoff update: SUCCESS on PR #1 at head `8e68a39`.
+- GitHub Actions status before this handoff update: `Typecheck, lint, tests, E2E, build` SUCCESS on PR #1 at head `8e68a39`.
 - Merge state before this handoff update: CLEAN.
 - Note: This handoff update still needs its own commit/push and post-push PR check confirmation.
 
@@ -38,38 +38,39 @@ Goal全体は未完了。実OpenAI/Supabase/WordPress sandboxでのライブ契�
 今回完了したこと：
 
 - Required workflow files, current branch, recent commits, PR checks, and CodeRabbit comments were checked before work.
-- Current CodeRabbit image-regeneration findings were verified against the current code and appeared already addressed:
-  - bulk image regeneration uses `Promise.allSettled`;
-  - missing generated-image recovery banner appears when missing prompts exist;
-  - `onImageFailure` already receives a single failure object.
-- Remaining user-visible English errors were scanned.
-- `src/lib/server/generation-jobs.ts` のSupabase永続化系エラーを日本語化した。
-  - 生成ジョブ読み込み失敗。
-  - 生成ジョブ保存失敗。
-  - 生成ログ読み込み失敗。
-  - 停止済みジョブ再実行ガード。
-- `tests/integration/generation-jobs.integration.test.ts` にSupabase失敗系統合テストを追加した。
-- 対象テスト、周辺ジョブランナーテスト、関連E2E、フル品質ゲートを実行し、成功を確認した。
-- 実装修正を `7c38063 Localize generation job persistence errors` としてコミットした。
+- PR #1 was green before this implementation pass.
+- WordPress連携まわりに残っていた英語のユーザー向け主エラーを日本語化した。
+  - WordPress接続情報の保存失敗。
+  - WordPress接続情報の読み込み失敗。
+  - WordPress接続情報の欠落。
+  - WordPress投稿失敗。
+  - WordPressカテゴリー/タグ検索失敗。
+  - WordPressカテゴリー/タグ作成失敗。
+  - WordPressカテゴリー/タグ検索・作成応答形式不正。
+  - 本番環境の `WORDPRESS_ENCRYPTION_KEY` 未設定。
+- `tests/integration/wordpress.integration.test.ts` にSupabase接続保存/読み込み失敗、接続欠落、投稿失敗の日本語エラー確認を追加した。
+- `tests/contract/wordpress.contract.test.ts` のWordPress REST API失敗系期待値を日本語主文へ更新した。
+- 対象テストとフル品質ゲートを実行し、成功を確認した。
+- 実装修正を `f15d89e Localize WordPress integration errors` としてコミットした。
 
 ## 4. Files Changed
 
 主な変更ファイル：
 
-- `src/lib/server/generation-jobs.ts`
-- `tests/integration/generation-jobs.integration.test.ts`
+- `src/lib/server/wordpress.ts`
+- `tests/integration/wordpress.integration.test.ts`
+- `tests/contract/wordpress.contract.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
 現在の状態：
 
-- 実装commit `7c38063` 作成済み。
+- 実装commit `f15d89e` 作成済み。
 - `npm.cmd run quality` 成功済み。
 - このhandoff更新は別commit予定。
-- ローカル作業ツリーは、このhandoff更新をコミット後に再確認すること。
 - PR #1: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR #1 checks were green before `7c38063`; `7c38063` とこのhandoff commitをpushした後、CodeRabbit OSSとGitHub Actionsを再確認すること。
+- PR #1 checks were green before `f15d89e`; `f15d89e` とこのhandoff commitをpushした後、CodeRabbit OSSとGitHub Actionsを再確認すること。
 - Cursor Bugbotは標準レビューから外れているため未実行。
 
 ## 6. Known Issues
@@ -79,7 +80,7 @@ Goal全体は未完了。実OpenAI/Supabase/WordPress sandboxでのライブ契�
 - CodeRabbit Deferred指摘が残る。
   - `file-extraction.ts` inline rich text周辺は、既存テストでDOCX/PPTX/XLSXの連結カバー済み。まだCodeRabbitが指摘する場合は、現行テストと具体コメントを照合すること。
   - 重複コード共通化は一部対応済み。残る重複があれば個別確認。
-  - i18nメッセージ統一は段階的に改善中。WordPress画像関連、画像アップロードAPI、URL本文抽出、ファイル添付抽出、ドラフト承認、Supabase下書き保存/読み込み、生成ジョブ保存/読み込みは対応済み。
+  - i18nメッセージ統一は段階的に改善中。WordPress画像関連、WordPress投稿/接続/ターム関連、画像アップロードAPI、URL本文抽出、ファイル添付抽出、ドラフト承認、Supabase下書き保存/読み込み、生成ジョブ保存/読み込みは対応済み。
   - markdownlint系の文書整形。
   - 追加のenv復元ヘルパー適用余地。
 - 実際のOpenAI/Supabase/WordPress sandbox資格情報を使う `test:live:*` は未実行。
@@ -92,8 +93,7 @@ CodeRabbit OSSの指摘と対応状況：
 
 - Review status: PR #1 open. 作業開始時点ではCodeRabbit SUCCESS、GitHub Actions SUCCESS、mergeState CLEAN。
 - Current pass:
-  - 画像再生成の逐次実行、部分失敗リカバリーバナー、`onImageFailure` callback形状の既存指摘は現行コードで対応済みと確認。
-  - 今回は新たに、生成ジョブ永続化エラーの日本語化を実施。
+  - 今回はWordPress連携エラーの日本語化とmock/contractテスト強化を実施。
 - Critical findings:
   - live env precedence不一致は `6be50a9` と `tests/unit/live-test-helpers.test.ts` で対応済み。
 - Resolved / strengthened findings:
@@ -109,6 +109,7 @@ CodeRabbit OSSの指摘と対応状況：
   - Draft approval error i18n: `7a1e5e0`
   - Supabase draft persistence i18n: `f6006e6`
   - Generation job persistence i18n: `7c38063`
+  - WordPress integration error i18n: `f15d89e`
 - Deferred findings:
   - `Known Issues`を参照。
 - False positives / not applicable:
@@ -121,53 +122,46 @@ Cursor Bugbotの任意確認：
 - Status: Not run
 - Findings: なし
 - Actions taken: なし
-- Reason: 標準レビューはCodeRabbit OSS。今回の変更は生成ジョブ永続化エラー文言とmock統合テスト追加であり、本番APIやDB本体へ接続する変更ではないため、Bugbot予備確認は不要と判断。
+- Reason: 標準レビューはCodeRabbit OSS。今回の変更はWordPress連携エラー文言とmock/contractテスト更新であり、本番WordPress、本番DB、本番APIへ接続する変更ではないため、Bugbot予備確認は不要と判断。
 
 ## 9. Verification Results
 
 実行した確認コマンドと結果：
 
 ```bash
-npx.cmd vitest run tests/integration/generation-jobs.integration.test.ts
-npx.cmd vitest run tests/integration/generation-job-runner.integration.test.ts
-npx.cmd playwright test tests/e2e/aio-workflow.spec.ts --grep "generation cancel|stale generation|failed generation job"
+npx.cmd vitest run tests/integration/wordpress.integration.test.ts
+npx.cmd vitest run tests/contract/wordpress.contract.test.ts
 npm.cmd run quality
-git commit -m "Localize generation job persistence errors"
+git commit -m "Localize WordPress integration errors"
 ```
 
 結果：
 
-- `tests/integration/generation-jobs.integration.test.ts`: 成功、1 file / 5 tests passed。
-- `tests/integration/generation-job-runner.integration.test.ts`: 成功、1 file / 4 tests passed。
-- 関連Playwright E2E: 成功、4 passed。
+- `tests/integration/wordpress.integration.test.ts`: 成功、1 file / 7 tests passed。
+- `tests/contract/wordpress.contract.test.ts`: 成功、1 file / 7 tests passed。
 - `npm.cmd run quality`: 成功。
   - `npm run typecheck`: 成功。
   - `npm run lint`: 成功。
   - `npm run test:integrity`: 成功、43 files。
-  - `npm run test`: 成功、39 files / 272 tests passed。
+  - `npm run test`: 成功、39 files / 275 tests passed。
   - `npm run test:contract`: 成功、3 files / 12 tests passed。
-  - `npm run test:coverage`: 成功、statements 86.07% / branches 72.8% / functions 91.31% / lines 86.48%。
+  - `npm run test:coverage`: 成功、statements 86.54% / branches 73.38% / functions 91.52% / lines 86.97%。
   - `npm run test:e2e`: 成功、48 passed。
   - `npm run build`: 成功、Next.js 16.2.9 production build passed。
 - 実装commit時pre-commit: 成功、`npm run lint` / `npm run test:integrity`。
 
-誤実行と修正：
-
-- `npx.cmd vitest run tests/e2e/aio-workflow.spec.ts --project=chromium --grep ...` はVitestにPlaywrightオプションを渡したため失敗。実装失敗ではなくコマンド選択ミス。
-- 直後に正しい `npx.cmd playwright test ... --grep ...` で再実行し、関連E2Eは成功。
-
 未実行：
 
 - `npm.cmd run test:live:*` はsandbox資格情報が必要なため未実行。
-- `7c38063` とこのhandoff commit push後のCodeRabbit/GitHub Actions再確認。
+- `f15d89e` とこのhandoff commit push後のCodeRabbit/GitHub Actions再確認。
 
 ## 10. Next Recommended Action
 
 次にClaude Codeが最初にやるべきこと：
 
-1. `7c38063 Localize generation job persistence errors` とこのhandoff更新commitをレビューする。
+1. `f15d89e Localize WordPress integration errors` とこのhandoff更新commitをレビューする。
 2. PR #1で最新push後のCodeRabbit OSSとGitHub Actionsの結果を確認する。
-3. `src/lib/server/generation-jobs.ts` と `tests/integration/generation-jobs.integration.test.ts` をレビューし、生成ジョブ保存/読み込み/ログ取得失敗時の日本語エラーが画面利用者に十分分かりやすいか確認する。
+3. `src/lib/server/wordpress.ts`、`tests/integration/wordpress.integration.test.ts`、`tests/contract/wordpress.contract.test.ts` をレビューし、WordPress投稿・接続・カテゴリー/タグ失敗時の日本語エラーが画面利用者に十分分かりやすいか確認する。
 4. 重大な新規指摘がなければ、CodeRabbit Deferredのうち高価値な1件を最小差分で対応する。
 5. 変更後は `npm.cmd run quality` を実行し、結果をこのファイルに記録する。
 
@@ -175,19 +169,20 @@ git commit -m "Localize generation job persistence errors"
 
 Claude Codeに重点レビューしてほしい範囲：
 
-- `src/lib/server/generation-jobs.ts`
-  - Supabase errorのdetailを維持しつつ、主メッセージが日本語として分かりやすいか。
-  - 停止済みジョブの409エラー文言が、生成停止後のユーザー体験に合っているか。
-- `tests/integration/generation-jobs.integration.test.ts`
-  - Supabase保存/読み込み/ログ取得失敗のmockが本番DBに触れず、十分な回帰テストになっているか。
-- `AI_HANDOFF.md`
-  - 検証結果、未実行項目、次アクションが最新状態と矛盾していないか。
+- `src/lib/server/wordpress.ts`
+  - WordPress/Supabase由来のdetailを維持しつつ、主メッセージが日本語として分かりやすいか。
+  - WordPress接続欠落時の回復手順が自然か。
+  - カテゴリー/タグ関連の日本語文言が投稿フロー上で違和感ないか。
+- `tests/integration/wordpress.integration.test.ts`
+  - mock Supabaseが本番DBへ触れず、保存/読み込み失敗と接続欠落を十分に固定できているか。
+- `tests/contract/wordpress.contract.test.ts`
+  - WordPress REST API失敗時に、外部detailを残しながら主エラーが日本語化されているか。
 
 ## 12. Risk Notes
 
 リスク・人間確認が必要な事項：
 
-- 今回は生成ジョブ永続化エラー文言とmock統合テスト追加のみ。本番deploy、本番DB/API書き込み、秘密情報出力、`.env*`内容の参照/コミットは行っていない。
+- 今回はWordPress連携エラー文言とmock/contractテスト更新のみ。本番deploy、本番DB/API書き込み、秘密情報出力、`.env*`内容の参照/コミットは行っていない。
 - 実生成記事品質の人間評価は未完了。
 - `test:live:*` はsandbox資格情報が整ってから実行すること。
 - push後のCodeRabbit/GitHub Actions再確認が必要。
