@@ -178,7 +178,17 @@ The latest pushed status-only head before this pass was also checked:
 
 The current local branch also includes test commit `6112b9c`, which verifies underscore-joined
 English title tokens such as `Platform_form` do not count as natural input-signal matches. Hosted
-CodeRabbit and Actions must be re-checked after the handoff/docs update is pushed.
+CodeRabbit and Actions have been checked after the handoff/docs update was pushed.
+
+The latest pushed head containing that underscore title-signal test pass and handoff update was
+also checked:
+
+- Commit: `9474aae`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m50s
+
+Later status-only handoff commits should be re-checked on the current PR head; they do not change
+runtime code.
 
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
