@@ -7,7 +7,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this remains a narrow continuation rather than a new loop.
 - Phase: Autonomous Improvement / FAQ English Token Signals / Handoff
-- Last updated: 2026-07-08 08:41 +09:00
+- Last updated: 2026-07-08 08:46 +09:00
 
 ## 1. Current Goal
 
@@ -30,11 +30,12 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Branch: `codex/persistent-quality-gate-operations`
 - Latest implementation/test commit: `5cade63 Align FAQ English token signals`
 - Previous pushed status head: `1b05cef Record shared token helper PR checks`
-- Latest handoff/docs commit checked on PR: `1b05cef Record shared token helper PR checks`
+- Latest handoff/docs commit checked on PR: `ae15e74 Update handoff after FAQ token signal fix`
 - Last known good local verification: `npm.cmd run quality` passed after `5cade63`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - PR status before this pass at head `1b05cef`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS in 3m34s.
-- PR status after this pass: pending until the implementation and handoff/docs commits are pushed and hosted checks complete.
+- PR status after this pass at head `ae15e74`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS in 3m09s.
+- Later status-only handoff commits should be re-checked on the current PR head; they do not change runtime code.
 - CodeRabbit OSS review status: CodeRabbit is installed and responding on PR #1. Old duplicate comments about image recovery / parallel image regeneration still appear in PR review history, but the latest status check was SUCCESS before this pass; current code and E2E coverage had already addressed those areas in previous Loop 3 work.
 
 ## 3. What Was Done
@@ -60,8 +61,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 - Implementation/test commit `5cade63` exists locally and passed focused FAQ/token tests plus the full local quality gate.
 - Handoff/docs updates are prepared in this file and `docs/quality-audit.md`.
-- Hosted CodeRabbit and GitHub Actions were green before this pass on `1b05cef`.
-- Hosted checks must be re-run after the implementation and handoff/docs commits are pushed.
+- Hosted CodeRabbit and GitHub Actions are green on `ae15e74`.
+- If this file is included in a later status-only commit, Claude Code should re-check the latest PR head. Status-only handoff commits do not change runtime code.
 
 ## 6. Known Issues
 
@@ -75,7 +76,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `1b05cef`.
-- Review status after this pass: pending until push and hosted checks complete.
+- Review status after this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `ae15e74`.
 - Current pass:
   - Applies shared English token-boundary behavior to FAQ input-reflection quality checks.
   - Adds focused direct unit coverage.
@@ -129,13 +130,15 @@ Results:
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials and explicit non-production confirmation are required.
-- Hosted `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15` after this pass; run it after push.
+- Hosted `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15` after push at head `ae15e74`: passed.
+  - CodeRabbit: pass.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m09s.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Re-check PR #1 after the latest push:
+1. If this file is included in a later status-only handoff commit, re-check PR #1:
    - `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`
 2. Review the FAQ/token boundary change:
    - `src/lib/faq-quality.ts`
