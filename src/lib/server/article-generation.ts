@@ -170,10 +170,12 @@ function compactForm(form: Record<string, unknown>) {
         ? compactOptionalText(form.primaryInfo, 2400)
         : form.primaryInfo,
     closingText:
-      typeof form.closingText === "string" ? truncateText(form.closingText, 1000) : form.closingText,
+      typeof form.closingText === "string"
+        ? compactOptionalText(form.closingText, 1000)
+        : form.closingText,
     regenerationInstruction:
       typeof form.regenerationInstruction === "string"
-        ? truncateText(form.regenerationInstruction, 1200)
+        ? compactOptionalText(form.regenerationInstruction, 1200)
         : form.regenerationInstruction,
     visualTone: {
       ...visualTone,

@@ -141,8 +141,8 @@ describe("generateAioArticle", () => {
         ...sampleFormPayload,
         theme: "theme ".repeat(600),
         primaryInfo: "primary ".repeat(700),
-        closingText: "closing ".repeat(300),
-        regenerationInstruction: "regenerate ".repeat(300),
+        closingText: `  ${"closing ".repeat(300)}  `,
+        regenerationInstruction: `  ${"regenerate ".repeat(300)}  `,
         visualTone: {
           mode: "upload",
           uploadedImageUrl: "https://example.com/tone.png",
@@ -198,7 +198,9 @@ describe("generateAioArticle", () => {
     expect(input.payload.form.theme.length).toBeLessThanOrEqual(1813);
     expect(input.payload.form.theme).toContain("[truncated]");
     expect(input.payload.form.primaryInfo.length).toBeLessThanOrEqual(2413);
+    expect(input.payload.form.closingText.startsWith(" ")).toBe(false);
     expect(input.payload.form.closingText.length).toBeLessThanOrEqual(1013);
+    expect(input.payload.form.regenerationInstruction.startsWith(" ")).toBe(false);
     expect(input.payload.form.regenerationInstruction.length).toBeLessThanOrEqual(1213);
     expect(input.payload.form.visualTone.uploadedImageUrl).toBe("[uploaded image]");
     expect(input.payload.form.author.bio.length).toBeLessThanOrEqual(813);
@@ -212,6 +214,31 @@ describe("generateAioArticle", () => {
     expect(input.payload.fetchedReferences[0].reason?.length).toBeLessThanOrEqual(313);
     expect(input.payload.form.imageCount).toBe(2);
     expect(input.payload.form.wordCount).toBe(3000);
+  });
+
+  test("treats whitespace-only optional guidance as missing before article generation", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce(sampleArticleResult);
+
+    await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        closingText: " \n\t ",
+        regenerationInstruction: " \n\t ",
+      },
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
+    const input = JSON.parse(String(call?.input)) as {
+      payload: { form: { closingText?: string; regenerationInstruction?: string } };
+    };
+
+    expect(input.payload.form.closingText).toBe("");
+    expect(input.payload.form.regenerationInstruction).toBe("");
   });
 
   test("keeps word count, image count, and anti-commodity requirements explicit", async () => {
