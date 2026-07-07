@@ -5,211 +5,168 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: Claude Code handoff used `Loop: 3 continuation` with `Next owner: Codex`, and the active 100/100 goal remains unproven. This is the Codex continuation returning to Claude Code after one focused quality-gate hardening change.
-- Phase: Autonomous Improvement / Quality Test Hardening / Handoff
-- Last updated: 2026-07-08 01:37 +09:00
+- Loop number inferred from: The previous handoff kept `Loop: 3 continuation` and the active 100/100 objective is still not fully proven by live sandbox tests or human article-quality review. This Codex pass continues Loop 3 with one focused reliability fix.
+- Phase: Autonomous Improvement / Draft HTML Reliability / Handoff
+- Last updated: 2026-07-08 01:47 +09:00
 
 ## 1. Current Goal
 
-今回の目的：
+Improve the AIO article generator toward the active 100/100 goal:
 
-AIO記事生成アプリを、機能信頼性・PCブラウザ画面遷移・日常利用UX・非commodity記事品質の観点で100/100へ近づける。
+- all major functions and PC-browser flows work without bugs or confusing recovery states
+- the app feels strong enough for daily article-production work
+- generated articles feel specific, source-aware, and editorial rather than commodity AI content
 
-今回のCodexフェーズでは、CodeRabbit Deferred/Claude Code指摘にあった「品質チェックID抽出テストの正規表現依存による誤検出リスク」に対応した。品質評価ファイル内の任意の `id` 文字列を拾う正規表現から、TypeScript ASTで `id` / `label` / `passed` / `detail` を持つ品質チェックオブジェクトだけを抽出するヘルパーへ置き換えた。
+This Codex pass fixed a publishable HTML reliability issue in author-block rendering. When an uploaded author portrait is present, the renderer previously could treat an incidental author-name mention in an article section plus a title-like phrase in another section as an existing author profile. That could remove real article evidence while replacing the author block. The fix only treats a manual profile as complete when the author identity is grouped in the same `<section>` or when the managed author heading is present with the author name.
 
-Goal全体は未完了。実OpenAI/Supabase/WordPress sandboxでのライブ契約テスト、実生成記事品質の人間評価、残るCodeRabbit Deferredの継続確認は残る。
+The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority CodeRabbit Deferred cleanup are still open.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `6f1352e Harden quality check ID extraction tests`
-- Previous handoff/review commit: `270a9cb Record Claude review handoff`
-- Previous implementation commit: `870686a Catch generic Japanese FAQ questions`
-- Last known good commit before this final handoff refresh: `58bcc47 Update handoff after quality ID extraction hardening`
-- Last known good verification: `npm.cmd run quality` passed after `6f1352e`.
+- Latest implementation commit: `94eaf48 Preserve article sections during author block replacement`
+- Previous implementation commit: `6f1352e Harden quality check ID extraction tests`
+- Previous handoff commit: `b044ddb Refresh final handoff status`
+- Last known good local verification: `npm.cmd run quality` passed after `94eaf48`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status after implementation/handoff push: SUCCESS on PR #1 at head `58bcc47`.
-- GitHub Actions status after implementation/handoff push: `Typecheck, lint, tests, E2E, build` SUCCESS on PR #1 at head `58bcc47`.
-- Merge state after implementation/handoff push: CLEAN.
-- Note: This final handoff refresh itself is documentation-only. If committed/pushed after `58bcc47`, re-check PR #1 CodeRabbit OSS and GitHub Actions once more.
+- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `b044ddb`.
+- Note: this handoff update still needs commit/push and post-push PR check confirmation.
 
 ## 3. What Was Done
 
-今回完了したこと：
-
-- Required workflow files, current branch, recent commits, PR checks, and PR metadata were checked before work.
-- Claude Codeの未コミットhandoffを確認し、巻き戻さず `270a9cb Record Claude review handoff` として記録した。
-- PR #1 was green before this implementation pass.
-- `tests/helpers/quality-check-ids.ts` を追加した。
-  - TypeScript ASTでソースを解析。
-  - `id` / `label` / `passed` / `detail` を持つオブジェクトだけを品質チェックとして扱う。
-  - 関係ない `id` プロパティや文字列を品質チェックIDとして誤検出しない。
-- `tests/unit/quality-edit-guidance.test.ts` と `tests/unit/quality-regeneration-action-coverage.test.ts` の重複していた正規表現ID抽出を共通ヘルパーへ置き換えた。
-- `quality-regeneration-action-coverage.test.ts` に、`src/lib/server/article-generation.ts` のような品質チェックではない `id` が混ざる可能性のあるファイルを読んでもIDを抽出しない回帰テストを追加した。
-- 対象テスト、lint、フル品質ゲートを実行し、成功を確認した。
-- 実装修正を `6f1352e Harden quality check ID extraction tests` としてコミットした。
+- Read required workflow files, current handoff, branch status, recent commits, and PR status before editing.
+- Confirmed `AI_HANDOFF.md` is UTF-8 readable even when PowerShell display looks garbled.
+- Selected a remaining CodeRabbit/Claude deferred risk related to author-section removal and draft HTML publishing reliability.
+- Updated `src/lib/draft-html.ts`:
+  - `hasExistingAuthorSection` now checks structural proximity instead of page-wide text co-occurrence.
+  - A manual author profile without the managed heading is considered complete only when author name plus title or bio appear in the same `<section>`.
+  - `removeExistingAuthorProfileBlock` now removes only the matching profile section, not the first section that merely mentions the author name.
+- Updated `tests/unit/draft-html.test.ts`:
+  - Added coverage that a manual author profile section is replaced when an uploaded portrait must be used.
+  - Added coverage that article sections mentioning the author incidentally are preserved even when another section contains a title-like phrase.
+- Ran focused and full verification successfully.
+- Cursor Bugbot was not run; CodeRabbit OSS remains the standard review path.
 
 ## 4. Files Changed
 
-主な変更ファイル：
-
-- `tests/helpers/quality-check-ids.ts`
-- `tests/unit/quality-edit-guidance.test.ts`
-- `tests/unit/quality-regeneration-action-coverage.test.ts`
+- `src/lib/draft-html.ts`
+- `tests/unit/draft-html.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
-現在の状態：
-
-- Claude handoff commit `270a9cb` 作成済み。
-- 実装commit `6f1352e` 作成済み。
-- `npm.cmd run quality` 成功済み。
-- Handoff update `58bcc47` 作成・push済み。
-- PR #1: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR #1 checks were green at head `58bcc47` after pushing `270a9cb` / `6f1352e` / handoff update.
-- Cursor Bugbotは標準レビューから外れているため未実行。
+- Implementation commit `94eaf48` is created locally.
+- Working tree contains this handoff update until it is committed.
+- Local full quality gate is green after the implementation commit.
+- PR #1 was green before this pass; re-check after pushing the implementation and handoff commits.
 
 ## 6. Known Issues
 
-既知の問題：
-
-- CodeRabbit Deferred/低優先の継続課題:
-  - 重複コードの一部共通化余地。
-  - テスト設計改善の残件: Reactコンポーネント直接importの解消、名前ベース`<section>`削除の回帰テスト追加、article-imagesフィクスチャ形状の改善など。
-  - markdownlint（AI_HANDOFF MD022、PRテンプレH1）系の文書整形。
-  - 追加のenv復元ヘルパー適用余地。
-- FAQ汎用検知の軽微な観察:
-  - 具体的な語を含む「<具体語>とは何ですか？」型の定義質問も検知される。編集方針としては「定義は本文、FAQは判断/実務寄り」なので意図に沿うが、実運用データで過検出が目立つ場合は上限や対象パターンを調整すること。
-- 実際のOpenAI/Supabase/WordPress sandbox資格情報を使う `test:live:*` は未実行。
-- 生成記事の「AIっぽさ」低減は、ライブ入力と人間評価を含む追加検証が必要。
-- 100/100 goalは未達。
+- Remaining low-priority CodeRabbit Deferred / cleanup items:
+  - Some duplication/commonization opportunities remain.
+  - Test design improvements remain around direct React component imports, section-removal regression coverage beyond this focused fix, and article-images fixture shape.
+  - markdownlint/document formatting items remain.
+  - Some env restore helper expansion opportunities remain.
+- FAQ generic-question detection may still be slightly strict for definition-style FAQs. This is currently aligned with the editorial policy that definitions belong in the body and FAQ should focus on practical decisions, but real generated data should be monitored.
+- `test:live:*` was not run because sandbox credentials are required.
+- Human review of real generated article quality is still needed.
+- The active 100/100 goal is not complete.
 
 ## 7. CodeRabbit Review
 
-CodeRabbit OSSの指摘と対応状況：
-
-- Review status: PR #1 open. 作業開始時点ではCodeRabbit SUCCESS、GitHub Actions SUCCESS、mergeState CLEAN。`58bcc47` push後もCodeRabbit SUCCESS、GitHub Actions SUCCESS、mergeState CLEAN。
+- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `b044ddb`.
 - Current pass:
-  - 今回は品質チェックID抽出テストの誤検出耐性を改善。
+  - Addresses a draft HTML reliability risk related to false author-profile section removal.
 - Critical findings:
-  - live env precedence不一致は `6be50a9` と `tests/unit/live-test-helpers.test.ts` で対応済み。
+  - No known open Critical findings at the time of this handoff.
 - Resolved / strengthened findings:
-  - FAQ編集回答レンダリング: `1ca2816`
-  - test env cleanup: `003f1db`
-  - persistence系test env cleanup: `9394819`
-  - prompt line truncation duplication: `e371976`
-  - generation requirement duplication: `555b3dc`
-  - WordPress featured image error i18n: `181da67`
-  - Upload image validation i18n: `6555974`
-  - URL extraction reason i18n: `1a0250b`
-  - File extraction validation i18n: `3d8dfb1`
-  - Draft approval error i18n: `7a1e5e0`
-  - Supabase draft persistence i18n: `f6006e6`
-  - Generation job persistence i18n: `7c38063`
-  - WordPress integration error i18n: `f15d89e`
-  - OpenAI wrapper error i18n and API-key no-fetch handling: `0b16060`
-  - Japanese generic FAQ question detection and prompt guidance: `870686a`
-  - Quality check ID extraction test hardening: `6f1352e`
+  - Author block replacement no longer removes unrelated article sections based on page-wide author-name/title co-occurrence.
+  - Regression tests now cover both manual author profile replacement and incidental author mentions.
 - Deferred findings:
-  - `Known Issues`を参照。
+  - See `Known Issues`.
 - False positives / not applicable:
-  - `generateArticle` の旧非window分割削除指摘は、現行コードに該当なしとの前回判断を維持。
-  - 画像再生成の逐次実行/部分失敗バナー指摘は、最新コードでは `Promise.allSettled` と部分失敗E2Eが存在するため現時点では対応不要。
+  - No new false positives identified in this pass.
 
 ## 8. Optional Bugbot Findings
 
-Cursor Bugbotの任意確認：
-
 - Status: Not run
-- Findings: なし
-- Actions taken: なし
-- Reason: 標準レビューはCodeRabbit OSS。今回の変更はテストヘルパーとunit test更新であり、本番OpenAI、本番DB、本番WordPressへ接続する変更ではないため、Bugbot予備確認は不要と判断。
+- Findings: None
+- Actions taken: None
+- Reason: Cursor Bugbot is optional/backup only. This pass changed server-side HTML rendering logic and unit tests, with full local quality passing and CodeRabbit OSS as the standard review path.
 
 ## 9. Verification Results
 
-実行した確認コマンドと結果：
+Commands run in this pass:
 
 ```bash
-npx.cmd vitest run tests/unit/quality-edit-guidance.test.ts
-npx.cmd vitest run tests/unit/quality-regeneration-action-coverage.test.ts
+npx.cmd vitest run tests/unit/draft-html.test.ts
 npm.cmd run lint
+npm.cmd run typecheck
 npm.cmd run quality
-git commit -m "Record Claude review handoff"
-git commit -m "Harden quality check ID extraction tests"
-git commit -m "Update handoff after quality ID extraction hardening"
-git push origin codex/persistent-quality-gate-operations
-gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
+git commit -m "Preserve article sections during author block replacement"
 ```
 
-結果：
+Results:
 
-- `tests/unit/quality-edit-guidance.test.ts`: 成功、1 file / 2 tests passed。
-- `tests/unit/quality-regeneration-action-coverage.test.ts`: 成功、1 file / 8 tests passed。
-- `npm.cmd run lint`: 成功。
-- `npm.cmd run quality`: 成功。
-  - `npm run typecheck`: 成功。
-  - `npm run lint`: 成功。
-  - `npm run test:integrity`: 成功、43 files。
-  - `npm run test`: 成功、39 files / 281 tests passed。
-  - `npm run test:contract`: 成功、3 files / 12 tests passed。
-  - `npm run test:coverage`: 成功、statements 86.85% / branches 73.79% / functions 91.52% / lines 87.30%。
-  - `npm run test:e2e`: 成功、48 passed。
-  - `npm run build`: 成功、Next.js 16.2.9 production build passed。
-- 各commit時pre-commit: 成功、`npm run lint` / `npm run test:integrity`。
-- `git push origin codex/persistent-quality-gate-operations`: 成功。pre-pushで `npm run lint` / `npm run typecheck` / `npm run test:integrity` / `npm run test` / `npm run test:contract` が成功。
-- PR #1 after `58bcc47`: CodeRabbit SUCCESS、GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS、mergeState CLEAN。
+- `npx.cmd vitest run tests/unit/draft-html.test.ts`: passed, 1 file / 31 tests.
+- `npm.cmd run lint`: passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run quality`: passed.
+  - `npm run typecheck`: passed.
+  - `npm run lint`: passed.
+  - `npm run test:integrity`: passed, 43 files.
+  - `npm run test`: passed, 39 files / 283 tests.
+  - `npm run test:contract`: passed, 3 files / 12 tests.
+  - `npm run test:coverage`: passed, statements 86.92%, branches 73.89%, functions 91.55%, lines 87.38%.
+  - `npm run test:e2e`: passed, 48 PC Chromium tests.
+  - `npm run build`: passed, Next.js 16.2.9 production build.
+- Commit pre-commit hook: passed, `npm run lint` and `npm run test:integrity`.
 
-未実行：
+Not run:
 
-- `npm.cmd run test:live:*` はsandbox資格情報が必要なため未実行。
-- この最終handoff refreshを追加でcommit/pushした場合のCodeRabbit/GitHub Actions再確認。
+- `npm.cmd run test:live:*` because sandbox credentials are required.
+- Post-push CodeRabbit/GitHub Actions for this handoff commit; run after push.
 
 ## 10. Next Recommended Action
 
-次にClaude Codeが最初にやるべきこと：
+Next Claude Code should:
 
-1. `270a9cb Record Claude review handoff`、`6f1352e Harden quality check ID extraction tests` とこのhandoff更新commitをレビューする。
-2. PR #1でこの最終handoff refresh後のCodeRabbit OSSとGitHub Actionsの結果を確認する。
-3. `tests/helpers/quality-check-ids.ts` と利用テスト2本をレビューし、AST抽出が品質チェックIDを漏らさず、無関係な `id` を拾わないことを確認する。
-4. 重大な新規指摘がなければ、CodeRabbit Deferredのうち高価値な1件、または実生成品質に効く小さな改善を継続する。
-5. 変更後は `npm.cmd run quality` を実行し、結果をこのファイルに記録する。
+1. Review `94eaf48 Preserve article sections during author block replacement` and this handoff.
+2. Confirm PR #1 checks after the latest push: CodeRabbit OSS and GitHub Actions should be green.
+3. Review the structural author-profile detection in `src/lib/draft-html.ts`, especially:
+   - managed author heading + name still suppresses duplicate blocks
+   - manual profile section with name + title/bio is still replaced when image upload requires the managed block
+   - incidental author mentions in article sections are preserved
+4. If checks stay green and no major review comments appear, continue with another small high-value Deferred item or a live/sandbox article-quality proof step.
+5. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
-Claude Codeに重点レビューしてほしい範囲：
-
-- `tests/helpers/quality-check-ids.ts`
-  - TypeScript AST利用が過剰でなく、テスト目的に対して妥当か。
-  - `id` / `label` / `passed` / `detail` のshape判定で、現在の品質チェックを漏らしていないか。
-- `tests/unit/quality-regeneration-action-coverage.test.ts`
-  - 無関係な `id` プロパティを拾わない回帰テストとして十分か。
+- `src/lib/draft-html.ts`
+  - `hasExistingAuthorSection`
+  - `removeExistingAuthorProfileBlock`
+  - `findAuthorProfileSection`
+- `tests/unit/draft-html.test.ts`
+  - new manual author profile replacement test
+  - new incidental author mention preservation test
 
 ## 12. Risk Notes
 
-リスク・人間確認が必要な事項：
-
-- 今回はテストヘルパーとunit test更新のみ。本番deploy、本番DB/API書き込み、秘密情報出力、`.env*`内容の参照/コミットは行っていない。
-- AST抽出はTypeScript dev dependencyを利用しているため依存追加はなし。
-- 実生成記事品質の人間評価は未完了。
-- `test:live:*` はsandbox資格情報が整ってから実行すること。
-- この最終handoff refresh commitをpushした場合は、CodeRabbit/GitHub Actionsをもう一度確認すること。
+- This change is intentionally narrow and does not alter API routes, DB persistence, OpenAI calls, WordPress calls, auth, or UI layout.
+- The HTML parsing remains regex/string based, matching the existing implementation style. It is now more conservative for section removal, but not a full HTML parser.
+- If future drafts include non-`section` manual author profiles with uploaded portrait images, the old text may remain and the managed block may be appended. That is safer than deleting real article content, but Claude Code may consider a parser-based improvement later if needed.
+- Live external-service proof is still missing.
 
 ## 13. Do Not Touch
 
-触らない方がよい領域：
-
-- `.env*`、OpenAI/Supabase/WordPress/Vercel credentials、production data。
-- `.claude/` 配下（ユーザー明示時を除く）。
-- 品質ゲート、test integrity check、CodeRabbit運用ドキュメントを弱める変更。
-- 無関係なUI刷新、画面遷移変更、大規模リファクタリング。
-- 本番deploy、本番DB/API書き込み、`git push --force`、`git reset --hard`。
+- `.env*`, OpenAI/Supabase/WordPress/Vercel credentials, production data.
+- `.claude/` unless the user explicitly asks.
+- Quality gate, test integrity, and CodeRabbit operating docs should not be weakened.
+- Avoid unrelated UI rewrites, screen-transition changes, broad refactors, production deploys, production DB/API writes, `git push --force`, or `git reset --hard`.
 
 ## 14. Notes for Claude Code
 
-Claude Codeへの補足：
-
-- Windowsでは `npm.cmd` / `npx.cmd` を使う方が安全。
-- CodeRabbit OSSを標準レビュー、Cursor Bugbotを任意・予備として扱う運用を継続する。
-- ループ番号はLoop 3 continuationを継続中。CodeRabbit Deferredが一区切りしたら、次のループでLoop 4へ進める判断をする。
-- Goalは未完了。指標100/100はまだ証明できていないため、`update_goal complete`は呼ばないこと。
+- Use `npm.cmd` / `npx.cmd` on Windows PowerShell.
+- CodeRabbit OSS is the standard PR reviewer. Cursor Bugbot is optional/backup only.
+- Keep Loop 3 continuation unless you decide the remaining Deferred items are sufficiently closed and the next cycle should become Loop 4.
+- Do not call `update_goal complete`; the 100/100 objective is not proven yet.
