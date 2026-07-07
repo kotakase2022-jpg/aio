@@ -29,7 +29,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Last known good local verification: `npm.cmd run quality` passed after `15f2b65`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS at head `b2aa2e5b6d36ea63fcd9799656471fda14c89545`.
-- PR status after this implementation pass: not yet re-checked on GitHub until this handoff/docs update is pushed.
+- PR status after implementation/handoff push at head `a7f8f5b7ddfd172a2a4bbfc7451e13018ea87aef`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS.
+- Later status-only handoff commits should be re-checked on the current PR head; they do not change runtime code.
 
 ## 3. What Was Done
 
@@ -51,8 +52,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 - Implementation/test commit `15f2b65` exists locally and passed focused checks plus the full local quality gate.
 - This handoff document records the implementation commit and local quality gate.
-- Branch is expected to be ahead of origin until the handoff/docs commit is created and pushed.
-- PR #1 was green before this pass at `b2aa2e5`; Claude Code should re-check the latest PR head after push.
+- Implementation and handoff/docs commits were pushed through `a7f8f5b`, which was green on CodeRabbit and GitHub Actions.
+- If this file is included in a later status-only commit, Claude Code should re-check the latest PR head. Status-only handoff commits do not change runtime code.
 
 ## 6. Known Issues
 
@@ -66,7 +67,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `b2aa2e5`.
-- Review status after this pass: pending until the latest commits are pushed and checked.
+- Review status after implementation/handoff push at head `a7f8f5b`: CodeRabbit SUCCESS and GitHub Actions SUCCESS.
 - Current pass:
   - Adds route-level coverage for WordPress publishing failure responses.
   - Confirms the route preserves status, Japanese error text, and recovery detail from `ApiError`.
@@ -121,7 +122,7 @@ Results:
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials are required.
-- Post-push `gh pr checks --watch` is still pending until this handoff/docs commit is created and pushed.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 10`: CodeRabbit passed; `Typecheck, lint, tests, E2E, build` passed in 3m46s.
 
 ## 10. Next Recommended Action
 
