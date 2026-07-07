@@ -7,7 +7,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this remains a narrow continuation rather than a new loop.
 - Phase: Autonomous Improvement / Article Quality Repetition Coverage / Handoff
-- Last updated: 2026-07-08 06:22 +09:00
+- Last updated: 2026-07-08 06:30 +09:00
 
 ## 1. Current Goal
 
@@ -29,7 +29,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Last known good local verification: `npm.cmd run quality` passed after `c4d81ed`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - PR status before this implementation pass at head `847ad77`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS in 3m37s.
-- PR status after this handoff/docs update: needs re-check after push.
+- PR status after implementation/handoff push at head `1438ebc`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS after rerunning a transient Playwright install failure.
+- Later status-only handoff commits should be re-checked on the current PR head; they do not change runtime code.
 - CodeRabbit OSS review status: CodeRabbit is installed and responding on PR #1. Old duplicate comments about image recovery / parallel image regeneration still appear in PR review history, but current status check was SUCCESS before this pass; current code and E2E coverage had already addressed those areas in previous Loop 3 work.
 
 ## 3. What Was Done
@@ -59,8 +60,9 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 - Implementation commit `c4d81ed` exists locally and passed the focused article-quality tests plus the full local quality gate.
 - This handoff/docs update records the implementation commit and local quality gate.
-- The branch was one commit ahead of origin after `c4d81ed` before this handoff/docs update.
-- Hosted CodeRabbit and GitHub Actions need to be re-checked after this handoff/docs update is committed and pushed.
+- Implementation and handoff/docs commits were pushed through `1438ebc`.
+- Hosted CodeRabbit and GitHub Actions are green on `1438ebc`. The first Actions attempt failed before any project command, during Playwright Chromium dependency installation, due to a transient Microsoft apt repository signature fetch error. Rerunning the failed job passed in 3m44s.
+- If this file is included in a later status-only commit, Claude Code should re-check the latest PR head. Status-only handoff commits do not change runtime code.
 
 ## 6. Known Issues
 
@@ -74,6 +76,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `847ad77`.
+- Review status after implementation/handoff push at head `1438ebc`: CodeRabbit SUCCESS and GitHub Actions SUCCESS after rerun.
 - Current pass:
   - Adds article-quality coverage for repeated necessity phrasing.
   - Wires the new quality check into edit guidance and regeneration actions.
@@ -134,21 +137,23 @@ Results:
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials and explicit non-production confirmation are required.
-- Hosted PR checks after this handoff/docs update; re-check after push.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 10` after push:
+  - First run failed before project checks during `Install Playwright Chromium` with Microsoft apt `Clearsigned file isn't valid, got 'NOSPLIT'`.
+  - `gh run rerun 28899757944 --repo kotakase2022-jpg/aio --failed`: rerun started.
+  - Rerun passed: CodeRabbit pass; GitHub Actions `Typecheck, lint, tests, E2E, build` pass in 3m44s.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Confirm this handoff/docs update has been pushed to PR #1.
-2. Confirm CodeRabbit OSS and GitHub Actions are green on the latest PR head.
-3. Review the new article-quality check and ensure it is neither too strict nor too weak:
+1. Confirm any latest status-only handoff commit after `1438ebc`, if present, is green on PR #1.
+2. Review the new article-quality check and ensure it is neither too strict nor too weak:
    - `src/lib/article-quality.ts`
    - `tests/unit/article-quality.test.ts`
    - `src/lib/quality-edit-guidance.ts`
    - `src/lib/quality-regeneration-action.ts`
-4. If checks stay green and no major CodeRabbit comments appear, decide whether the next pass should be live/sandbox readiness or another small regression test around generated-output quality.
-5. Run `npm.cmd run quality` after any code changes and record the result here.
+3. If checks stay green and no major CodeRabbit comments appear, decide whether the next pass should be live/sandbox readiness or another small regression test around generated-output quality.
+4. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
