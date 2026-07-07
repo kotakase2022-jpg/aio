@@ -217,6 +217,9 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("Strategy");
     expect(call?.instructions).toContain("Checklist");
     expect(call?.instructions).toContain("Make faq_items specific enough for publication");
+    expect(call?.instructions).toContain("AIOとは何ですか");
+    expect(call?.instructions).toContain("AIOはなぜ重要ですか");
+    expect(call?.instructions).toContain("AIOはどのように活用できますか");
     expect(call?.instructions).toContain("What is AIO?");
     expect(call?.instructions).toContain("Why is AIO important?");
     expect(call?.instructions).toContain("How does it work?");

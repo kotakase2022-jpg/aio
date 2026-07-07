@@ -85,6 +85,39 @@ describe("evaluateFaqQuality", () => {
     expect(result.score).toBeLessThan(90);
   });
 
+  test("flags short Japanese FAQ questions that sound like commodity AI copy", () => {
+    const result = evaluateFaqQuality({
+      faqItems: [
+        {
+          question: "AIOとは何ですか？",
+          answer:
+            "AIO記事では、参照元、一次情報、競合差分、承認担当を分けて整理し、公開前に未確認情報を断定しないよう確認します。",
+        },
+        {
+          question: "AIOはなぜ重要ですか？",
+          answer:
+            "検索意図、出典URL、判断基準、FAQ、CTAを記事内で結び、読者が次に確認する条件を見落とさないようにするためです。",
+        },
+        {
+          question: "AIOはどのように活用できますか？",
+          answer:
+            "テーマ候補、参照情報、一次情報、競合比較、WordPress下書き投稿までの流れを、担当者と期限つきで確認できます。",
+        },
+      ],
+      themeText: "AIO workflow for editorial review and AI search optimization",
+      primaryInfo:
+        "Our support team sees one-person contractors using LINE for approvals while forms are often missing.",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "faq-question-specificity", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "faq-answer-specificity", passed: true }),
+    );
+    expect(result.score).toBeLessThan(90);
+  });
+
   test("flags long English FAQ answers that still rely on generic business filler", () => {
     const result = evaluateFaqQuality({
       faqItems: [
