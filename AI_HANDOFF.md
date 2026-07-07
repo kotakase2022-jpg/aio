@@ -17,7 +17,7 @@ AIO記事生成アプリを、機能信頼性・PCブラウザ画面遷移・日
 
 ## 2. Current Branch / Commit / PR
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest commit: `27ea8b8 Update handoff after Supabase draft localization`
+- Latest commit: branch HEAD, handoff restoration commit created after `27ea8b8 Update handoff after Supabase draft localization`
 - Latest implementation commit: `f6006e6 Localize Supabase draft persistence errors`
 - Previous handoff commit: `bb22b91 Update handoff after draft approval localization`
 - Previous implementation commit: `7a1e5e0 Localize draft approval errors`
@@ -61,7 +61,7 @@ AIO記事生成アプリを、機能信頼性・PCブラウザ画面遷移・日
   - CodeRabbit: pass / Review completed.
   - GitHub Actions quality-gate: pass / 3m22s.
   - mergeStateStatus: CLEAN.
-- ローカル作業ツリーは、このhandoff復旧差分をまだコミットしていない可能性があるため、次担当は `git status --short --branch` を最初に確認すること。
+- このhandoff復旧差分はhandoff restoration commitとしてまとめた。次担当は念のため `git status --short --branch` を最初に確認すること。
 - Cursor Bugbotは標準レビューから外れているため未実行。
 
 ## 6. Known Issues
@@ -153,12 +153,11 @@ gh pr view 1 --repo kotakase2022-jpg/aio --json url,headRefName,headRefOid,merge
 ## 10. Next Recommended Action
 次にClaude Codeが最初にやるべきこと：
 
-1. `git status --short --branch` で、このhandoff復旧差分が未コミットかどうかを確認する。
+1. `git status --short --branch` で、作業ツリーがcleanか確認する。
 2. `AI_HANDOFF.md` の文字化け復旧内容が正しく、前回コミット内容と矛盾しないか確認する。
-3. 必要ならhandoff復旧差分を小さなcommitとしてまとめる。
-4. PR #1でCodeRabbit OSSとGitHub Actionsの最新結果を再確認する。
-5. `src/lib/server/drafts.ts` と `tests/integration/drafts-supabase.integration.test.ts` をレビューし、Supabase失敗時の日本語エラーが画面利用者に十分分かりやすいか確認する。
-6. 重大な新規指摘がなければ、CodeRabbit Deferredのうち高価値な1件を最小差分で対応する。
+3. PR #1でCodeRabbit OSSとGitHub Actionsの最新結果を再確認する。
+4. `src/lib/server/drafts.ts` と `tests/integration/drafts-supabase.integration.test.ts` をレビューし、Supabase失敗時の日本語エラーが画面利用者に十分分かりやすいか確認する。
+5. 重大な新規指摘がなければ、CodeRabbit Deferredのうち高価値な1件を最小差分で対応する。
 
 ## 11. Suggested Review Scope for Claude Code
 Claude Codeに重点レビューしてほしい範囲：
