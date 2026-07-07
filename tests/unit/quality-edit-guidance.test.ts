@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { qualityCheckEditGuidance } from "@/components/aio/article-generator-app";
+import { qualityCheckEditGuidance } from "@/lib/quality-edit-guidance";
 import { extractQualityCheckIds } from "../helpers/quality-check-ids";
 
 describe("qualityCheckEditGuidance", () => {
