@@ -44,7 +44,10 @@ describe("generation job cancellation and restoration", () => {
     expect(cancelResponse.status).toBe(200);
     expect(cancelJson.job.status).toBe("canceled");
     expect(getJson.job.status).toBe("canceled");
-    await expect(assertGenerationJobActive(job.id)).rejects.toMatchObject({ status: 409 });
+    await expect(assertGenerationJobActive(job.id)).rejects.toMatchObject({
+      message: "記事作成は停止済みです。",
+      status: 409,
+    });
 
     vi.resetModules();
     const { getGenerationJob } = await import("@/lib/server/generation-jobs");
@@ -68,3 +71,72 @@ describe("generation job cancellation and restoration", () => {
     expect(current?.startedAt).toBeUndefined();
   });
 });
+
+describe("generation job persistence with Supabase", () => {
+  test("returns Japanese errors when Supabase job saving fails", async () => {
+    mockSupabaseClient({
+      from: vi.fn(() => ({
+        upsert: vi.fn(async () => ({ error: { message: "job upsert failed" } })),
+      })),
+    });
+    const { createGenerationJob } = await import("@/lib/server/generation-jobs");
+
+    await expect(createGenerationJob({ inputPayload: sampleFormPayload })).rejects.toMatchObject({
+      message: "生成ジョブの保存に失敗しました。",
+      detail: "job upsert failed",
+      status: 500,
+    });
+  });
+
+  test("returns Japanese errors when Supabase job loading fails", async () => {
+    const maybeSingle = vi.fn(async () => ({
+      data: null,
+      error: { message: "job select failed" },
+    }));
+    mockSupabaseClient({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle })) })),
+      })),
+    });
+    const { getGenerationJob } = await import("@/lib/server/generation-jobs");
+
+    await expect(getGenerationJob("job-load-failure")).rejects.toMatchObject({
+      message: "生成ジョブの読み込みに失敗しました。",
+      detail: "job select failed",
+      status: 500,
+    });
+  });
+
+  test("returns Japanese errors when Supabase generation log loading fails", async () => {
+    const limit = vi.fn(async () => ({
+      data: null,
+      error: { message: "job log select failed" },
+    }));
+    mockSupabaseClient({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          order: vi.fn(() => ({ limit })),
+        })),
+      })),
+    });
+    const { listGenerationLogs } = await import("@/lib/server/generation-jobs");
+
+    await expect(listGenerationLogs()).rejects.toMatchObject({
+      message: "生成ログの読み込みに失敗しました。",
+      detail: "job log select failed",
+      status: 500,
+    });
+  });
+});
+
+function mockSupabaseClient(client: unknown) {
+  vi.resetModules();
+  vi.doMock("@/lib/server/supabase", () => ({
+    assertDurableStorageConfigured: vi.fn(),
+    getSupabaseAdmin: vi.fn(() => client),
+  }));
+  vi.doMock("@/lib/server/supabase-gateway", () => ({
+    callSupabaseGateway: vi.fn(),
+    isSupabaseGatewayConfigured: vi.fn(() => false),
+  }));
+}
