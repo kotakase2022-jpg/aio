@@ -136,9 +136,12 @@ The latest pushed status-only head before this pass was also checked:
 - CodeRabbit: success
 - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m33s
 
-The current local branch also includes implementation commit `894c666`, which makes English title
-input-signal matching token-aware. Hosted CodeRabbit and Actions must be re-checked after this
-handoff/docs update is pushed.
+The latest pushed head containing that English title-signal matching pass and handoff update was
+also checked:
+
+- Commit: `309b2fc`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m07s
 
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
@@ -205,8 +208,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  are green through status-only head `45642d1`; re-check the current English title-signal
-  implementation and handoff/docs commits after they are pushed.
+  are green through implementation/handoff head `309b2fc`; re-check any later status-only handoff
+  commits on the current PR head.
 
 ## Current Self Score
 
@@ -221,8 +224,8 @@ human review of real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit after the `894c666` title-signal implementation and
-   following handoff/docs update are pushed.
+1. Re-check hosted Actions and CodeRabbit if a new status-only handoff commit is pushed after
+   `309b2fc`.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
