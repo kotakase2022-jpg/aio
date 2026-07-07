@@ -215,7 +215,7 @@ function titleContainsTerm(titleText: string, term: string) {
 
 function titleEnglishTokenAppearsInText(term: string, titleText: string) {
   const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?<![a-z0-9_-])${escapedTerm}(?![a-z0-9_-])`, "i").test(titleText);
+  return new RegExp(`(?<![a-z0-9_])${escapedTerm}(?![a-z0-9_])`, "i").test(titleText);
 }
 
 function uniqueItems(items: string[]) {

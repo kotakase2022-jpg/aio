@@ -78,6 +78,26 @@ describe("evaluateTitleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("counts English input terms in hyphenated title phrases", () => {
+    const result = evaluateTitleQuality({
+      selectedTitle: "AI-powered form workflow for field approvals",
+      titleCandidates: [
+        "AI-powered form workflow for field approvals",
+        "Form-based approval review for field teams",
+        "AI search workflow for approval teams",
+      ],
+      themeText: "AI search editorial review",
+      primaryInfo: "Our form alpha beta",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-input-signal", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-specificity", passed: true }),
+    );
+  });
+
   test("flags short topic plus generic English BtoB title suffixes", () => {
     const result = evaluateTitleQuality({
       selectedTitle: "AIO Best Practices",
