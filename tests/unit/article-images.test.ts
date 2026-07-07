@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { sampleArticleResult, sampleFormPayload } from "../fixtures/article";
 
 vi.mock("@/lib/server/openai", () => ({
@@ -13,6 +13,10 @@ vi.mock("@/lib/server/storage", () => ({
 }));
 
 describe("article image helpers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   test("buildProductionImagePrompt adds strict visual quality constraints", async () => {
     const { buildProductionImagePrompt } = await import("@/lib/server/article-images");
 
@@ -70,6 +74,42 @@ describe("article image helpers", () => {
       expect.stringContaining("Key takeaways to visualize"),
     );
     expect(generateImageBase64).toHaveBeenCalledWith(expect.stringContaining("Relevant headings"));
+  });
+
+  test("fills missing generated image prompts for the requested slots", async () => {
+    const { generateImageBase64 } = await import("@/lib/server/openai");
+    const { createArticleImagesForDraft } = await import("@/lib/server/article-images");
+
+    const images = await createArticleImagesForDraft(
+      {
+        ...sampleArticleResult,
+        image_prompts: [],
+      },
+      {
+        ...sampleFormPayload,
+        imageCount: 3,
+      },
+    );
+
+    expect(images.map((image) => image.slot)).toEqual(["featured", "inline-1", "inline-2"]);
+    expect(images.map((image) => image.url)).toEqual([
+      "https://assets.example.com/featured.png",
+      "https://assets.example.com/inline-1.png",
+      "https://assets.example.com/inline-2.png",
+    ]);
+    expect(generateImageBase64).toHaveBeenCalledTimes(3);
+    expect(generateImageBase64).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining(`hero editorial visual for ${sampleArticleResult.selected_title}`),
+    );
+    expect(generateImageBase64).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("Focus topic: Workflow checklist"),
+    );
+    expect(generateImageBase64).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("Concrete takeaway: Keep sources visible"),
+    );
   });
 
   test("keeps the article draft usable when one generated image fails", async () => {

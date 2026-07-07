@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import { truncatePromptLine } from "@/lib/prompt-text";
 import { generateImageBase64 } from "@/lib/server/openai";
 import { storeAsset } from "@/lib/server/storage";
-import type { ArticleFormPayload, ArticleGenerationResult, ArticleImage } from "@/types/aio";
+import type {
+  ArticleFormPayload,
+  ArticleGenerationResult,
+  ArticleImage,
+  ImagePrompt,
+} from "@/types/aio";
 
 export type ArticleImageFailure = {
   slot: "featured" | "inline-1" | "inline-2";
@@ -68,7 +73,7 @@ export async function createArticleImagesForDraft(
 
   const toneText =
     form.visualTone.mode === "custom" ? form.visualTone.custom : form.visualTone.preset;
-  const prompts = article.image_prompts.slice(0, imageCount).map((prompt) => ({
+  const prompts = normalizePromptsForImageCreation(article, imageCount).map((prompt) => ({
     ...prompt,
     prompt: buildArticleImagePrompt(prompt.prompt, toneText, article),
   }));
@@ -96,6 +101,50 @@ export async function createArticleImagesForDraft(
     });
     return [];
   });
+}
+
+function normalizePromptsForImageCreation(
+  article: ArticleGenerationResult,
+  imageCount: number,
+): ImagePrompt[] {
+  const slots = ["featured", "inline-1", "inline-2"] as const;
+  const requestedSlots = slots.slice(0, imageCount);
+
+  return requestedSlots.map((slot, index) => {
+    const existing = article.image_prompts.find((prompt) => prompt.slot === slot);
+    if (existing) {
+      return existing;
+    }
+
+    return {
+      slot,
+      purpose:
+        slot === "featured" ? "Article featured image" : "Article body explanatory image",
+      prompt: fallbackImagePrompt(article, slot, index),
+      alt_text: `${article.selected_title} - ${
+        slot === "featured" ? "featured image" : "explanatory image"
+      }`,
+    };
+  });
+}
+
+function fallbackImagePrompt(
+  article: Pick<ArticleGenerationResult, "selected_title" | "headings" | "key_takeaways">,
+  slot: "featured" | "inline-1" | "inline-2",
+  index: number,
+) {
+  const heading =
+    article.headings[index]?.text ?? article.headings[0]?.text ?? article.selected_title;
+  const takeaway = article.key_takeaways[index] ?? article.key_takeaways[0] ?? "";
+  const role = slot === "featured" ? "hero editorial visual" : "inline explanatory visual";
+
+  return [
+    `${role} for ${article.selected_title}`,
+    `Focus topic: ${heading}`,
+    takeaway ? `Concrete takeaway: ${takeaway}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function buildProductionImagePrompt(
