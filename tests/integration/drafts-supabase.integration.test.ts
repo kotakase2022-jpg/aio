@@ -64,6 +64,53 @@ describe("draft persistence with Supabase", () => {
     ]);
   });
 
+  test("returns Japanese errors when Supabase draft saving fails", async () => {
+    const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+    const { saveDraft } = await import("@/lib/server/drafts");
+    const draft = createSampleDraft({ id: "draft-supabase-save-failure" });
+    const from = vi.fn(() => ({
+      upsert: vi.fn(async () => ({ error: { message: "row upsert failed" } })),
+    }));
+
+    vi.mocked(getSupabaseAdmin).mockReturnValue({
+      from,
+    } as unknown as ReturnType<typeof getSupabaseAdmin>);
+
+    await expect(saveDraft(draft)).rejects.toMatchObject({
+      message: "下書きの保存に失敗しました。",
+      detail: "row upsert failed",
+      status: 500,
+    });
+  });
+
+  test("returns Japanese errors when Supabase draft image saving fails", async () => {
+    const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+    const { saveDraft } = await import("@/lib/server/drafts");
+    const draft = createSampleDraft({ id: "draft-supabase-image-failure" });
+    const deleteEq = vi.fn(async () => ({ error: null }));
+    const from = vi.fn((table: string) => {
+      if (table === "article_drafts") {
+        return { upsert: vi.fn(async () => ({ error: null })) };
+      }
+
+      return {
+        delete: vi.fn(() => ({ eq: deleteEq })),
+        insert: vi.fn(async () => ({ error: { message: "image insert failed" } })),
+      };
+    });
+
+    vi.mocked(getSupabaseAdmin).mockReturnValue({
+      from,
+    } as unknown as ReturnType<typeof getSupabaseAdmin>);
+
+    await expect(saveDraft(draft)).rejects.toMatchObject({
+      message: "下書き画像の保存に失敗しました。",
+      detail: "image insert failed",
+      status: 500,
+    });
+    expect(deleteEq).toHaveBeenCalledWith("draft_id", "draft-supabase-image-failure");
+  });
+
   test("hydrates drafts and image rows from Supabase without losing edited content", async () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { getDraft } = await import("@/lib/server/drafts");
@@ -143,5 +190,76 @@ describe("draft persistence with Supabase", () => {
     expect(draftEq).toHaveBeenCalledWith("id", "draft-supabase-load");
     expect(imageEq).toHaveBeenCalledWith("draft_id", "draft-supabase-load");
     expect(orderImages).toHaveBeenCalledWith("created_at", { ascending: true });
+  });
+
+  test("returns Japanese errors when Supabase draft loading fails", async () => {
+    const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+    const { getDraft } = await import("@/lib/server/drafts");
+    const maybeSingle = vi.fn(async () => ({
+      data: null,
+      error: { message: "draft select failed" },
+    }));
+    const from = vi.fn(() => ({
+      select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle })) })),
+    }));
+
+    vi.mocked(getSupabaseAdmin).mockReturnValue({
+      from,
+    } as unknown as ReturnType<typeof getSupabaseAdmin>);
+
+    await expect(getDraft("draft-supabase-load-failure")).rejects.toMatchObject({
+      message: "下書きの読み込みに失敗しました。",
+      detail: "draft select failed",
+      status: 500,
+    });
+  });
+
+  test("returns Japanese errors when Supabase draft image loading fails", async () => {
+    const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+    const { getDraft } = await import("@/lib/server/drafts");
+    const draft = createSampleDraft({ id: "draft-supabase-image-load-failure" });
+    const maybeSingle = vi.fn(async () => ({
+      data: {
+        id: draft.id,
+        input_payload: draft.inputPayload,
+        fetched_references: draft.fetchedReferences,
+        fetched_competitors: draft.fetchedCompetitors,
+        competitor_research: null,
+        ai_result: draft.aiResult,
+        edited_title: draft.editedTitle,
+        edited_slug: draft.editedSlug,
+        edited_meta_description: draft.editedMetaDescription,
+        edited_body_html: draft.editedBodyHtml,
+        faq_items: draft.faqItems,
+        tags: draft.tags,
+        categories: draft.categories,
+        author_payload: draft.author,
+        status: draft.status,
+      },
+      error: null,
+    }));
+    const orderImages = vi.fn(async () => ({
+      data: null,
+      error: { message: "image select failed" },
+    }));
+    const from = vi.fn((table: string) => {
+      if (table === "article_drafts") {
+        return { select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle })) })) };
+      }
+
+      return {
+        select: vi.fn(() => ({ eq: vi.fn(() => ({ order: orderImages })) })),
+      };
+    });
+
+    vi.mocked(getSupabaseAdmin).mockReturnValue({
+      from,
+    } as unknown as ReturnType<typeof getSupabaseAdmin>);
+
+    await expect(getDraft("draft-supabase-image-load-failure")).rejects.toMatchObject({
+      message: "下書き画像の読み込みに失敗しました。",
+      detail: "image select failed",
+      status: 500,
+    });
   });
 });

@@ -23,7 +23,7 @@ export async function saveDraft(draft: ArticleDraft) {
     const row = draftToRow(draft);
     const { error } = await supabase.from("article_drafts").upsert(row);
     if (error) {
-      throw new ApiError("Failed to save draft to Supabase.", 500, error.message);
+      throw new ApiError("下書きの保存に失敗しました。", 500, error.message);
     }
 
     await supabase.from("article_images").delete().eq("draft_id", draft.id);
@@ -32,7 +32,7 @@ export async function saveDraft(draft: ArticleDraft) {
         draftToImageRows(draft),
       );
       if (imageError) {
-        throw new ApiError("Failed to save draft images to Supabase.", 500, imageError.message);
+        throw new ApiError("下書き画像の保存に失敗しました。", 500, imageError.message);
       }
     }
 
@@ -64,7 +64,7 @@ export async function getDraft(id: string) {
       .maybeSingle();
 
     if (error) {
-      throw new ApiError("Failed to load draft from Supabase.", 500, error.message);
+      throw new ApiError("下書きの読み込みに失敗しました。", 500, error.message);
     }
 
     if (!data) {
@@ -78,7 +78,7 @@ export async function getDraft(id: string) {
       .order("created_at", { ascending: true });
 
     if (imageError) {
-      throw new ApiError("Failed to load draft images from Supabase.", 500, imageError.message);
+      throw new ApiError("下書き画像の読み込みに失敗しました。", 500, imageError.message);
     }
 
     return rowToDraft(data as Record<string, unknown>, imageRows as Record<string, unknown>[]);
