@@ -66,7 +66,7 @@ describe("generateAioArticle", () => {
       form: {
         ...sampleFormPayload,
         primaryInfo:
-          "Our support team often sees one-person contractors manage back-office work through LINE, leaving forms missing.",
+          "  Our support team often sees one-person contractors manage back-office work through LINE, leaving forms missing.  ",
       },
       fetchedReferences: [],
       fetchedCompetitors: [],
@@ -103,8 +103,32 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("Do not paste long reference or competitor passages");
     expect(call?.instructions).toContain("Do not paste primaryInfo verbatim");
     expect(call?.instructions).toContain("absence of AI-like generic phrasing");
+    expect(input.payload.form.primaryInfo?.startsWith(" ")).toBe(false);
     expect(input.payload.form.primaryInfo).toContain("one-person contractors");
     expect(input.payload.form.primaryInfo).toContain("LINE");
+  });
+
+  test("treats whitespace-only primary information as missing before article generation", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce(sampleArticleResult);
+
+    await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        primaryInfo: " \n\t ",
+      },
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
+    const input = JSON.parse(String(call?.input)) as {
+      payload: { form: { primaryInfo?: string } };
+    };
+
+    expect(input.payload.form.primaryInfo).toBe("");
   });
 
   test("compacts uploaded files, fetched text, and invalid count inputs before model calls", async () => {

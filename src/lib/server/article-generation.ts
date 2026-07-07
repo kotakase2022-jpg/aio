@@ -167,7 +167,7 @@ function compactForm(form: Record<string, unknown>) {
     theme: typeof form.theme === "string" ? truncateText(form.theme, 1800) : form.theme,
     primaryInfo:
       typeof form.primaryInfo === "string"
-        ? truncateText(form.primaryInfo, 2400)
+        ? compactOptionalText(form.primaryInfo, 2400)
         : form.primaryInfo,
     closingText:
       typeof form.closingText === "string" ? truncateText(form.closingText, 1000) : form.closingText,
@@ -203,6 +203,12 @@ function compactFileInput(value: unknown) {
     text: typeof value.text === "string" ? truncateText(value.text, 2200) : undefined,
     error: typeof value.error === "string" ? truncateText(value.error, 220) : undefined,
   };
+}
+
+function compactOptionalText(value: string, maxLength: number): string {
+  const trimmed = value.trim();
+
+  return trimmed ? truncateText(trimmed, maxLength) : "";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
