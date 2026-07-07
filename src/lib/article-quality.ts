@@ -116,6 +116,13 @@ const verboseAiPhrases = [
   "utilize",
 ];
 
+const repetitiveNecessityPhrases = [
+  "必要があります",
+  "必要です",
+  "必要となります",
+  "必要になる",
+];
+
 const unsupportedStrongClaims = [
   "必ず",
   "絶対に",
@@ -417,6 +424,7 @@ export function evaluateArticleQuality(
   const formulaicFrames = extractFormulaicSentenceFrames(text);
   const genericPhraseHits = countPhraseHits(text, genericPhrases);
   const verboseAiPhraseHits = countPhraseHits(text, verboseAiPhrases);
+  const repetitiveNecessityPhraseHits = countPhraseHits(text, repetitiveNecessityPhrases);
   const unsupportedClaimHits = countPhraseHits(text, unsupportedStrongClaims);
   const numericClaims = extractNumericClaims(text);
   const unsupportedNumericClaims = numericClaims.filter(
@@ -614,6 +622,15 @@ export function evaluateArticleQuality(
         verboseAiPhraseHits <= 1
           ? "「することができます」型の冗長表現は目立ちません。"
           : `${verboseAiPhraseHits}件の冗長なAI風表現候補があります。「できる」「確認します」「分けます」など短く具体的な述語に置き換えると自然になります。`,
+    },
+    {
+      id: "repetitive-necessity-phrasing",
+      label: "必要性表現の反復",
+      passed: repetitiveNecessityPhraseHits <= 2,
+      detail:
+        repetitiveNecessityPhraseHits <= 2
+          ? "「必要があります」型の言い回しは過度に反復していません。"
+          : `${repetitiveNecessityPhraseHits}件の「必要があります」型の反復があります。必要性だけでつなぐのではなく、現場で起きた事実、判断条件、例外、次の行動に言い換えると一般論から抜け出せます。`,
     },
     {
       id: "concrete-detail",
@@ -918,6 +935,7 @@ export function evaluateArticleQuality(
       Math.min(genericOpeningHits.length, 4) * 3 -
       Math.min(genericEndingHits.length, 4) * 3 -
       Math.min(verboseAiPhraseHits, 6) * 2 -
+      Math.min(Math.max(0, repetitiveNecessityPhraseHits - 2), 4) * 2 -
       Math.min(unsupportedClaimHits, 4) * 2 -
       Math.min(unsupportedNumericClaims.length, 4) * 2 -
       Math.min(mechanicalSequenceHeadingHits, 4) * 2 -

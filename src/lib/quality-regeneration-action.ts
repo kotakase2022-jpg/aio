@@ -38,6 +38,10 @@ export function qualityRegenerationAction(checkId: string) {
     return "することができます、することが重要です等の冗長な述語を、確認します、分けます、できます等の短い動詞に直し、主語と判断を明確にする。";
   }
 
+  if (checkId === "repetitive-necessity-phrasing") {
+    return "必要があります、必要です等の反復を減らし、必要性だけでつながず、現場で起きた事実、判断条件、例外、次の行動へ言い換える。";
+  }
+
   if (checkId === "sentence-variety") {
     return "同じ語尾が続く段落を分割し、断定、条件、例外、問いかけを混ぜて抑揚を出す。";
   }

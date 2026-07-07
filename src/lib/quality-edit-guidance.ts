@@ -127,6 +127,10 @@ export function qualityCheckEditGuidance(checkId: string) {
     return "修正先: 本文HTML。「することができます」型の冗長な述語を、「確認します」「分けます」「できます」など短く具体的な動詞に置き換えます。";
   }
 
+  if (checkId === "repetitive-necessity-phrasing") {
+    return "修正先: 本文HTML。「必要があります」型の反復を減らし、現場で起きた事実、判断条件、例外、次の行動に言い換えます。";
+  }
+
   if (checkId === "numeric-claim-support") {
     return "修正先: 本文HTML。数字の近くに出典、条件、時点、目安、現場観察を補います。";
   }

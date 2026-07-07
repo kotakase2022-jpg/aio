@@ -1111,6 +1111,24 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("flags repeated necessity phrasing that makes copy feel generic", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>結論として、公開前には参照元と一次情報を分ける必要があります。当社の支援現場では、12件の相談で承認担当と出典確認の手順が曖昧でした。</p>
+      <p>制度説明は出典を残す必要があります。現場観察は自社経験として分ける必要があります。競合情報は比較軸に変える必要があります。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
+      <h2>承認担当が決まらない記事で起きる公開直前の手戻り</h2>
+      <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "repetitive-necessity-phrasing", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("必要があります");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("penalizes structured but commodity article HTML without editorial evidence", () => {
     const result = evaluateArticleQuality(`
       <h2>AI活用とは、業務を効率化する取り組みを指します</h2>
