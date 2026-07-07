@@ -118,6 +118,24 @@ describe("evaluateTitleQuality", () => {
     );
   });
 
+  test("does not count English input terms inside underscore joined title tokens", () => {
+    const result = evaluateTitleQuality({
+      selectedTitle: "Platform_form workflow for approval teams",
+      titleCandidates: [
+        "Platform_form workflow for approval teams",
+        "Approval_platform formality checklist",
+        "Workflow_platform operations",
+      ],
+      themeText: "AI search editorial review",
+      primaryInfo: "Our form alpha beta",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "title-input-signal", passed: false }),
+    );
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("flags short topic plus generic English BtoB title suffixes", () => {
     const result = evaluateTitleQuality({
       selectedTitle: "AIO Best Practices",
