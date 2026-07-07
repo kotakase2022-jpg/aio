@@ -107,6 +107,32 @@ describe("draft HTML rendering", () => {
     expect(html).toContain("The current edited nested answer should replace the stale managed block.");
   });
 
+  test("replaces an unclosed stale managed FAQ block without removing the next body heading", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<h2>Main body</h2><p>Editorially approved body.</p>",
+          '<section class="aio-faq-block" aria-label="FAQ"><h2>FAQ</h2>',
+          "<p>Old unclosed FAQ answer.</p>",
+          "<h2>Next body section</h2><p>Body continues after FAQ.</p>",
+        ].join("\n"),
+        faqItems: [
+          {
+            question: "Which recovered FAQ answer should be published?",
+            answer: "The current edited answer should replace the unclosed stale block.",
+          },
+        ],
+      }),
+    );
+
+    expect(html.match(/class="aio-faq-block"/g)).toHaveLength(1);
+    expect(html).toContain("Editorially approved body.");
+    expect(html).toContain("<h2>Next body section</h2>");
+    expect(html).toContain("Body continues after FAQ.");
+    expect(html).not.toContain("Old unclosed FAQ answer.");
+    expect(html).toContain("Which recovered FAQ answer should be published?");
+  });
+
   test("resolves placeholder and relative image URLs through the supplied resolver", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
@@ -437,6 +463,35 @@ describe("draft HTML rendering", () => {
     expect(html).toContain('src="https://app.example.com/uploads/authors/test-author.png"');
   });
 
+  test("replaces an unclosed managed author block without removing the next body heading", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<h2>Main body</h2><p>Editorially approved body.</p>",
+          '<section class="aio-author-block" aria-label="Author"><h2>Author</h2>',
+          "<p>Old unclosed author copy.</p>",
+          "<h2>Next body section</h2><p>Body continues after author.</p>",
+        ].join("\n"),
+        author: {
+          name: "Test Author",
+          title: "Content Strategist",
+          bio: "Writes practical B2B content operations guides.",
+          imageUrl: "/uploads/authors/test-author.png",
+        },
+      }),
+      {
+        imageUrlResolver: (url) => `https://app.example.com${url}`,
+      },
+    );
+
+    expect(html.match(/class="aio-author-block"/g)).toHaveLength(1);
+    expect(html).toContain("Editorially approved body.");
+    expect(html).toContain("<h2>Next body section</h2>");
+    expect(html).toContain("Body continues after author.");
+    expect(html).not.toContain("Old unclosed author copy.");
+    expect(html).toContain('src="https://app.example.com/uploads/authors/test-author.png"');
+  });
+
   test("appends source URLs from the AI result to publishable article HTML", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
@@ -529,6 +584,26 @@ describe("draft HTML rendering", () => {
     expect(html).toContain("Editorially approved body.");
     expect(html).toContain("Body continues after sources.");
     expect(html).not.toContain("Old nested source note.");
+    expect(html).toContain('href="https://example.com/reference"');
+  });
+
+  test("replaces an unclosed managed source block without removing the next body heading", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<h2>Main body</h2><p>Editorially approved body.</p>",
+          '<section class="aio-source-block" aria-label="Sources"><h2>Sources</h2>',
+          "<p>Old unclosed source note.</p>",
+          "<h2>Next body section</h2><p>Body continues after sources.</p>",
+        ].join("\n"),
+      }),
+    );
+
+    expect(html.match(/class="aio-source-block"/g)).toHaveLength(1);
+    expect(html).toContain("Editorially approved body.");
+    expect(html).toContain("<h2>Next body section</h2>");
+    expect(html).toContain("Body continues after sources.");
+    expect(html).not.toContain("Old unclosed source note.");
     expect(html).toContain('href="https://example.com/reference"');
   });
 

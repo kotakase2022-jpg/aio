@@ -293,7 +293,9 @@ function removeSectionsByClass(html: string, className: string) {
       continue;
     }
 
-    const end = findSectionEnd(html, sectionStart.lastIndex);
+    const end =
+      findSectionEnd(html, sectionStart.lastIndex) ??
+      findUnclosedManagedSectionEnd(html, sectionStart.lastIndex);
     if (end > sectionStart.lastIndex) {
       ranges.push({ start: match.index, end });
       sectionStart.lastIndex = end;
@@ -329,7 +331,19 @@ function findSectionEnd(html: string, fromIndex: number) {
     }
   }
 
-  return fromIndex;
+  return null;
+}
+
+function findUnclosedManagedSectionEnd(html: string, fromIndex: number) {
+  const htmlAfterStart = html.slice(fromIndex);
+  const firstHeading = htmlAfterStart.match(/<h[1-3]\b[\s\S]*?<\/h[1-3]>/i);
+  const searchFrom =
+    firstHeading?.index === undefined
+      ? fromIndex
+      : fromIndex + firstHeading.index + firstHeading[0].length;
+  const boundary = html.slice(searchFrom).search(/<h[1-2]\b|<section\b/i);
+
+  return boundary >= 0 ? searchFrom + boundary : html.length;
 }
 
 function collectRenderableSources(draft: ArticleDraft) {
