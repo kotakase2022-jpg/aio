@@ -476,6 +476,7 @@ test("editing the title to a generic label updates the quality checklist", async
 
   await page.getByTestId("draft-edit-tab").click();
   await page.getByTestId("draft-title-input").fill("重要なポイント");
+  await page.getByTestId("draft-meta-textarea").fill("この記事ではAIOについてわかりやすく解説します。");
   await page.getByTestId("draft-faq-question-0").fill("メリットは何ですか？");
   await page.getByTestId("draft-faq-answer-0").fill("重要です。");
   await page.getByTestId("draft-faq-remove-2").click();
@@ -502,6 +503,17 @@ test("editing the title to a generic label updates the quality checklist", async
   await page.getByTestId("quality-edit-draft-button").first().click();
   await expect(page.getByTestId("draft-title-input")).toBeVisible();
   await expect(page.getByTestId("draft-title-input")).toBeFocused();
+  await page.getByTestId("draft-preview-tab").click();
+  await expect(
+    page.getByTestId("quality-check-failed").filter({ hasText: "メタディスクリプションの具体性" }),
+  ).toContainText("修正先: メタディスクリプション");
+  await page
+    .getByTestId("quality-check-failed")
+    .filter({ hasText: "メタディスクリプションの具体性" })
+    .getByTestId("quality-edit-draft-button")
+    .click();
+  await expect(page.getByTestId("draft-meta-textarea")).toBeVisible();
+  await expect(page.getByTestId("draft-meta-textarea")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
   await expect(
     page.getByTestId("quality-check-failed").filter({ hasText: "FAQ件数" }),

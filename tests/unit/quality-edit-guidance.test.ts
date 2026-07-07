@@ -10,6 +10,7 @@ describe("qualityCheckEditGuidance", () => {
       ...extractQualityCheckIds("src/lib/article-quality.ts"),
       ...extractQualityCheckIds("src/lib/title-quality.ts"),
       ...extractQualityCheckIds("src/lib/faq-quality.ts"),
+      ...extractQualityCheckIds("src/lib/meta-description-quality.ts"),
     ];
 
     expect(currentIds).not.toHaveLength(0);
@@ -36,5 +37,13 @@ describe("qualityCheckEditGuidance", () => {
       expect(guidance).toContain(expectedText);
       expect(guidance).not.toContain("一般論を減らし");
     }
+  });
+
+  it("gives specific guidance for meta description checks", () => {
+    const guidance = qualityCheckEditGuidance("meta-description-specificity");
+
+    expect(guidance).toContain("修正先: メタディスクリプション");
+    expect(guidance).toContain("記事固有の判断軸");
+    expect(guidance).not.toContain("本文HTML");
   });
 });

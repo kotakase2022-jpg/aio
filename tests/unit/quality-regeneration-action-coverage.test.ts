@@ -32,6 +32,7 @@ function currentQualityCheckIds() {
     ...extractQualityCheckIds("src/lib/article-quality.ts"),
     ...extractQualityCheckIds("src/lib/title-quality.ts"),
     ...extractQualityCheckIds("src/lib/faq-quality.ts"),
+    ...extractQualityCheckIds("src/lib/meta-description-quality.ts"),
   ];
 }
 
@@ -41,6 +42,9 @@ describe("quality regeneration action coverage", () => {
       "src/lib/article-quality.ts": extractQualityCheckIds("src/lib/article-quality.ts"),
       "src/lib/title-quality.ts": extractQualityCheckIds("src/lib/title-quality.ts"),
       "src/lib/faq-quality.ts": extractQualityCheckIds("src/lib/faq-quality.ts"),
+      "src/lib/meta-description-quality.ts": extractQualityCheckIds(
+        "src/lib/meta-description-quality.ts",
+      ),
     };
 
     for (const [path, ids] of Object.entries(idsByFile)) {
@@ -63,12 +67,22 @@ describe("quality regeneration action coverage", () => {
     expect(idsWithoutActions(articleQualityIds)).toEqual([]);
   });
 
-  test("covers title and FAQ quality checks through their regeneration action prefixes", () => {
+  test("covers title, meta description, and FAQ quality checks through their regeneration action prefixes", () => {
     const titleQualityIds = extractQualityCheckIds("src/lib/title-quality.ts");
+    const metaQualityIds = extractQualityCheckIds("src/lib/meta-description-quality.ts");
     const faqQualityIds = extractQualityCheckIds("src/lib/faq-quality.ts");
 
     expect(idsWithoutActions(titleQualityIds)).toEqual([]);
+    expect(idsWithoutActions(metaQualityIds)).toEqual([]);
     expect(idsWithoutActions(faqQualityIds)).toEqual([]);
+  });
+
+  test("keeps meta description regeneration focused on search-result usefulness", () => {
+    const action = qualityRegenerationAction("meta-description-specificity");
+
+    expect(action).toContain("メタディスクリプション");
+    expect(action).toContain("50〜160文字");
+    expect(action).toContain("記事固有の判断軸");
   });
 
   test("uses specialized regeneration actions for all current quality check IDs", () => {

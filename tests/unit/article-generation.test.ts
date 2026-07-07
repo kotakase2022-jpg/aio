@@ -367,6 +367,32 @@ describe("generateAioArticle", () => {
     );
   });
 
+  test("caps self-evaluation when the generated meta description is generic", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      meta_description: "この記事ではAIOについてわかりやすく解説します。",
+      aio_score_self_evaluation: {
+        score: 99,
+        strengths: ["High claimed score"],
+        improvements: [],
+      },
+    });
+
+    const result = await generateAioArticle({
+      form: sampleFormPayload,
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
+    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
+      "メタディスクリプション",
+    );
+  });
+
   test("caps self-evaluation when FAQ items are generic and thin", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");

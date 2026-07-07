@@ -3,6 +3,10 @@ export function qualityCheckEditGuidance(checkId: string) {
     return "修正先: タイトル。テーマ、一次情報、読者の判断軸が伝わる表現にします。";
   }
 
+  if (checkId.startsWith("meta-description-")) {
+    return "修正先: メタディスクリプション。検索結果で読む理由が伝わるよう、記事固有の判断軸、一次情報、対象読者を短く入れます。";
+  }
+
   if (checkId === "faq-count") {
     return "修正先: FAQ。読者の不安、比較、次の行動に答える質問を追加します。";
   }

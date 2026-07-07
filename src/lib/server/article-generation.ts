@@ -3,6 +3,7 @@ import { articleGenerationSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
 import { evaluateArticleQuality } from "@/lib/article-quality";
 import { evaluateFaqQuality } from "@/lib/faq-quality";
+import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
 import { truncatePromptLine } from "@/lib/prompt-text";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import { compactOptionalText, truncateText } from "@/lib/utils";
@@ -121,6 +122,12 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       compactPayload.competitorResearch,
     ),
   });
+  const metaDescriptionEvaluation = evaluateMetaDescriptionQuality({
+    metaDescription: result.meta_description,
+    themeText: typeof compactPayload.form.theme === "string" ? compactPayload.form.theme : "",
+    primaryInfo:
+      typeof compactPayload.form.primaryInfo === "string" ? compactPayload.form.primaryInfo : "",
+  });
 
   return {
     ...result,
@@ -132,15 +139,18 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
         qualityEvaluation.score,
         titleEvaluation.score,
         faqEvaluation.score,
+        metaDescriptionEvaluation.score,
       ),
       strengths: uniqueItems([
         ...result.aio_score_self_evaluation.strengths,
         ...qualityEvaluation.strengths.map((item) => `編集品質チェック: ${item}`),
         ...titleEvaluation.strengths.map((item) => `タイトル品質チェック: ${item}`),
         ...faqEvaluation.strengths.map((item) => `FAQ品質チェック: ${item}`),
+        ...metaDescriptionEvaluation.strengths.map((item) => `メタ品質チェック: ${item}`),
       ]).slice(0, 8),
       improvements: uniqueItems([
         ...titleEvaluation.improvements,
+        ...metaDescriptionEvaluation.improvements,
         ...qualityEvaluation.improvements,
         ...faqEvaluation.improvements,
         ...result.aio_score_self_evaluation.improvements,

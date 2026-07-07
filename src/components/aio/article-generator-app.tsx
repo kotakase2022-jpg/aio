@@ -45,6 +45,7 @@ import {
   formatGenerationRequirementMessage,
   getMissingGenerationRequirements,
 } from "@/lib/generation-requirements";
+import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
 import { truncatePromptLine } from "@/lib/prompt-text";
 import { qualityCheckEditGuidance } from "@/lib/quality-edit-guidance";
 import { qualityRegenerationAction } from "@/lib/quality-regeneration-action";
@@ -2434,14 +2435,29 @@ function ArticlePreview({
       }),
     [draft],
   );
+  const metaDescriptionQualityEvaluation = useMemo(
+    () =>
+      evaluateMetaDescriptionQuality({
+        metaDescription: draft.editedMetaDescription,
+        themeText: draft.inputPayload.theme,
+        primaryInfo: draft.inputPayload.primaryInfo,
+      }),
+    [draft],
+  );
   const qualityEvaluation = useMemo(
     () =>
       combineQualityEvaluations(
         titleQualityEvaluation,
         bodyQualityEvaluation,
         faqQualityEvaluation,
+        metaDescriptionQualityEvaluation,
       ),
-    [bodyQualityEvaluation, faqQualityEvaluation, titleQualityEvaluation],
+    [
+      bodyQualityEvaluation,
+      faqQualityEvaluation,
+      metaDescriptionQualityEvaluation,
+      titleQualityEvaluation,
+    ],
   );
   const failedQualityChecks = useMemo(
     () => qualityEvaluation.checks.filter((check) => !check.passed),
@@ -3318,19 +3334,32 @@ function combineQualityEvaluations(
   titleEvaluation: ArticleQualityEvaluation,
   bodyEvaluation: ArticleQualityEvaluation,
   faqEvaluation: ArticleQualityEvaluation,
+  metaDescriptionEvaluation: ArticleQualityEvaluation,
 ): ArticleQualityEvaluation {
   return {
-    score: Math.min(titleEvaluation.score, bodyEvaluation.score, faqEvaluation.score),
-    checks: [...titleEvaluation.checks, ...bodyEvaluation.checks, ...faqEvaluation.checks],
+    score: Math.min(
+      titleEvaluation.score,
+      bodyEvaluation.score,
+      faqEvaluation.score,
+      metaDescriptionEvaluation.score,
+    ),
+    checks: [
+      ...titleEvaluation.checks,
+      ...bodyEvaluation.checks,
+      ...faqEvaluation.checks,
+      ...metaDescriptionEvaluation.checks,
+    ],
     strengths: uniqueStrings([
       ...titleEvaluation.strengths,
       ...bodyEvaluation.strengths,
       ...faqEvaluation.strengths,
+      ...metaDescriptionEvaluation.strengths,
     ]),
     improvements: uniqueStrings([
       ...titleEvaluation.improvements,
       ...bodyEvaluation.improvements,
       ...faqEvaluation.improvements,
+      ...metaDescriptionEvaluation.improvements,
     ]),
   };
 }
@@ -3338,6 +3367,10 @@ function combineQualityEvaluations(
 function draftEditorTargetTestId(checkId: string) {
   if (checkId.startsWith("title-")) {
     return "draft-title-input";
+  }
+
+  if (checkId.startsWith("meta-description-")) {
+    return "draft-meta-textarea";
   }
 
   if (checkId === "faq-count") {
