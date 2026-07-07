@@ -1133,6 +1133,26 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeLessThan(100);
   });
 
+  test("flags rapidly evolving landscape guide language as commodity AI copy", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO article quality means source-aware editorial judgment for AI search</h2>
+      <p>In today's rapidly evolving landscape, this comprehensive guide will delve into how teams can navigate the complexities of AI content. Our support team observed 12 review cases where approval owners, source URLs, caveats, and WordPress approval status were unclear before publication.</p>
+      <table><tr><th>Decision point</th><td>Owner, timing, source URL, caveat, and approval status are compared before publication.</td></tr></table>
+      <ul><li>Failure pattern: editors mix source claims and first-party observations without attribution.</li><li>Review note: keep source notes and conditions close to the claim.</li></ul>
+      <h2>Where approval owners cause last-minute editorial rework</h2>
+      <p>FAQ: teams separate source evidence, field observations, and unsupported information before approval. Source: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-opening-frame", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-phrases", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("today's rapidly evolving landscape");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("flags alternate Japanese commodity phrases that avoid the base phrase list", () => {
     const result = evaluateArticleQuality(`
       <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>

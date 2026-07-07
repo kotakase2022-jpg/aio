@@ -106,6 +106,10 @@ describe("quality regeneration action coverage", () => {
 
     expect(action).toContain("わかりやすく解説");
     expect(action).toContain("today's fast-paced digital landscape");
+    expect(action).toContain("today's rapidly evolving landscape");
+    expect(action).toContain("comprehensive guide");
+    expect(action).toContain("delve into");
+    expect(action).toContain("navigate the complexities");
     expect(action).toContain("unlock the potential");
     expect(action).toContain("参照元の事実");
     expect(action).toContain("一次情報");

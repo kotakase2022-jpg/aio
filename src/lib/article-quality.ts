@@ -72,8 +72,12 @@ const genericPhrases = [
   "enhance productivity",
   "leverage",
   "today's digital landscape",
+  "today's rapidly evolving landscape",
   "fast-paced digital landscape",
   "ever-evolving",
+  "comprehensive guide",
+  "delve into",
+  "navigate the complexities",
   "game-changer",
   "unlock the potential",
   "empower businesses",
@@ -98,6 +102,10 @@ const genericOpeningPatterns = [
   {
     label: "today's digital landscape",
     pattern: /\bin today['’]?s (?:fast-paced )?digital landscape\b/i,
+  },
+  {
+    label: "today's rapidly evolving landscape",
+    pattern: /\bin today'?s rapidly evolving (?:digital )?landscape\b/i,
   },
   { label: "ever-evolving landscape", pattern: /\bever-evolving (?:digital )?landscape\b/i },
 ];

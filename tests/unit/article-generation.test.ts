@@ -100,7 +100,11 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("enhance productivity");
     expect(call?.instructions).toContain("leverage");
     expect(call?.instructions).toContain("today's fast-paced digital landscape");
+    expect(call?.instructions).toContain("today's rapidly evolving landscape");
     expect(call?.instructions).toContain("ever-evolving landscape");
+    expect(call?.instructions).toContain("comprehensive guide");
+    expect(call?.instructions).toContain("delve into");
+    expect(call?.instructions).toContain("navigate the complexities");
     expect(call?.instructions).toContain("unlock the potential");
     expect(call?.instructions).toContain("empower businesses");
     expect(call?.instructions).toContain("run one silent editorial self-review");
