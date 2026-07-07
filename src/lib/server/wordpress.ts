@@ -121,7 +121,13 @@ export async function publishDraftToWordpress({
     (image) => image.slot === "featured" && image.url.trim(),
   );
   if (featured) {
-    featuredMedia = await uploadMedia(connection.siteUrl, authHeader, featured.url, origin);
+    featuredMedia = await uploadMedia(
+      connection.siteUrl,
+      authHeader,
+      featured.url,
+      origin,
+      featured.altText,
+    );
   }
 
   const response = await fetch(`${connection.siteUrl}/wp-json/wp/v2/posts`, {
@@ -403,6 +409,7 @@ async function uploadMedia(
   authHeader: string,
   imageUrl: string,
   origin: string,
+  altText: string,
 ) {
   const resolvedUrl = imageUrl.startsWith("/")
     ? `${origin.replace(/\/$/, "")}${imageUrl}`
@@ -451,7 +458,41 @@ async function uploadMedia(
     throw new ApiError("WordPressのメディアアップロードに失敗しました。", response.status, json.message);
   }
 
-  return json.id;
+  const mediaId = json.id;
+  const normalizedAltText = altText.trim();
+  if (normalizedAltText) {
+    await updateMediaAltText(siteUrl, authHeader, mediaId, normalizedAltText);
+  }
+
+  return mediaId;
+}
+
+async function updateMediaAltText(
+  siteUrl: string,
+  authHeader: string,
+  mediaId: number,
+  altText: string,
+) {
+  const response = await fetch(`${siteUrl}/wp-json/wp/v2/media/${mediaId}`, {
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ alt_text: altText }),
+  });
+  const json = (await response.json().catch(() => ({}))) as {
+    id?: number;
+    message?: string;
+  };
+
+  if (!response.ok || json.id !== mediaId) {
+    throw new ApiError(
+      "WordPressメディアの代替テキスト更新に失敗しました。",
+      response.status,
+      json.message,
+    );
+  }
 }
 
 function resolveAssetUrl(url: string, origin: string) {

@@ -63,6 +63,12 @@ describe("WordPress REST API contract", () => {
         return;
       }
 
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/media/301") {
+        expect(request.json).toMatchObject({ alt_text: "Contract featured image" });
+        sendJson(response, { id: 301 }, 200);
+        return;
+      }
+
       if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/posts") {
         expect(request.json).toMatchObject({
           title: "AIO Content Operations Guide",
@@ -138,12 +144,16 @@ describe("WordPress REST API contract", () => {
           "GET /wp-json/wp/v2/categories",
           "POST /wp-json/wp/v2/categories",
           "POST /wp-json/wp/v2/media",
+          "POST /wp-json/wp/v2/media/301",
           "POST /wp-json/wp/v2/posts",
         ]),
       );
       expect(requestNames.filter((name) => name === "GET /wp-json/wp/v2/tags")).toHaveLength(3);
       expect(requestNames.filter((name) => name === "POST /wp-json/wp/v2/tags")).toHaveLength(3);
       expect(requestNames.indexOf("POST /wp-json/wp/v2/media")).toBeLessThan(
+        requestNames.indexOf("POST /wp-json/wp/v2/media/301"),
+      );
+      expect(requestNames.indexOf("POST /wp-json/wp/v2/media/301")).toBeLessThan(
         requestNames.indexOf("POST /wp-json/wp/v2/posts"),
       );
     } finally {
@@ -356,6 +366,88 @@ describe("WordPress REST API contract", () => {
 
       const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
       expect(requestNames).toContain("POST /wp-json/wp/v2/media");
+      expect(requestNames).not.toContain("POST /wp-json/wp/v2/posts");
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("stops before creating a post when featured media alt update fails", async () => {
+    const server = await createMockHttpServer((request, response) => {
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, []);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/categories") {
+        sendJson(response, { id: 11, name: (request.json as { name: string }).name }, 201);
+        return;
+      }
+
+      if (request.method === "GET" && request.pathname === "/wp-json/wp/v2/tags") {
+        sendJson(response, []);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/tags") {
+        sendJson(response, { id: 21, name: (request.json as { name: string }).name }, 201);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/media") {
+        sendJson(response, { id: 301 }, 201);
+        return;
+      }
+
+      if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/media/301") {
+        expect(request.json).toMatchObject({ alt_text: "Contract featured image" });
+        sendJson(response, { message: "Alt text cannot be updated." }, 403);
+        return;
+      }
+
+      sendJson(response, { message: `Unexpected route ${request.method} ${request.pathname}` }, 500);
+    });
+
+    try {
+      const { saveWordpressConnection, publishDraftToWordpress } = await import(
+        "@/lib/server/wordpress"
+      );
+      const connection = await saveWordpressConnection({
+        siteUrl: server.origin,
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      });
+      const draft = createSampleDraft({
+        status: "approved",
+        images: [
+          {
+            id: "featured-alt-failure",
+            slot: "featured",
+            url: `data:image/png;base64,${Buffer.from("png").toString("base64")}`,
+            path: "generated/featured.png",
+            prompt: "contract image",
+            altText: "Contract featured image",
+            source: "generated",
+          },
+        ],
+      });
+
+      await expect(
+        publishDraftToWordpress({
+          draft,
+          connectionId: connection.id,
+          status: "draft",
+          origin: "http://localhost",
+        }),
+      ).rejects.toMatchObject({
+        status: 403,
+        message: "WordPressメディアの代替テキスト更新に失敗しました。",
+        detail: "Alt text cannot be updated.",
+      });
+
+      const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
+      expect(requestNames).toContain("POST /wp-json/wp/v2/media");
+      expect(requestNames).toContain("POST /wp-json/wp/v2/media/301");
       expect(requestNames).not.toContain("POST /wp-json/wp/v2/posts");
     } finally {
       await server.close();
