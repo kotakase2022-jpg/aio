@@ -30,7 +30,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Last known good local verification: `npm.cmd run quality` passed after `4e8510d`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `7177ef7`.
-- PR status after this implementation/handoff commit/push: re-check required after pushing the latest commits.
+- PR status after implementation/handoff push at head `091d6a5`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS.
 - If this document is included in a later status-only handoff commit, re-check the latest PR head once more.
 
 ## 3. What Was Done
@@ -62,9 +62,9 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 5. Current Status
 
 - Implementation commit `4e8510d` exists locally and passed focused checks plus the full local quality gate.
-- This handoff document records the state before the final handoff commit/push for this pass.
+- This handoff document records the implementation commit, local quality gate, and PR checks observed after the implementation/handoff push.
 - PR #1 was green at `7177ef7` before this implementation pass.
-- After pushing the implementation and handoff commits, Claude Code should confirm CodeRabbit OSS and GitHub Actions are green on the latest PR head.
+- After pushing the implementation and handoff commits, PR #1 was green on CodeRabbit and GitHub Actions at head `091d6a5`; Claude Code should re-check the latest PR head if this status-only handoff update is pushed after that.
 
 ## 6. Known Issues
 
@@ -78,7 +78,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `7177ef7`.
-- Review status after implementation/handoff push: re-check required on the latest head.
+- Review status after implementation/handoff push at head `091d6a5`: CodeRabbit SUCCESS and GitHub Actions SUCCESS.
 - Current pass:
   - Adds image alt quality checks to server self-evaluation and the editor quality panel.
   - Confirms generic image alt text is flagged and the edit action focuses `draft-images-section`.
@@ -132,11 +132,11 @@ Results:
   - `npm run build`: passed, Next.js 16.2.9 production build.
 - Commit pre-commit hook for `4e8510d`: passed, `npm run lint` and `npm run test:integrity`.
 
-Not yet recorded in this handoff:
+Push / PR result recorded in this handoff:
 
-- Final handoff commit hash.
-- Push result for this implementation/handoff pair.
-- Post-push CodeRabbit OSS and GitHub Actions result for the latest head.
+- Implementation and handoff commits were pushed through `091d6a5`.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 10`: CodeRabbit passed; `Typecheck, lint, tests, E2E, build` passed in 3m48s.
+- If a later status-only handoff commit is pushed, re-check that newer head.
 
 Not run:
 
