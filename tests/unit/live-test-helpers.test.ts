@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 
+import { withProcessEnv } from "../helpers/env";
 import { loadLiveEnv } from "../live/live-test-helpers";
 
 describe("loadLiveEnv", () => {
@@ -93,21 +94,12 @@ describe("loadLiveEnv", () => {
 async function withTempProject(callback: () => Promise<void>) {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "aio-live-env-"));
   const previousCwd = process.cwd();
-  const previousEnv = { ...process.env };
 
   process.chdir(projectDir);
   try {
-    await callback();
+    await withProcessEnv(callback);
   } finally {
     process.chdir(previousCwd);
-    restoreEnv(previousEnv);
     await rm(projectDir, { recursive: true, force: true });
   }
-}
-
-function restoreEnv(previousEnv: NodeJS.ProcessEnv) {
-  for (const key of Object.keys(process.env)) {
-    delete process.env[key];
-  }
-  Object.assign(process.env, previousEnv);
 }

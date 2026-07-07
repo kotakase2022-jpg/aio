@@ -8,3 +8,12 @@ export function restoreProcessEnv(snapshot: NodeJS.ProcessEnv) {
   }
   Object.assign(process.env, snapshot);
 }
+
+export async function withProcessEnv<T>(callback: () => Promise<T> | T): Promise<T> {
+  const snapshot = snapshotProcessEnv();
+  try {
+    return await callback();
+  } finally {
+    restoreProcessEnv(snapshot);
+  }
+}
