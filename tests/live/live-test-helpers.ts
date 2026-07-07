@@ -3,12 +3,18 @@ import path from "node:path";
 import { expect } from "vitest";
 
 export function loadLiveEnv() {
-  for (const fileName of [".env.live.local", ".env.live", ".env.local", ".env"]) {
+  // Precedence must match scripts/check-live-readiness.mjs (loadDotenvFiles): the sandbox-only
+  // `.env.live*` files override any shell-exported values, while `.env` / `.env.local` only fill
+  // gaps. Otherwise the readiness check could validate a sandbox host from `.env.live.local` while
+  // the live tests actually run against a production URL exported in the shell \u2014 risking writes to
+  // or deletes against production Supabase/WordPress.
+  for (const fileName of [".env", ".env.local", ".env.live", ".env.live.local"]) {
     const filePath = path.join(process.cwd(), fileName);
     if (!existsSync(filePath)) {
       continue;
     }
 
+    const isLiveFile = fileName.startsWith(".env.live");
     const text = readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
     for (const line of text.split(/\r?\n/)) {
       const trimmed = line.trim();
@@ -23,7 +29,7 @@ export function loadLiveEnv() {
 
       const key = trimmed.slice(0, separator).trim();
       const value = cleanEnvValue(trimmed.slice(separator + 1));
-      if (key && process.env[key] == null) {
+      if (key && (isLiveFile || process.env[key] == null)) {
         process.env[key] = value;
       }
     }
