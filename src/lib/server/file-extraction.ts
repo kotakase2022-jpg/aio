@@ -32,14 +32,14 @@ export async function extractAttachmentText({
 
   if (!(SUPPORTED_ATTACHMENT_EXTENSIONS as readonly string[]).includes(extension)) {
     throw new ApiError(
-      "Unsupported file type.",
+      "対応していないファイル形式です。",
       400,
       "PDF/TXT/PPTX/XLSX/DOCX/HTMLのみ添付できます。",
     );
   }
 
   if (buffer.length === 0) {
-    throw new ApiError("Uploaded file is empty.", 400, "空のファイルです。");
+    throw new ApiError("空のファイルです。", 400);
   }
 
   let text = "";
@@ -60,7 +60,7 @@ export async function extractAttachmentText({
   const cleaned = cleanText(text);
   if (cleaned.length < MIN_USEFUL_TEXT_CHARS) {
     throw new ApiError(
-      "Could not extract enough file text.",
+      "十分な本文を抽出できませんでした。",
       422,
       `${contentType || extension}から十分な本文を抽出できませんでした。`,
     );
@@ -681,7 +681,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
       promise,
       new Promise<T>((_, reject) => {
         timer = setTimeout(() => {
-          reject(new ApiError("File parsing timed out.", 504, "解析に時間がかかりすぎました。"));
+          reject(new ApiError("ファイル解析がタイムアウトしました。", 504));
         }, timeoutMs);
       }),
     ]);

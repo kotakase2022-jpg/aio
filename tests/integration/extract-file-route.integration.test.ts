@@ -39,7 +39,10 @@ describe("extract-file-content route", () => {
       }),
     );
     expect(missing.status).toBe(400);
-    await expect(missing.json()).resolves.toMatchObject({ ok: false, error: "File is required." });
+    await expect(missing.json()).resolves.toMatchObject({
+      ok: false,
+      error: "添付ファイルを選択してください。",
+    });
 
     const formData = new FormData();
     formData.set(
@@ -53,7 +56,44 @@ describe("extract-file-content route", () => {
       }),
     );
     expect(oversized.status).toBe(400);
-    await expect(oversized.json()).resolves.toMatchObject({ ok: false, error: "File is too large." });
+    await expect(oversized.json()).resolves.toMatchObject({
+      ok: false,
+      error: "添付ファイルは1件12MB以内にしてください。",
+    });
+  });
+
+  test("returns Japanese validation errors for unsupported and empty files", async () => {
+    const { POST } = await import("@/app/api/extract-file-content/route");
+
+    const unsupportedFormData = new FormData();
+    unsupportedFormData.set(
+      "file",
+      new File(["image"], "screen.png", { type: "image/png" }),
+    );
+    const unsupported = await POST(
+      new Request("http://localhost/api/extract-file-content", {
+        method: "POST",
+        body: unsupportedFormData,
+      }),
+    );
+    await expect(unsupported.json()).resolves.toMatchObject({
+      ok: false,
+      error: "対応していないファイル形式です。",
+      detail: "PDF/TXT/PPTX/XLSX/DOCX/HTMLのみ添付できます。",
+    });
+
+    const emptyFormData = new FormData();
+    emptyFormData.set("file", new File([], "empty.txt", { type: "text/plain" }));
+    const empty = await POST(
+      new Request("http://localhost/api/extract-file-content", {
+        method: "POST",
+        body: emptyFormData,
+      }),
+    );
+    await expect(empty.json()).resolves.toMatchObject({
+      ok: false,
+      error: "空のファイルです。",
+    });
   });
 
   test.each([
