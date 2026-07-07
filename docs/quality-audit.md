@@ -32,15 +32,16 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 07:37 +09:00 after expanding title-quality
-regression coverage so English input terms also match natural slash-separated and colon-separated
-title phrases such as `AI/Search` and `Form: approval`:
+The latest local full gate passed on 2026-07-08 07:53 +09:00 after expanding title-quality
+regression coverage so underscore-joined English title tokens do not accidentally satisfy input
+signals, while prior coverage still permits natural hyphenated, slash-separated, and
+colon-separated title phrases:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 46 files
-  - `npm run test`: passed, 42 files / 320 tests
+  - `npm run test`: passed, 42 files / 321 tests
   - `npm run test:contract`: passed, 3 files / 13 tests
   - `npm run test:coverage`: passed, statements 88.22%, branches 76.19%, functions 92.14%,
     lines 88.66%
@@ -169,6 +170,16 @@ also checked:
 - CodeRabbit: success
 - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m48s
 
+The latest pushed status-only head before this pass was also checked:
+
+- Commit: `5041dae`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m43s
+
+The current local branch also includes test commit `6112b9c`, which verifies underscore-joined
+English title tokens such as `Platform_form` do not count as natural input-signal matches. Hosted
+CodeRabbit and Actions must be re-checked after the handoff/docs update is pushed.
+
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -186,7 +197,8 @@ topic. It now also flags short-topic beginner/explainer templates that can make 
 drafts feel like commodity SEO content before the body is reviewed. It also verifies that English
 input terms are not counted when they only appear as substrings inside longer title words, while
 hyphenated, slash-separated, and colon-separated title phrases still count as natural input-signal
-matches.
+matches. Underscore-joined tokens intentionally remain treated as one token, so `form` inside
+`Platform_form` does not satisfy the input-signal check.
 
 Publishing-readiness coverage now also checks meta descriptions, image alt quality, source URL
 deduplication, author block preservation, edited image alt text in publishable HTML / WordPress post

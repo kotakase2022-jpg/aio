@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this remains a narrow continuation rather than a new loop.
-- Phase: Autonomous Improvement / Slash and Colon English Title Signals / Handoff
-- Last updated: 2026-07-08 07:45 +09:00
+- Phase: Autonomous Improvement / Underscore English Title Signals / Handoff
+- Last updated: 2026-07-08 07:53 +09:00
 
 ## 1. Current Goal
 
@@ -17,34 +17,36 @@ Improve the AIO article generator toward the active 100/100 goal:
 - the app feels strong enough for daily article-production work
 - generated articles feel specific, source-aware, accessible, and editorial rather than commodity AI content
 
-This Codex pass added regression coverage for slash-separated and colon-separated English title phrases. The previous pass made hyphenated phrases such as `AI-powered` and `form-based` count as natural input-signal matches while still avoiding accidental substring matches like `form` inside `platform`. This pass verifies that `AI/Search` and `Form: approval` style BtoB/SaaS title phrasing is also preserved.
+This Codex pass added regression coverage proving underscore-joined English title tokens do not accidentally satisfy the input-signal title check. Previous passes covered:
+
+- exact English term matching without substring false positives such as `form` inside `platform`
+- natural hyphenated title phrasing such as `AI-powered` and `form-based`
+- natural slash-separated and colon-separated BtoB/SaaS title phrasing such as `AI/Search` and `Form: approval`
 
 The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, live WordPress recovery verification, and human review of real generated article quality are still open.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation/test commit: `2082d38 Cover slash separated English title signals`
-- Previous pushed status head: `e7c8aee Record hyphenated title PR checks`
-- Last known good local verification: `npm.cmd run quality` passed after `2082d38`.
+- Latest implementation/test commit: `6112b9c Cover underscore joined title signals`
+- Previous pushed status head: `5041dae Record slash title PR checks`
+- Last known good local verification: `npm.cmd run quality` passed after `6112b9c`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR status before this test pass at head `e7c8aee`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS in 3m55s.
-- PR status after test/handoff push at head `032a07f`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS in 3m48s.
-- Later status-only handoff commits should be re-checked on the current PR head; they do not change runtime code.
-- CodeRabbit OSS review status: CodeRabbit is installed and responding on PR #1. Old duplicate comments about image recovery / parallel image regeneration still appear in PR review history, but current status check was SUCCESS before this pass; current code and E2E coverage had already addressed those areas in previous Loop 3 work.
+- PR status before this test pass at head `5041dae`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS in 3m43s.
+- PR status for `6112b9c`: not yet checked at the time this handoff/docs update was prepared. Re-check after pushing this pass.
+- CodeRabbit OSS review status: CodeRabbit is installed and responding on PR #1. Old duplicate comments about image recovery / parallel image regeneration still appear in PR review history, but the current status check was SUCCESS before this pass; current code and E2E coverage had already addressed those areas in previous Loop 3 work.
 
 ## 3. What Was Done
 
-- Read the required workflow files, current handoff, README, package scripts, branch state, recent commits, PR status, and title-quality implementation/tests before editing.
-- Confirmed PR #1 was green before this pass at head `e7c8aee`.
-- Inspected `tests/unit/title-quality.test.ts`.
-- Added a unit regression test proving slash-separated and colon-separated English title phrases still satisfy `title-input-signal`:
-  - `AI/Search title review: form approval workflow`
-  - `Form: approval workflow for editorial teams`
-  - `Search/title quality for approval workflows`
-- Confirmed the test passes without changing runtime code.
+- Read the required workflow files, current handoff, README, package scripts, branch state, recent commits, PR status, CodeRabbit status, and title-quality implementation/tests before editing.
+- Confirmed PR #1 was green before this pass at head `5041dae`.
+- Inspected `tests/unit/title-quality.test.ts` and `src/lib/title-quality.ts`.
+- Added a unit regression test proving underscore-joined English title tokens do not count as natural input-signal matches:
+  - `Platform_form workflow for approval teams`
+  - `Approval_platform formality checklist`
+  - `Workflow_platform operations`
+- Confirmed the focused test passes without changing runtime code.
 - Ran focused tests and the full local `npm.cmd run quality` gate successfully.
-- Updated `docs/quality-audit.md` with the latest local evidence and title-quality coverage status.
 - Cursor Bugbot was not run; CodeRabbit OSS remains the standard review path, and this pass did not touch auth, DB, credentials, production writes, or other high-risk areas that would justify optional Bugbot use.
 
 ## 4. Files Changed
@@ -55,10 +57,9 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 ## 5. Current Status
 
-- Test commit `2082d38` exists locally and passed the focused title-quality tests plus the full local quality gate.
-- Handoff/docs commit `032a07f` records the test commit and local quality gate.
-- Test and handoff/docs commits were pushed through `032a07f`.
-- Hosted CodeRabbit and GitHub Actions are green on `032a07f`.
+- Test commit `6112b9c` exists locally and passed the focused title-quality tests plus the full local quality gate.
+- This handoff/docs update records the test commit and local quality gate.
+- Push the current branch, then re-check hosted CodeRabbit and GitHub Actions on PR #1.
 - If this file is included in a later status-only commit, Claude Code should re-check the latest PR head. Status-only handoff commits do not change runtime code.
 
 ## 6. Known Issues
@@ -72,14 +73,14 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 ## 7. CodeRabbit Review
 
-- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `e7c8aee`.
+- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `5041dae`.
 - Current pass:
-  - Adds regression coverage for slash-separated and colon-separated English title phrases.
+  - Adds regression coverage for underscore-joined English title tokens.
   - Does not change runtime code or add a new quality-check ID / UI surface.
 - Critical findings:
   - No known open Critical findings at the time of this handoff.
 - Resolved / strengthened findings:
-  - Strengthened the anti-commodity title-quality layer by locking in natural English punctuation behavior while preserving exact matching.
+  - Strengthened the anti-commodity title-quality layer by locking in English token-boundary behavior across substrings, hyphens, slashes, colons, and underscores.
 - Deferred findings:
   - See `Known Issues`.
 - False positives / not applicable:
@@ -101,40 +102,39 @@ gh pr checks 1 --repo kotakase2022-jpg/aio
 npx.cmd vitest run tests/unit/title-quality.test.ts
 git diff --check
 npm.cmd run quality
-git commit -m "Cover slash separated English title signals"
+git commit -m "Cover underscore joined title signals"
 ```
 
 Results:
 
-- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed before this pass at head `e7c8aee`.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed before this pass at head `5041dae`.
   - CodeRabbit: pass.
-  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m55s.
-- `npx.cmd vitest run tests/unit/title-quality.test.ts`: passed, 1 file / 9 tests.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m43s.
+- `npx.cmd vitest run tests/unit/title-quality.test.ts`: passed, 1 file / 10 tests.
 - `git diff --check`: passed.
 - `npm.cmd run quality`: passed.
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
   - `npm run test:integrity`: passed, 46 files.
-  - `npm run test`: passed, 42 files / 320 tests.
+  - `npm run test`: passed, 42 files / 321 tests.
   - `npm run test:contract`: passed, 3 files / 13 tests.
   - `npm run test:coverage`: passed, statements 88.22%, branches 76.19%, functions 92.14%, lines 88.66%.
   - `npm run test:e2e`: passed, 48 PC Chromium tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
-- Commit pre-commit hook for `2082d38`: passed, `npm run lint` and `npm run test:integrity`.
+- Commit pre-commit hook for `6112b9c`: passed, `npm run lint` and `npm run test:integrity`.
 
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials and explicit non-production confirmation are required.
-- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15` after push:
-  - CodeRabbit: pass.
-  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m48s.
+- Hosted `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15` after this new push: pending until the branch is pushed.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Confirm any later status-only handoff commit after `032a07f`, if present, is green on PR #1.
-2. Review the new slash/colon title-signal regression test:
+1. Re-check PR #1 after this branch is pushed:
+   - `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`
+2. Review the new underscore title-signal regression test:
    - `tests/unit/title-quality.test.ts`
 3. If checks stay green and no major CodeRabbit comments appear, decide whether the next pass should be live/sandbox readiness or another small regression test around generated-output quality.
 4. Run `npm.cmd run quality` after any code changes and record the result here.
@@ -142,6 +142,7 @@ Next Claude Code should:
 ## 11. Suggested Review Scope for Claude Code
 
 - Whether the title-quality test matrix now covers the main English separator cases enough for the current heuristic.
+- Whether underscore should intentionally remain a token character for title input-signal matching, as currently tested.
 - Whether additional commodity patterns should be added only after reviewing real generated OpenAI output, rather than expanding heuristics speculatively.
 
 ## 12. Risk Notes
