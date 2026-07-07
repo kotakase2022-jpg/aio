@@ -32,16 +32,16 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 07:53 +09:00 after expanding title-quality
-regression coverage so underscore-joined English title tokens do not accidentally satisfy input
-signals, while prior coverage still permits natural hyphenated, slash-separated, and
-colon-separated title phrases:
+The latest local full gate passed on 2026-07-08 08:08 +09:00 after aligning article-quality
+English token matching with the recent title-quality boundary work. Article first-party reflection
+now treats hyphenated phrases such as `form-based` as natural matches for `form`, while
+underscore-joined technical tokens such as `platform_form` still do not satisfy the input signal:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 46 files
-  - `npm run test`: passed, 42 files / 321 tests
+  - `npm run test`: passed, 42 files / 323 tests
   - `npm run test:contract`: passed, 3 files / 13 tests
   - `npm run test:coverage`: passed, statements 88.22%, branches 76.19%, functions 92.14%,
     lines 88.66%
@@ -190,6 +190,17 @@ also checked:
 Later status-only handoff commits should be re-checked on the current PR head; they do not change
 runtime code.
 
+The latest pushed status-only head before this pass was also checked:
+
+- Commit: `401e269`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m52s
+
+The current local branch also includes implementation commit `def4a3b`, which aligns article-body
+English signal matching with title-quality boundaries: hyphenated phrases count as natural
+first-party reflections, but underscore-joined tokens do not. Hosted CodeRabbit and Actions must be
+re-checked after the handoff/docs update is pushed.
+
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -200,7 +211,9 @@ decision frame, not only later in the body. It also checks common AI-ish commodi
 including generic openings, English boilerplate, repeated formulaic sentence frames, thin sections,
 mechanical headings, repeated "necessary" phrasing such as "必要があります", and alternate Japanese
 commodity phrases such as "求められています" and "と言えます". This prevents drafts from passing
-quality checks when they read like generic AI copy.
+quality checks when they read like generic AI copy. It also verifies English first-party signal
+boundaries in article bodies: `form-based` can preserve the input term `form`, but `platform_form`
+does not count as a natural reflection.
 
 Title-quality coverage checks that selected titles and title candidates are specific enough for the
 topic. It now also flags short-topic beginner/explainer templates that can make otherwise useful
@@ -274,8 +287,8 @@ human review of real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit if a new status-only handoff commit is pushed after
-   `032a07f`.
+1. Re-check hosted Actions and CodeRabbit after the `def4a3b` article-quality token-boundary pass
+   and its handoff/docs update are pushed.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
