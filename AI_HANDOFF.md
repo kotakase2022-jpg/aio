@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this pass remains a narrow continuation rather than a new loop.
-- Phase: Autonomous Improvement / Test Env Restore Helper Consolidation / Handoff
-- Last updated: 2026-07-08 03:54 +09:00
+- Phase: Autonomous Improvement / Test Env Restore Helper Coverage / Handoff
+- Last updated: 2026-07-08 04:03 +09:00
 
 ## 1. Current Goal
 
@@ -17,43 +17,44 @@ Improve the AIO article generator toward the active 100/100 goal:
 - the app feels strong enough for daily article-production work
 - generated articles feel specific, source-aware, and editorial rather than commodity AI content
 
-This Codex pass consolidated test environment cleanup around live-readiness helpers. The shared `tests/helpers/env.ts` helper now exposes `withProcessEnv`, and the live env loader tests use it instead of carrying a local restore implementation. This keeps sandbox/live readiness tests safer as they mutate `process.env` around production-like and sandbox-like values.
+This Codex pass added direct regression coverage for the shared `withProcessEnv` test helper. The helper is now verified to restore `process.env` after both successful async callbacks and rejected async callbacks, reducing the risk that future live/sandbox readiness tests leak production-like or sandbox-like environment values into unrelated tests.
 
 The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority cleanup are still open.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `6add9fc Share process env restore helper in tests`
-- Previous implementation commit: `a4f08a2 Recover unclosed managed draft sections`
-- Previous pushed handoff commit: `1523a34 Update handoff after unclosed draft section recovery`
-- Last known good local verification: `npm.cmd run quality` passed after `6add9fc`.
+- Latest implementation commit: `b08d371 Cover process env helper restoration`
+- Previous implementation commit: `6add9fc Share process env restore helper in tests`
+- Previous pushed handoff commit: `c3ef4f6 Update handoff after env restore helper consolidation`
+- Last known good local verification: `npm.cmd run quality` passed after `b08d371`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `1523a34`.
+- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `c3ef4f6`.
 - PR status after this implementation/handoff commit/push: re-check required after pushing the latest commits.
 - If this document is included in a later status-only handoff commit, re-check the latest PR head once more.
 
 ## 3. What Was Done
 
-- Read the required workflow files, current handoff, branch state, recent commits, PR status, README, package scripts, and live-readiness/env helper tests before editing.
-- Confirmed PR #1 was green before this pass at head `1523a34`.
-- Added `withProcessEnv` to `tests/helpers/env.ts` so tests can snapshot and restore `process.env` through a shared async-safe helper.
-- Replaced the local `restoreEnv` helper in `tests/unit/live-test-helpers.test.ts` with `withProcessEnv`.
-- Kept the change scoped to test infrastructure; no application runtime, UI, external API, or DB behavior changed.
+- Read the required workflow files, current handoff, branch state, recent commits, PR status, README, package scripts, and env helper usage before editing.
+- Confirmed PR #1 was green before this pass at head `c3ef4f6`.
+- Added `tests/unit/env-helper.test.ts`.
+- Verified `withProcessEnv` restores existing and newly added env vars after an async callback resolves.
+- Verified `withProcessEnv` restores existing and newly added env vars after an async callback rejects.
+- Kept the change scoped to test coverage; no application runtime, UI, external API, or DB behavior changed.
 - Ran focused checks and the full local quality gate successfully.
 - Cursor Bugbot was not run; CodeRabbit OSS remains the standard review path.
 
 ## 4. Files Changed
 
 - `tests/helpers/env.ts`
-- `tests/unit/live-test-helpers.test.ts`
+- `tests/unit/env-helper.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
-- Implementation commit `6add9fc` exists locally and passed focused checks plus the full local quality gate.
+- Implementation commit `b08d371` exists locally and passed focused checks plus the full local quality gate.
 - This handoff document records the state before the final handoff commit/push for this pass.
-- PR #1 was green at `1523a34` before this implementation pass.
+- PR #1 was green at `c3ef4f6` before this implementation pass.
 - After pushing the implementation and handoff commits, Claude Code should confirm CodeRabbit OSS and GitHub Actions are green on the latest PR head.
 
 ## 6. Known Issues
@@ -67,15 +68,15 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 ## 7. CodeRabbit Review
 
-- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `1523a34`.
+- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `c3ef4f6`.
 - Review status after implementation/handoff push: re-check required on the latest head.
 - Current pass:
-  - Consolidates duplicated process env restore logic in live-readiness tests.
-  - Keeps live/sandbox env mutation cleanup behind a shared helper.
+  - Adds direct unit coverage for the shared process env restore helper.
+  - Confirms env cleanup runs on both success and failure paths.
 - Critical findings:
   - No known open Critical findings at the time of this handoff.
 - Resolved / strengthened findings:
-  - Addressed the deferred env restore helper expansion opportunity for live-readiness test coverage.
+  - Strengthened the previously added env restore helper with direct success/failure-path coverage.
 - Deferred findings:
   - See `Known Issues`.
 - False positives / not applicable:
@@ -86,7 +87,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Status: Not run
 - Findings: None
 - Actions taken: None
-- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow test-helper consolidation with CodeRabbit OSS as the standard review path.
+- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow test-helper coverage addition with CodeRabbit OSS as the standard review path.
 
 ## 9. Verification Results
 
@@ -95,23 +96,23 @@ Commands run in this pass:
 ```bash
 npm.cmd run lint
 npm.cmd run typecheck
-npx.cmd vitest run tests/unit/live-test-helpers.test.ts tests/unit/live-readiness-script.test.ts tests/integration/wordpress.integration.test.ts tests/integration/generation-jobs.integration.test.ts
+npx.cmd vitest run tests/unit/env-helper.test.ts tests/unit/live-test-helpers.test.ts
 git diff --check
 npm.cmd run quality
-git commit -m "Share process env restore helper in tests"
+git commit -m "Cover process env helper restoration"
 ```
 
 Results:
 
 - `npm.cmd run lint`: passed.
 - `npm.cmd run typecheck`: passed.
-- `npx.cmd vitest run tests/unit/live-test-helpers.test.ts tests/unit/live-readiness-script.test.ts tests/integration/wordpress.integration.test.ts tests/integration/generation-jobs.integration.test.ts`: passed, 4 files / 20 tests.
+- `npx.cmd vitest run tests/unit/env-helper.test.ts tests/unit/live-test-helpers.test.ts`: passed, 2 files / 5 tests.
 - `git diff --check`: passed.
 - `npm.cmd run quality`: passed.
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
-  - `npm run test:integrity`: passed, 43 files.
-  - `npm run test`: passed, 39 files / 295 tests.
+  - `npm run test:integrity`: passed, 44 files.
+  - `npm run test`: passed, 40 files / 297 tests.
   - `npm run test:contract`: passed, 3 files / 12 tests.
   - `npm run test:coverage`: passed, statements 87.68%, branches 75.5%, functions 91.72%, lines 88.13%.
   - `npm run test:e2e`: passed, 48 PC Chromium tests.
@@ -136,13 +137,13 @@ Next Claude Code should:
 2. Confirm CodeRabbit OSS and GitHub Actions are green on the latest head.
 3. Review the test helper consolidation path:
    - `tests/helpers/env.ts`
-   - `tests/unit/live-test-helpers.test.ts`
+   - `tests/unit/env-helper.test.ts`
 4. If checks stay green and no major review comments appear, continue with another small high-value deferred item or a live/sandbox article-quality proof step.
 5. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `withProcessEnv` behavior for async callbacks that mutate `process.env`.
+- `withProcessEnv` restoration behavior for both resolved and rejected async callbacks.
 - Whether other tests with local env restore helpers should later adopt `withProcessEnv`.
 - Whether live-readiness script and live-test helper dotenv precedence should later be extracted into a single runtime helper, or whether duplication is acceptable to keep scripts dependency-light.
 
