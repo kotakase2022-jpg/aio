@@ -5,9 +5,9 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The previous handoff kept `Loop: 3 continuation`, the active 100/100 objective is still not fully proven by live sandbox tests or human article-quality review, and this pass continued with one narrow follow-up to normalize optional article-generation guidance inputs.
-- Phase: Autonomous Improvement / Optional Guidance Input Normalization / Handoff
-- Last updated: 2026-07-08 03:14 +09:00
+- Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this pass remains a narrow continuation rather than a new loop.
+- Phase: Autonomous Improvement / Optional Text Helper Consolidation / Handoff
+- Last updated: 2026-07-08 03:23 +09:00
 
 ## 1. Current Goal
 
@@ -17,66 +17,72 @@ Improve the AIO article generator toward the active 100/100 goal:
 - the app feels strong enough for daily article-production work
 - generated articles feel specific, source-aware, and editorial rather than commodity AI content
 
-This Codex pass extended the first-party input hygiene work to other optional article-generation guidance. `closingText` and `regenerationInstruction` are now trimmed before truncation in the article-generation payload, and whitespace-only values are treated as missing. This prevents blank CTA text or blank regeneration directions from being interpreted as meaningful user guidance by the model or downstream quality checks.
+This Codex pass consolidated the optional-text compaction helper used for first-party information, closing text, regeneration instructions, and theme-candidate primary information. The goal is to keep trim / blank / truncation semantics identical across article generation and theme candidate generation.
 
-The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority CodeRabbit deferred cleanup are still open.
+The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority cleanup are still open.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `40999fc Normalize optional article guidance inputs`
-- Previous implementation commit: `47ca036 Normalize primary info for article generation`
-- Previous pushed handoff commit: `5528ef5 Update handoff after article primary info normalization`
-- Last known good local verification: `npm.cmd run quality` passed after `40999fc`.
+- Latest implementation commit: `031b997 Share optional text compaction helper`
+- Previous implementation commit: `40999fc Normalize optional article guidance inputs`
+- Previous pushed handoff commit: `7b516a0 Update handoff after optional guidance normalization`
+- Last known good local verification: `npm.cmd run quality` passed after `031b997`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `5528ef5`.
-- PR status after this handoff commit/push: re-check required after pushing the handoff commit.
+- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `7b516a0`.
+- PR status after this handoff commit/push: re-check required after pushing the implementation and handoff commits.
 
 ## 3. What Was Done
 
-- Read required workflow files, current handoff, branch status, recent commits, PR status, and relevant article-generation code/tests before editing.
+- Read the required workflow files, current handoff, branch state, recent commits, PR status, and local Next.js Route Handler documentation before changing route-adjacent code.
 - Confirmed PR #1 was green before this pass.
-- Updated `compactForm` in `src/lib/server/article-generation.ts` so `closingText` and `regenerationInstruction` use the same trim/empty semantics as `primaryInfo`.
-- Ensured whitespace-only `closingText` and `regenerationInstruction` become empty strings before article generation.
-- Strengthened article-generation unit tests:
-  - long closing text and regeneration instruction with surrounding whitespace are trimmed before model input
-  - whitespace-only optional guidance values are treated as missing
+- Moved `compactOptionalText` into `src/lib/utils.ts`.
+- Updated `/api/theme-candidates` and article generation to use the shared helper.
+- Removed duplicate local helper implementations.
+- Added unit coverage for `compactOptionalText`:
+  - `undefined` returns an empty string
+  - whitespace-only values return an empty string
+  - surrounding whitespace is trimmed
+  - long values are truncated with the existing marker
 - Ran focused checks and the full local quality gate successfully.
 - Cursor Bugbot was not run; CodeRabbit OSS remains the standard review path.
 
 ## 4. Files Changed
 
+- `src/lib/utils.ts`
+- `src/app/api/theme-candidates/route.ts`
 - `src/lib/server/article-generation.ts`
-- `tests/unit/article-generation.test.ts`
+- `tests/unit/utils.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
-- Implementation commit `40999fc` exists locally and passed the full local quality gate.
+- Implementation commit `031b997` exists locally and passed focused checks plus the full local quality gate.
 - This handoff document records the state before the final handoff commit/push.
-- PR #1 was green at `5528ef5` before this implementation pass.
+- PR #1 was green at `7b516a0` before this implementation pass.
 - After pushing the implementation and handoff commits, Claude Code should confirm CodeRabbit OSS and GitHub Actions are green on the latest PR head.
 
 ## 6. Known Issues
 
-- Remaining low-priority CodeRabbit deferred / cleanup items:
-  - Some duplication/commonization opportunities remain.
-  - Broader nested/irregular HTML section-removal regression coverage can still be expanded.
-  - markdownlint/document formatting items remain.
-  - Some env restore helper expansion opportunities remain.
+- Remaining low-priority deferred / cleanup items:
+  - broader nested/irregular HTML section-removal regression coverage can still be expanded
+  - markdownlint/document formatting items remain
+  - some env restore helper expansion opportunities remain
 - `test:live:*` was not run because sandbox credentials are required.
 - Human review of real generated article quality is still needed.
 - The active 100/100 goal is not complete.
 
 ## 7. CodeRabbit Review
 
-- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `5528ef5`.
+- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `7b516a0`.
 - Current pass:
-  - Normalizes optional closing/regeneration guidance before article-generation AI payload creation.
+  - Consolidates duplicated optional-text compaction into `src/lib/utils.ts`.
+  - Keeps article-generation and theme-candidate input hygiene semantics aligned.
 - Critical findings:
   - No known open Critical findings at the time of this handoff.
 - Resolved / strengthened findings:
-  - Added unit coverage for trimmed and whitespace-only `closingText` / `regenerationInstruction`.
+  - Addressed the previous handoff's "decide whether local helper should be shared" follow-up by sharing the helper.
+  - Added direct unit coverage for the shared helper.
 - Deferred findings:
   - See `Known Issues`.
 - False positives / not applicable:
@@ -87,7 +93,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Status: Not run
 - Findings: None
 - Actions taken: None
-- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow input-normalization and test-strengthening change, with CodeRabbit OSS as the standard review path.
+- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow helper consolidation with CodeRabbit OSS as the standard review path.
 
 ## 9. Verification Results
 
@@ -96,25 +102,25 @@ Commands run in this pass:
 ```bash
 npm.cmd run lint
 npm.cmd run typecheck
-npx.cmd vitest run tests/unit/article-generation.test.ts
+npx.cmd vitest run tests/unit/utils.test.ts tests/unit/article-generation.test.ts tests/integration/ai-routes.integration.test.ts
 git diff --check
 npm.cmd run quality
-git commit -m "Normalize optional article guidance inputs"
+git commit -m "Share optional text compaction helper"
 ```
 
 Results:
 
 - `npm.cmd run lint`: passed.
 - `npm.cmd run typecheck`: passed.
-- `npx.cmd vitest run tests/unit/article-generation.test.ts`: passed, 1 file / 20 tests.
+- `npx.cmd vitest run tests/unit/utils.test.ts tests/unit/article-generation.test.ts tests/integration/ai-routes.integration.test.ts`: passed, 3 files / 28 tests.
 - `git diff --check`: passed.
 - `npm.cmd run quality`: passed.
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
   - `npm run test:integrity`: passed, 43 files.
-  - `npm run test`: passed, 39 files / 288 tests.
+  - `npm run test`: passed, 39 files / 289 tests.
   - `npm run test:contract`: passed, 3 files / 12 tests.
-  - `npm run test:coverage`: passed, statements 87.51%, branches 75.36%, functions 91.66%, lines 87.96%.
+  - `npm run test:coverage`: passed, statements 87.5%, branches 75.35%, functions 91.65%, lines 87.95%.
   - `npm run test:e2e`: passed, 48 PC Chromium tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
 - Commit pre-commit hook: passed, `npm run lint` and `npm run test:integrity`.
@@ -135,26 +141,26 @@ Next Claude Code should:
 
 1. Confirm the latest PR #1 head after this handoff is pushed.
 2. Confirm CodeRabbit OSS and GitHub Actions are green on the latest head.
-3. Review the optional guidance normalization path:
+3. Review the shared helper behavior and call sites:
+   - `src/lib/utils.ts`
+   - `src/app/api/theme-candidates/route.ts`
    - `src/lib/server/article-generation.ts`
-   - `tests/unit/article-generation.test.ts`
-4. Decide whether the local `compactOptionalText` helper should later be shared with `/api/theme-candidates`, or whether duplication is acceptable to keep the diff small.
-5. If checks stay green and no major review comments appear, continue with another small high-value deferred item or a live/sandbox article-quality proof step.
-6. Run `npm.cmd run quality` after any code changes and record the result here.
+   - `tests/unit/utils.test.ts`
+4. If checks stay green and no major review comments appear, continue with another small high-value deferred item or a live/sandbox article-quality proof step.
+5. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `compactForm` behavior for `primaryInfo`, `closingText`, and `regenerationInstruction`.
-- Interaction between trimmed optional text and downstream `evaluateArticleQuality`.
-- Unit test coverage for:
-  - real optional guidance with surrounding whitespace
-  - whitespace-only optional guidance
+- `compactOptionalText` behavior for `undefined`, blank, trimmed, and over-limit values.
+- Article-generation `compactForm` use of the shared helper for `primaryInfo`, `closingText`, and `regenerationInstruction`.
+- Theme-candidate route use of the shared helper for `primaryInfo`.
+- Whether exporting this helper from `utils.ts` creates any unwanted client/server boundary assumptions. It is currently pure string logic with no server-only dependency.
 
 ## 12. Risk Notes
 
 - This change is intentionally narrow and does not alter DB persistence, OpenAI model wrappers, image generation, WordPress calls, auth, or screen layout.
-- It affects AI input hygiene and quality evaluation context. Real article-quality benefit still requires human review with real OpenAI output.
-- Theme-candidate `primaryInfo` and article-generation optional guidance now share the same trim/empty semantics, but use separate local helper functions.
+- It affects AI input hygiene and quality evaluation context only through shared trim/blank/truncate semantics.
+- Real article-quality benefit still requires human review with real OpenAI output.
 - Live external-service proof is still missing.
 
 ## 13. Do Not Touch
