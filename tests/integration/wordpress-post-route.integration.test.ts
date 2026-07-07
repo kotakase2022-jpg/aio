@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { ApiError } from "@/lib/server/http";
 import { createSampleDraft } from "../fixtures/article";
 
 vi.mock("@/lib/server/wordpress", () => ({
@@ -130,6 +131,57 @@ describe("WordPress post route", () => {
     expect(response.status).toBe(409);
     expect(getDraft).toHaveBeenCalledWith(clientDraft.id);
     expect(publishDraftToWordpress).not.toHaveBeenCalled();
+  });
+
+  test("returns WordPress publishing failures with status and recovery detail", async () => {
+    const { publishDraftToWordpress } = await import("@/lib/server/wordpress");
+    const { getDraft } = await import("@/lib/server/drafts");
+    const draft = createSampleDraft({ status: "approved" });
+    vi.mocked(getDraft).mockResolvedValueOnce(draft);
+    vi.mocked(publishDraftToWordpress).mockRejectedValueOnce(
+      new ApiError(
+        "WordPressメディアの代替テキスト更新に失敗しました。",
+        403,
+        "Alt text cannot be updated.",
+      ),
+    );
+    const { POST } = await import("@/app/api/wordpress/post/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/wordpress/post", {
+        method: "POST",
+        headers: { origin: "https://app.example.com" },
+        body: JSON.stringify({
+          draft,
+          connectionId: "wp-connection-1",
+          connection: {
+            id: "wp-connection-1",
+            siteUrl: "https://wordpress.example.com",
+            username: "editor",
+            connectionToken: "encrypted-token",
+            createdAt: "2026-07-02T00:00:00.000Z",
+            updatedAt: "2026-07-02T00:00:00.000Z",
+          },
+          status: "draft",
+        }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(json).toMatchObject({
+      ok: false,
+      error: "WordPressメディアの代替テキスト更新に失敗しました。",
+      detail: "Alt text cannot be updated.",
+    });
+    expect(publishDraftToWordpress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        draft: expect.objectContaining({ id: draft.id }),
+        connectionId: "wp-connection-1",
+        status: "draft",
+        origin: "https://app.example.com",
+      }),
+    );
   });
 
   test("rejects a WordPress post payload when draft id is not a string", async () => {
