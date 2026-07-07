@@ -7,7 +7,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this remains a narrow continuation rather than a new loop.
 - Phase: Autonomous Improvement / Shared English Token Matching / Handoff
-- Last updated: 2026-07-08 08:24 +09:00
+- Last updated: 2026-07-08 08:30 +09:00
 
 ## 1. Current Goal
 
@@ -30,10 +30,12 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Branch: `codex/persistent-quality-gate-operations`
 - Latest implementation/test commit: `4ac77dd Share English token matching`
 - Previous pushed status head: `333aedd Record article token signal PR checks`
+- Latest handoff/docs commit checked on PR: `fa01d01 Update handoff after shared token helper`
 - Last known good local verification: `npm.cmd run quality` passed after `4ac77dd`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - PR status before this pass at head `333aedd`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS in 3m47s.
-- PR status after this pass: not yet checked at the time this handoff/docs update was prepared. Re-check after pushing.
+- PR status after test/handoff push at head `fa01d01`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS in 3m25s.
+- Later status-only handoff commits should be re-checked on the current PR head; they do not change runtime code.
 - CodeRabbit OSS review status: CodeRabbit is installed and responding on PR #1. Old duplicate comments about image recovery / parallel image regeneration still appear in PR review history, but the current status check was SUCCESS before this pass; current code and E2E coverage had already addressed those areas in previous Loop 3 work.
 
 ## 3. What Was Done
@@ -64,8 +66,9 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 5. Current Status
 
 - Implementation/test commit `4ac77dd` exists locally and passed the focused token/title/article quality tests plus the full local quality gate.
-- This handoff/docs update records the implementation commit and local quality gate.
-- Push the current branch, then re-check hosted CodeRabbit and GitHub Actions on PR #1.
+- Handoff/docs commit `fa01d01` records the implementation commit and local quality gate.
+- Test and handoff/docs commits were pushed through `fa01d01`.
+- Hosted CodeRabbit and GitHub Actions are green on `fa01d01`.
 - If this file is included in a later status-only commit, Claude Code should re-check the latest PR head. Status-only handoff commits do not change runtime code.
 
 ## 6. Known Issues
@@ -80,6 +83,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `333aedd`.
+- Review status after this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `fa01d01`.
 - Current pass:
   - Centralizes English token-boundary behavior shared by title-quality and article-quality checks.
   - Adds focused direct unit coverage.
@@ -133,13 +137,15 @@ Results:
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials and explicit non-production confirmation are required.
-- Hosted `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15` after this new push: pending until the branch is pushed.
+- Hosted `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15` after push at head `fa01d01`: passed.
+  - CodeRabbit: pass.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m25s.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Re-check PR #1 after this branch is pushed:
+1. If this file is included in a later status-only handoff commit, re-check PR #1:
    - `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`
 2. Review the shared English token helper and its two call sites:
    - `src/lib/english-token.ts`

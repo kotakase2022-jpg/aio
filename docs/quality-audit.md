@@ -220,7 +220,17 @@ The latest pushed status-only head before this pass was also checked:
 
 The current local branch also includes implementation commit `4ac77dd`, which centralizes English
 token matching for title-quality and article-quality checks in `src/lib/english-token.ts`. Hosted
-CodeRabbit and Actions must be re-checked after the handoff/docs update is pushed.
+CodeRabbit and Actions have been checked after the handoff/docs update was pushed.
+
+The latest pushed head containing that shared English-token helper pass and handoff update was
+also checked:
+
+- Commit: `fa01d01`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m25s
+
+Later status-only handoff commits should be re-checked on the current PR head; they do not change
+runtime code.
 
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
@@ -309,8 +319,8 @@ human review of real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit after the `4ac77dd` shared English-token helper pass and
-   its handoff/docs update are pushed.
+1. Re-check hosted Actions and CodeRabbit if a new status-only handoff commit is pushed after
+   `fa01d01`.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
