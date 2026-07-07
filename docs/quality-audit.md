@@ -32,17 +32,17 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 08:24 +09:00 after centralizing English token
-matching for both title-quality and article-quality checks. The shared helper preserves the same
-boundary behavior across both anti-commodity layers: hyphen, slash, and colon can work as natural
-editorial separators, while underscore-joined technical tokens and longer words do not accidentally
-satisfy input signals:
+The latest local full gate passed on 2026-07-08 08:39 +09:00 after extending shared English token
+matching to FAQ input-reflection checks. The shared helper now preserves the same boundary behavior
+across title-quality, article-quality, and FAQ-quality layers: hyphen, slash, and colon can work as
+natural editorial separators, while underscore-joined technical tokens and longer words do not
+accidentally satisfy input signals:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 47 files
-  - `npm run test`: passed, 43 files / 325 tests
+  - `npm run test`: passed, 43 files / 327 tests
   - `npm run test:contract`: passed, 3 files / 13 tests
   - `npm run test:coverage`: passed, statements 88.2%, branches 76.19%, functions 92.13%,
     lines 88.64%
@@ -232,6 +232,11 @@ also checked:
 Later status-only handoff commits should be re-checked on the current PR head; they do not change
 runtime code.
 
+The current local branch also includes implementation commit `5cade63`, which applies the shared
+English token-boundary helper to FAQ input-reflection quality checks. FAQ coverage now verifies that
+`form-based` counts as a natural reflection of the input term `form`, while `platform_form` does not.
+Hosted CodeRabbit and Actions must be re-checked after the handoff/docs update is pushed.
+
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -254,6 +259,11 @@ hyphenated, slash-separated, and colon-separated title phrases still count as na
 matches through the same shared helper used by article-quality checks. Underscore-joined tokens
 intentionally remain treated as one token, so `form` inside `Platform_form` does not satisfy the
 input-signal check.
+
+FAQ-quality coverage now uses the same shared English token helper for input-reflection checks.
+Hyphenated FAQ answers such as `form-based` can satisfy the provided input signal `form`, while
+underscore-joined technical labels such as `platform_form` do not count as natural FAQ input
+reflection.
 
 Publishing-readiness coverage now also checks meta descriptions, image alt quality, source URL
 deduplication, author block preservation, edited image alt text in publishable HTML / WordPress post
@@ -319,8 +329,8 @@ human review of real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit if a new status-only handoff commit is pushed after
-   `fa01d01`.
+1. Re-check hosted Actions and CodeRabbit after implementation commit `5cade63` and the handoff/docs
+   update are pushed.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
