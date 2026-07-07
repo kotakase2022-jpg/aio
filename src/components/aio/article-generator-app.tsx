@@ -41,6 +41,10 @@ import {
 import { formatJaDateTime } from "@/lib/date";
 import { buildDraftArticleHtml } from "@/lib/draft-html";
 import { evaluateFaqQuality } from "@/lib/faq-quality";
+import {
+  formatGenerationRequirementMessage,
+  getMissingGenerationRequirements,
+} from "@/lib/generation-requirements";
 import { truncatePromptLine } from "@/lib/prompt-text";
 import { qualityRegenerationAction } from "@/lib/quality-regeneration-action";
 import { evaluateTitleQuality } from "@/lib/title-quality";
@@ -70,24 +74,6 @@ import type {
 const activeGenerationJobStorageKey = "aio-active-generation-job-id";
 const lastClosingTextStorageKey = "aio-last-closing-text";
 const lastAuthorStorageKey = "aio-last-author";
-
-function hasUsableReferenceInput(
-  references: KeyValueInput[],
-  referenceFiles: AttachedFileInput[],
-) {
-  return (
-    references.some((item) => item.url?.trim() || item.text?.trim()) ||
-    referenceFiles.some((file) => file.ok && file.text?.trim())
-  );
-}
-
-function hasUsableVisualTone(visualTone: VisualToneInput) {
-  return Boolean(
-    (visualTone.mode === "preset" && visualTone.preset) ||
-      (visualTone.mode === "custom" && visualTone.custom?.trim()) ||
-      (visualTone.mode === "upload" && visualTone.uploadedImageUrl),
-  );
-}
 
 function getGeneratedImageSlots(images: ArticleImage[]) {
   return new Set(
@@ -236,24 +222,15 @@ export function ArticleGeneratorApp() {
     ],
   );
 
-  const canGenerate = useMemo(() => {
-    return (
-      hasUsableReferenceInput(references, referenceFiles) &&
-      hasUsableVisualTone(visualTone)
-    );
-  }, [referenceFiles, references, visualTone]);
-  const generateRequirementMessage = useMemo(() => {
-    if (canGenerate) return "";
-
-    const missing: string[] = [];
-    const hasReference = hasUsableReferenceInput(references, referenceFiles);
-    const hasTone = hasUsableVisualTone(visualTone);
-
-    if (!hasReference) missing.push("参照情報");
-    if (!hasTone) missing.push("画像トーン");
-
-    return `${missing.join("と")}を入力すると記事作成を開始できます。`;
-  }, [canGenerate, referenceFiles, references, visualTone]);
+  const missingGenerationRequirements = useMemo(
+    () => getMissingGenerationRequirements({ references, referenceFiles, visualTone }),
+    [referenceFiles, references, visualTone],
+  );
+  const canGenerate = missingGenerationRequirements.length === 0;
+  const generateRequirementMessage = useMemo(
+    () => formatGenerationRequirementMessage(missingGenerationRequirements),
+    [missingGenerationRequirements],
+  );
 
   const isGenerating = Boolean(activeGenerationJobId);
 
