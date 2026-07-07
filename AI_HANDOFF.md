@@ -29,7 +29,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Last known good local verification: `npm.cmd run quality` passed after `d80a080`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS at head `e1dc47b8f23403345bd1c4df4ccf63cfdf519280`.
-- PR status after this implementation pass: not yet re-checked on GitHub until this handoff/docs update is pushed.
+- PR status after implementation/handoff push at head `cbbf6335589da2132586819a335ec31d9fccf0df`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS after rerun.
+- Later status-only handoff commits should be re-checked on the current PR head; they do not change runtime code.
 
 ## 3. What Was Done
 
@@ -55,8 +56,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 - Implementation commit `d80a080` exists locally and passed focused checks plus the full local quality gate.
 - This handoff document records the implementation commit and local quality gate.
-- Branch is expected to be ahead of origin until the handoff/docs commit is created and pushed.
-- PR #1 was green before this pass at `e1dc47b`; Claude Code should re-check the latest PR head after push.
+- Implementation and handoff/docs commits were pushed through `cbbf633`, which was green on CodeRabbit and GitHub Actions after a CI rerun.
+- If this file is included in a later status-only commit, Claude Code should re-check the latest PR head. Status-only handoff commits do not change runtime code.
 
 ## 6. Known Issues
 
@@ -70,7 +71,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `e1dc47b`.
-- Review status after this pass: pending until the latest commits are pushed and checked.
+- Review status after implementation/handoff push at head `cbbf633`: CodeRabbit SUCCESS and GitHub Actions SUCCESS after rerun.
 - Current pass:
   - Writes featured image alt text into WordPress media library metadata.
   - Adds regression tests for the media metadata update and failure path.
@@ -127,7 +128,9 @@ Results:
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials are required.
-- Post-push `gh pr checks --watch` is still pending until this handoff/docs commit is created and pushed.
+- First post-push `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 10`: CodeRabbit passed; GitHub Actions failed during Playwright Chromium install because the GitHub runner could not fetch signed Microsoft apt repository metadata (`NOSPLIT` / repository no longer signed).
+- `gh run rerun 28897941867 --repo kotakase2022-jpg/aio`: rerun succeeded.
+- `gh run watch 28897941867 --repo kotakase2022-jpg/aio --interval 10`: passed, `Typecheck, lint, tests, E2E, build` completed in 3m04s with 48 E2E tests passed.
 
 ## 10. Next Recommended Action
 
