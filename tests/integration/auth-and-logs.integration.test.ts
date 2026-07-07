@@ -1,10 +1,17 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 import type { GenerationLogSummary } from "@/types/aio";
 
 vi.mock("@/lib/server/generation-jobs", () => ({
   listGenerationLogs: vi.fn(),
 }));
+
+const processEnvSnapshot = snapshotProcessEnv();
+
+afterEach(() => {
+  restoreProcessEnv(processEnvSnapshot);
+});
 
 describe("demo authentication and log routes", () => {
   test("demo auth rejects wrong code and sets secure cookie for the correct code", async () => {

@@ -6,6 +6,7 @@ import {
   sampleArticleResult,
   sampleFormPayload,
 } from "../fixtures/article";
+import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 import type { ArticleDraft, FetchResult } from "@/types/aio";
 
 vi.mock("@/lib/server/content", () => ({
@@ -25,6 +26,7 @@ vi.mock("@/lib/server/drafts", () => ({
 }));
 
 let tempDir = "";
+const processEnvSnapshot = snapshotProcessEnv();
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "aio-runner-tests-"));
@@ -39,7 +41,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true });
-  delete process.env.AIO_LOCAL_DATA_DIR;
+  restoreProcessEnv(processEnvSnapshot);
 });
 
 describe("article generation job runner", () => {
