@@ -222,7 +222,7 @@ function removeExistingAuthorProfileBlock(
     "i",
   );
   const fromHeadingToNextSection = new RegExp(
-    `<h[2-3][^>]*>\\s*${escapedHeading}\\s*<\\/h[2-3]>[\\s\\S]*?(?=<h[12]\\b|<section\\b|$)`,
+    `<h[2-3][^>]*>\\s*${escapedHeading}\\s*<\\/h[2-3]>[\\s\\S]*?(?=<h[1-3]\\b|<section\\b|$)`,
     "i",
   );
   const withoutHeadingSection = html.replace(sectionWithHeading, "").replace(fromHeadingToNextSection, "");

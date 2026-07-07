@@ -200,6 +200,30 @@ describe("draft HTML rendering", () => {
     expect(html.match(/この記事の執筆者/g)).toHaveLength(2);
   });
 
+  test("preserves h3 article sections after replacing an AI-written author section", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml:
+          "<h2>この記事の執筆者</h2><p>Test Author</p><p>Content Strategist</p><p>[uploaded author image]</p><h3>Next detail</h3><p>Body continues under an h3 heading.</p>",
+        author: {
+          name: "Test Author",
+          title: "Content Strategist",
+          bio: "Writes practical B2B content operations guides.",
+          imageUrl: "/uploads/authors/test-author.png",
+        },
+      }),
+      {
+        imageUrlResolver: (url) => `https://app.example.com${url}`,
+      },
+    );
+
+    expect(html).toContain('class="aio-author-block"');
+    expect(html).toContain('src="https://app.example.com/uploads/authors/test-author.png"');
+    expect(html).not.toContain("[uploaded author image]");
+    expect(html).toContain("<h3>Next detail</h3>");
+    expect(html).toContain("Body continues under an h3 heading.");
+  });
+
   test("replaces a manual author profile section without removing nearby article sections", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
