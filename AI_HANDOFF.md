@@ -5,9 +5,9 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The previous handoff kept `Loop: 3 continuation`, the active 100/100 objective remains unproven by live sandbox tests and human article-quality review, and this pass continued with one focused regression fix for publishable article HTML.
-- Phase: Autonomous Improvement / Draft HTML Section Preservation / Handoff
-- Last updated: 2026-07-08 02:38 +09:00
+- Loop number inferred from: The previous handoff kept `Loop: 3 continuation`, the active 100/100 objective is still not fully proven by live sandbox tests or human article-quality review, and this pass continued with one focused improvement to make theme-candidate generation use the new first-party information input.
+- Phase: Autonomous Improvement / Primary Info Theme Candidate Input / Handoff
+- Last updated: 2026-07-08 02:48 +09:00
 
 ## 1. Current Goal
 
@@ -17,66 +17,70 @@ Improve the AIO article generator toward the active 100/100 goal:
 - the app feels strong enough for daily article-production work
 - generated articles feel specific, source-aware, and editorial rather than commodity AI content
 
-This Codex pass fixed another author-block replacement edge case in publishable article HTML. When an AI-written author section had to be replaced to preserve an uploaded portrait, the removal boundary stopped at the next `h1`/`h2` or `section`. If the next real article section began with an `h3`, that section could be removed together with the old author block. The boundary now also stops at `h3`, and a regression test proves the following `h3` article section and paragraph are preserved.
+This Codex pass addressed a concrete article-quality gap: the UI already had an `AIOのための一次情報` textarea and article generation used that value, but the `AIで候補出力` flow under `テーマ・キーワード` did not send that first-party information to `/api/theme-candidates`. Theme and keyword suggestions could therefore remain more generic than the later article generation.
 
-The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority CodeRabbit Deferred cleanup are still open.
+The theme-candidate API now accepts and compacts `primaryInfo`, the client sends it from the form, and tests prove both the server prompt/input and the PC-browser retry/apply flow include it. This should help the user generate more original theme angles before drafting.
+
+The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabase/WordPress, human review of real generated article quality, and remaining low-priority CodeRabbit deferred cleanup are still open.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `f1a8e0d Preserve h3 sections after author block replacement`
-- Previous implementation commit: `0c51575 Move quality edit guidance into lib helper`
-- Previous pushed handoff commit: `ea7f34a Refresh final quality guidance handoff status`
-- Last known good local verification: `npm.cmd run quality` passed after `f1a8e0d`.
+- Latest implementation commit: `9670708 Use primary info for theme candidates`
+- Previous implementation commit: `f1a8e0d Preserve h3 sections after author block replacement`
+- Previous pushed handoff commit: `ea2bfe3 Refresh final h3 author section handoff status`
+- Last known good local verification: `npm.cmd run quality` passed after `9670708`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `ea7f34a`.
-- PR status after implementation/handoff push: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `96992c2`.
-- Note: this final status refresh is documentation-only. If pushed as a newer commit after `96992c2`, re-check PR #1 once more.
+- PR status before this implementation pass: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN at head `ea2bfe3`.
+- PR status after this handoff commit/push: re-check required after pushing the handoff commit.
 
 ## 3. What Was Done
 
-- Read required workflow files, current handoff, branch status, recent commits, and PR status before editing.
+- Read required workflow files, current handoff, branch status, recent commits, PR status, and the relevant local Next.js Route Handler docs before editing.
 - Confirmed PR #1 was green before this pass.
-- Inspected the draft HTML author-block replacement helper and existing regression tests.
-- Updated `src/lib/draft-html.ts` so the old AI-written author section removal boundary stops before `h3` article sections as well as `h1`/`h2` and `<section>`.
-- Updated `tests/unit/draft-html.test.ts` with a regression test proving an `h3` article section after the old author block is preserved when the managed author block is inserted.
-- Ran focused and full verification successfully.
+- Updated `/api/theme-candidates` to accept optional `primaryInfo`.
+- Added OpenAI instructions that treat provided first-party information as a high-priority source for original angles, field observations, caveats, reader pain points, and differentiation ideas while avoiding verbatim copying.
+- Added `primaryInfo` to the compacted AI payload with truncation.
+- Updated the article generator UI request so `generateThemeCandidates()` sends the current `primaryInfo` textarea value.
+- Strengthened integration coverage to verify `primaryInfo` is compacted/truncated and the prompt mentions first-party/original-angle handling.
+- Strengthened PC Chromium E2E coverage to verify the theme-candidate retry/apply flow sends the textarea value to `/api/theme-candidates`.
 - Cursor Bugbot was not run; CodeRabbit OSS remains the standard review path.
 
 ## 4. Files Changed
 
-- `src/lib/draft-html.ts`
-- `tests/unit/draft-html.test.ts`
+- `src/app/api/theme-candidates/route.ts`
+- `src/components/aio/article-generator-app.tsx`
+- `tests/integration/ai-routes.integration.test.ts`
+- `tests/e2e/aio-workflow.spec.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
-- Implementation commit `f1a8e0d` is pushed.
-- Handoff commit `96992c2` is pushed.
-- Local full quality gate is green after the implementation commit.
-- PR #1 is green at head `96992c2`; re-check if this final documentation-only status refresh is committed/pushed as a newer head.
+- Implementation commit `9670708` exists locally and passed the full local quality gate.
+- This handoff document records the state before the final handoff commit/push.
+- PR #1 was green at `ea2bfe3` before this implementation pass.
+- After pushing the implementation and handoff commits, Claude Code should confirm CodeRabbit OSS and GitHub Actions are green on the latest PR head.
 
 ## 6. Known Issues
 
-- Remaining low-priority CodeRabbit Deferred / cleanup items:
+- Remaining low-priority CodeRabbit deferred / cleanup items:
   - Some duplication/commonization opportunities remain.
   - Broader nested/irregular HTML section-removal regression coverage can still be expanded.
   - markdownlint/document formatting items remain.
   - Some env restore helper expansion opportunities remain.
-- FAQ generic-question detection may still be slightly strict for definition-style FAQs. This is currently aligned with the editorial policy that definitions belong in the body and FAQ should focus on practical decisions, but real generated data should be monitored.
 - `test:live:*` was not run because sandbox credentials are required.
 - Human review of real generated article quality is still needed.
 - The active 100/100 goal is not complete.
 
 ## 7. CodeRabbit Review
 
-- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `ea7f34a`.
+- Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `ea2bfe3`.
 - Current pass:
-  - Fixes an author-block replacement boundary so a following `h3` article section is not removed with the old author block.
+  - Makes theme and keyword AI candidate generation use the first-party information input that was already part of article generation.
 - Critical findings:
   - No known open Critical findings at the time of this handoff.
 - Resolved / strengthened findings:
-  - Draft HTML tests now cover preservation of `h3` article sections after AI-written author block replacement.
+  - Added integration and E2E coverage for the new `primaryInfo` theme-candidate path.
 - Deferred findings:
   - See `Known Issues`.
 - False positives / not applicable:
@@ -87,71 +91,81 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - Status: Not run
 - Findings: None
 - Actions taken: None
-- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow server-side HTML rendering regression fix with full local quality passing and CodeRabbit OSS as the standard review path.
+- Reason: Cursor Bugbot is optional/backup only. This pass is a narrow prompt/input propagation and regression-test improvement, with CodeRabbit OSS as the standard review path.
 
 ## 9. Verification Results
 
 Commands run in this pass:
 
 ```bash
-npx.cmd vitest run tests/unit/draft-html.test.ts
-git diff --check
 npm.cmd run lint
 npm.cmd run typecheck
+npx.cmd vitest run tests/integration/ai-routes.integration.test.ts
+git diff --check
+npx.cmd playwright test tests/e2e/aio-workflow.spec.ts --grep "theme candidate failure can be retried and then applied"
 npm.cmd run quality
-git commit -m "Preserve h3 sections after author block replacement"
-git commit -m "Update handoff after h3 author section fix"
-git push origin codex/persistent-quality-gate-operations
-gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
+git commit -m "Use primary info for theme candidates"
 ```
 
 Results:
 
-- `npx.cmd vitest run tests/unit/draft-html.test.ts`: passed, 1 file / 32 tests.
-- `git diff --check`: passed.
 - `npm.cmd run lint`: passed.
 - `npm.cmd run typecheck`: passed.
+- `npx.cmd vitest run tests/integration/ai-routes.integration.test.ts`: passed, 1 file / 2 tests.
+- `git diff --check`: passed.
+- `npx.cmd playwright test tests/e2e/aio-workflow.spec.ts --grep "theme candidate failure can be retried and then applied"`: passed, 1 Chromium PC test.
 - `npm.cmd run quality`: passed.
   - `npm run typecheck`: passed.
   - `npm run lint`: passed.
   - `npm run test:integrity`: passed, 43 files.
   - `npm run test`: passed, 39 files / 285 tests.
   - `npm run test:contract`: passed, 3 files / 12 tests.
-  - `npm run test:coverage`: passed, statements 87.49%, branches 75.17%, functions 91.63%, lines 87.94%.
+  - `npm run test:coverage`: passed, statements 87.49%, branches 75.14%, functions 91.63%, lines 87.94%.
   - `npm run test:e2e`: passed, 48 PC Chromium tests.
-- `npm run build`: passed, Next.js 16.2.9 production build.
+  - `npm run build`: passed, Next.js 16.2.9 production build.
 - Commit pre-commit hook: passed, `npm run lint` and `npm run test:integrity`.
-- `git push origin codex/persistent-quality-gate-operations`: passed. Pre-push ran `npm run lint`, `npm run typecheck`, `npm run test:integrity`, `npm run test`, and `npm run test:contract`; all passed.
-- PR #1 at head `96992c2`: CodeRabbit SUCCESS, GitHub Actions `Typecheck, lint, tests, E2E, build` SUCCESS, mergeState CLEAN.
+
+Not yet recorded in this handoff:
+
+- Final handoff commit hash.
+- Push result for this implementation/handoff pair.
+- Post-push CodeRabbit OSS and GitHub Actions result for the latest head.
 
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials are required.
-- Post-push CodeRabbit/GitHub Actions for this final documentation-only status refresh if it is pushed as a newer head.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Review `f1a8e0d Preserve h3 sections after author block replacement` and this handoff.
-2. Confirm PR #1 checks after the latest push: CodeRabbit OSS and GitHub Actions should become green.
-3. Review `src/lib/draft-html.ts` to confirm the author-section boundary change preserves following `h3` article sections without keeping stale author copy.
-4. If checks stay green and no major review comments appear, continue with another small high-value Deferred item or a live/sandbox article-quality proof step.
-5. Run `npm.cmd run quality` after any code changes and record the result here.
+1. Confirm the latest PR #1 head after this handoff is pushed.
+2. Confirm CodeRabbit OSS and GitHub Actions are green on the latest head.
+3. Review the narrow `primaryInfo` propagation path:
+   - `src/components/aio/article-generator-app.tsx`
+   - `src/app/api/theme-candidates/route.ts`
+   - `tests/integration/ai-routes.integration.test.ts`
+   - `tests/e2e/aio-workflow.spec.ts`
+4. Check whether the theme-candidate prompt language is strong enough to reduce commodity content without overfitting or copying the user's first-party text verbatim.
+5. If checks stay green and no major review comments appear, continue with another small high-value deferred item or a live/sandbox article-quality proof step.
+6. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `src/lib/draft-html.ts`
-  - `removeExistingAuthorProfileBlock`
-  - old author block removal boundary for `h2`/`h3` headings
-- `tests/unit/draft-html.test.ts`
-  - new `h3` preservation regression
-  - existing `h2`/section preservation regressions
+- `/api/theme-candidates` schema and compact payload behavior for `primaryInfo`.
+- The OpenAI instruction wording around first-party information:
+  - high-priority source
+  - original angles
+  - field observations
+  - no verbatim copying
+- E2E assertion that the PC browser form sends `primaryInfo` during the retry/apply flow.
+- Whether additional tests are needed for empty `primaryInfo` or very long Japanese input.
 
 ## 12. Risk Notes
 
-- This change is intentionally narrow and does not alter API routes, DB persistence, OpenAI wrappers, WordPress calls, auth, or UI layout.
-- The fix makes author section removal less destructive by stopping before `h3`. If a future AI-written author block uses an `h3` inside the old author area before the next article section, that stale fragment could be preserved; current generated/managed author blocks do not use that pattern, and the safer behavior is to avoid deleting article body sections.
+- This change is intentionally narrow and does not alter DB persistence, OpenAI model wrappers, image generation, WordPress calls, auth, or screen layout.
+- It affects AI input quality. The behavior is mocked in automated tests, so real article-quality benefit still requires human review with real OpenAI output.
+- The API truncates `primaryInfo` to 1200 characters for theme-candidate generation. This is intended to keep the request compact, but Claude Code may consider whether the limit is appropriate for longer first-party notes.
 - Live external-service proof is still missing.
 
 ## 13. Do Not Touch
@@ -165,5 +179,5 @@ Next Claude Code should:
 
 - Use `npm.cmd` / `npx.cmd` on Windows PowerShell.
 - CodeRabbit OSS is the standard PR reviewer. Cursor Bugbot is optional/backup only.
-- Keep Loop 3 continuation unless you decide the remaining Deferred items are sufficiently closed and the next cycle should become Loop 4.
+- Keep Loop 3 continuation unless you decide the remaining deferred items are sufficiently closed and the next cycle should become Loop 4.
 - Do not call `update_goal complete`; the 100/100 objective is not proven yet.
