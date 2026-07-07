@@ -120,7 +120,11 @@ export function appendAuthorBlockWhenNeeded(
 
   const text = normalizeText(stripHtmlText(withoutManagedAuthor));
   const headingAlreadyVisible = text.includes(normalizeText(authorSectionHeading));
-  const hasCompleteAuthorSection = hasExistingAuthorSection(text, normalizedAuthor);
+  const hasCompleteAuthorSection = hasExistingAuthorSection(
+    withoutManagedAuthor,
+    text,
+    normalizedAuthor,
+  );
 
   // Keep an existing complete author section as-is unless an uploaded portrait must be injected.
   if (hasCompleteAuthorSection && !normalizedAuthor.imageUrl) {
@@ -139,22 +143,22 @@ export function appendAuthorBlockWhenNeeded(
 }
 
 function hasExistingAuthorSection(
+  html: string,
   normalizedBodyText: string,
   author: Required<Pick<AuthorInput, "name" | "title" | "bio" | "imageUrl">>,
 ) {
   const headingAlreadyVisible = normalizedBodyText.includes(normalizeText(authorSectionHeading));
   const nameAlreadyVisible = author.name && normalizedBodyText.includes(normalizeText(author.name));
-  const titleAlreadyVisible =
-    author.title && normalizedBodyText.includes(normalizeText(author.title));
-  const bioAlreadyVisible = author.bio && normalizedBodyText.includes(normalizeText(author.bio));
 
   // A bare "この記事の執筆者" heading with no actual author identity in the body is an
   // orphan/placeholder, not a complete author section. Require the author name to appear
   // alongside the heading (or a title/bio) before suppressing the managed author block, so
   // uploaded author name/title/bio are not silently dropped when only the heading exists.
-  return Boolean(
-    nameAlreadyVisible && (headingAlreadyVisible || titleAlreadyVisible || bioAlreadyVisible),
-  );
+  if (nameAlreadyVisible && headingAlreadyVisible) {
+    return true;
+  }
+
+  return findAuthorProfileSection(html, author) !== "";
 }
 
 function buildFaqBlockHtml(items: Array<{ question: string; answer: string }>) {
@@ -226,20 +230,37 @@ function removeExistingAuthorProfileBlock(
     return withoutHeadingSection.trim();
   }
 
-  const escapedName = author.name ? escapeRegExp(author.name) : "";
-  if (!escapedName) {
+  if (!author.name) {
     return html;
   }
 
-  return html
-    .replace(
-      new RegExp(
-        `<section\\b[^>]*>[\\s\\S]*?${escapedName}[\\s\\S]*?<\\/section>`,
-        "i",
-      ),
-      "",
-    )
-    .trim();
+  const profileSection = findAuthorProfileSection(html, author);
+  if (!profileSection) {
+    return html;
+  }
+
+  return html.replace(profileSection, "").trim();
+}
+
+function findAuthorProfileSection(
+  html: string,
+  author: Required<Pick<AuthorInput, "name" | "title" | "bio" | "imageUrl">>,
+) {
+  if (!author.name) {
+    return "";
+  }
+
+  const sections = html.match(/<section\b[^>]*>[\s\S]*?<\/section>/gi) ?? [];
+  return (
+    sections.find((section) => {
+      const text = normalizeText(stripHtmlText(section));
+      const hasName = text.includes(normalizeText(author.name));
+      const hasTitle = author.title ? text.includes(normalizeText(author.title)) : false;
+      const hasBio = author.bio ? text.includes(normalizeText(author.bio)) : false;
+
+      return hasName && (hasTitle || hasBio);
+    }) ?? ""
+  );
 }
 
 function removeBareAuthorHeading(html: string) {

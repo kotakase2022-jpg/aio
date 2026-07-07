@@ -200,6 +200,62 @@ describe("draft HTML rendering", () => {
     expect(html.match(/この記事の執筆者/g)).toHaveLength(2);
   });
 
+  test("replaces a manual author profile section without removing nearby article sections", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<section><h2>Author profile</h2><p>Test Author</p>",
+          "<p>Content Strategist</p><p>Old profile copy.</p></section>",
+          "<section><h2>Next section</h2><p>Body continues.</p></section>",
+        ].join(""),
+        author: {
+          name: "Test Author",
+          title: "Content Strategist",
+          bio: "Writes practical B2B content operations guides.",
+          imageUrl: "/uploads/authors/test-author.png",
+        },
+      }),
+      {
+        imageUrlResolver: (url) => `https://app.example.com${url}`,
+      },
+    );
+
+    expect(html).toContain('class="aio-author-block"');
+    expect(html).toContain('src="https://app.example.com/uploads/authors/test-author.png"');
+    expect(html).not.toContain("Old profile copy.");
+    expect(html).toContain("<h2>Next section</h2>");
+    expect(html).toContain("Body continues.");
+  });
+
+  test("preserves article sections when the author name is only mentioned incidentally", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<section><h2>Interview evidence</h2>",
+          "<p>Test Author explained the approval pattern during a field interview, ",
+          "so this article evidence must stay.</p></section>",
+          "<section><h2>Team role</h2>",
+          "<p>A Content Strategist reviews the article operations workflow before publication.</p>",
+          "</section>",
+        ].join(""),
+        author: {
+          name: "Test Author",
+          title: "Content Strategist",
+          bio: "Writes practical B2B content operations guides.",
+          imageUrl: "/uploads/authors/test-author.png",
+        },
+      }),
+      {
+        imageUrlResolver: (url) => `https://app.example.com${url}`,
+      },
+    );
+
+    expect(html).toContain("Test Author explained the approval pattern");
+    expect(html).toContain("A Content Strategist reviews the article operations workflow");
+    expect(html).toContain('class="aio-author-block"');
+    expect(html).toContain('src="https://app.example.com/uploads/authors/test-author.png"');
+  });
+
   test("supplements a bare author heading that has no author identity with the managed block", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
