@@ -103,6 +103,10 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("ever-evolving landscape");
     expect(call?.instructions).toContain("unlock the potential");
     expect(call?.instructions).toContain("empower businesses");
+    expect(call?.instructions).toContain("run one silent editorial self-review");
+    expect(call?.instructions).toContain("selected_title, body_html, headings, faq_items");
+    expect(call?.instructions).toContain("lacks first-party/source evidence");
+    expect(call?.instructions).toContain("revise that part before final output");
     expect(call?.instructions).toContain("human editor who has interviewed the business");
     expect(call?.instructions).toContain("Do not paste long reference or competitor passages");
     expect(call?.instructions).toContain("Do not paste primaryInfo verbatim");
