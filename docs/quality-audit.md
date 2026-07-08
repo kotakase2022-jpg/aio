@@ -690,8 +690,9 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  were green at PR head `e7374f7` before the local `89fe2b5` implementation pass. Hosted PR
-  automation still needs re-checking after the current local commits are pushed.
+  were green at PR head `4431f35` after the `89fe2b5` implementation pass and the first follow-up
+  handoff update. GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m46s, and
+  CodeRabbit completed successfully. Re-check any subsequent status-only handoff commit if pushed.
 
 ## Current Self Score
 
@@ -706,14 +707,13 @@ for real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Push the current local commits, then re-check hosted Actions and CodeRabbit on PR #1.
-2. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
-3. Review the latest `test-results/live-openai/*.html` outputs for editorial naturalness, not just
+1. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
+2. Review the latest `test-results/live-openai/*.html` outputs for editorial naturalness, not just
    machine score. Pay particular attention to FAQ specificity and whether the target reader is
    obvious in the opening and headings.
-4. If a future OpenAI run fails with `insufficient_quota`, verify that the recovered billing/quota
+3. If a future OpenAI run fails with `insufficient_quota`, verify that the recovered billing/quota
    belongs to the same API-key project stored in `.env.local`.
-5. Prepare disposable WordPress sandbox settings in `.env.live.local`, including
+4. Prepare disposable WordPress sandbox settings in `.env.live.local`, including
    `AIO_LIVE_WORDPRESS_ALLOW_DELETE=1`, then rerun
    `npm run test:live:readiness:wordpress`.
-6. Complete the remaining sandbox browser pass focused on real WordPress posting recovery.
+5. Complete the remaining sandbox browser pass focused on real WordPress posting recovery.

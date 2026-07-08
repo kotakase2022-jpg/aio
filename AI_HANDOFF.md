@@ -27,12 +27,12 @@
 - Branch: `codex/persistent-quality-gate-operations`
 - Latest implementation commit: `89fe2b5 Harden article quality live checks`
 - Latest checked local quality state: `89fe2b5`, verified by `npm.cmd run quality`.
-- Last known pushed PR head before this pass: `e7374f7 Refresh handoff after article quality prompt pass`
-- Last known hosted state before this pass:
-  - CodeRabbit: success at `e7374f7`
-  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success at `e7374f7`
+- Latest pushed PR head checked before this final status-only handoff update: `4431f35 Refresh handoff after live OpenAI hardening`
+- Hosted state checked for `4431f35` during this pass:
+  - CodeRabbit: success at `4431f35`
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success at `4431f35` in 3m46s
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: needs re-check after the current local commits are pushed.
+- CodeRabbit OSS review status: passed at checked pushed head `4431f35`; re-check any subsequent status-only handoff commit if pushed.
 
 ## 3. What Was Done
 
@@ -52,6 +52,9 @@
 - Added unit coverage for the evaluator and prompt/timeout behavior.
 - Re-ran OpenAI live generation after the timeout change; it completed all three samples and wrote ignored artifacts under `test-results/live-openai/`.
 - Updated `docs/quality-audit.md` with the latest live OpenAI artifact evidence and remaining proof gaps.
+- Pushed implementation + handoff commits and confirmed PR #1 hosted checks at `4431f35`:
+  - CodeRabbit: pass.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m46s.
 
 ## 4. Files Changed
 
@@ -101,7 +104,7 @@
 
 CodeRabbit OSSの指摘と対応状況：
 
-- Review status: success at previous pushed head `e7374f7`; current local commits need re-check after push.
+- Review status: success at checked pushed head `4431f35`; re-check any subsequent status-only handoff commit if pushed.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
 - Deferred findings: none known.
@@ -126,6 +129,8 @@ npm.cmd run typecheck
 AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1 AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai npm.cmd run test:live:openai
 npm.cmd run quality
 git commit -m "Harden article quality live checks"
+git push
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 ```
 
 Results:
@@ -145,6 +150,15 @@ Results:
 - Pre-commit hook for `89fe2b5`: passed.
   - lint passed
   - test integrity passed, 48 files
+- Pre-push hook for `4431f35`: passed.
+  - lint passed
+  - typecheck passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 345 tests
+  - contract tests passed, 3 files / 13 tests
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed.
+  - CodeRabbit passed.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m46s.
 
 Not run in this pass:
 
@@ -157,12 +171,11 @@ Not run in this pass:
 次にClaude Codeが最初にやるべきこと：
 
 1. Review the local implementation commit `89fe2b5` for evaluator correctness and whether the 150 second OpenAI timeout is the right balance for Vercel execution limits.
-2. After Codex pushes this handoff state, check PR #1 CodeRabbit and GitHub Actions on the latest pushed head.
-3. Human-read the latest ignored OpenAI live HTML artifacts, especially the two body-score-92 samples:
+2. Human-read the latest ignored OpenAI live HTML artifacts, especially the two body-score-92 samples:
    - one-person contractor workers compensation: target length slightly under range;
    - SaaS onboarding operations: one or more sections still thin.
-4. Decide whether to do another small prompt pass for `target-length-alignment` and `section-specificity`, or accept the current live quality as good enough until human editorial feedback.
-5. Prepare a disposable WordPress sandbox and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
+3. Decide whether to do another small prompt pass for `target-length-alignment` and `section-specificity`, or accept the current live quality as good enough until human editorial feedback.
+4. Prepare a disposable WordPress sandbox and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 
 ## 11. Suggested Review Scope for Claude Code
 
