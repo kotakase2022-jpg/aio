@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass resumed that same Codex phase after the OpenAI quota was restored.
-- Phase: Live OpenAI Verification / Generated Article Quality Fix / Handoff
-- Last updated: 2026-07-08 12:24 +09:00
+- Phase: Supabase Live Write/Delete Readiness Attempt / Handoff
+- Last updated: 2026-07-08 12:34 +09:00
 
 ## 1. Current Goal
 
@@ -16,7 +16,7 @@ Current objective:
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
 - This Codex pass focused on the live OpenAI failure after quota recovery. The real OpenAI live test now passes on the current working tree.
 - The pass also fixed concrete causes found by the live test: model self-score scale drift, missing managed body structure, missing visible source URLs, and quality-scoring false positives around FAQ/source helper blocks.
-- Overall goal is still not complete. Supabase write/delete live tests remain blocked because the configured project was previously verified as production-labeled, and a disposable non-production Supabase sandbox has not been provided.
+- Overall goal is still not complete. After this handoff, the user explicitly allowed running the Supabase write/delete live test against production, but local credentials are still incomplete: `SUPABASE_SERVICE_ROLE_KEY` is empty, so the write/delete test cannot run yet.
 
 ## 2. Current Branch / Commit / PR
 
@@ -48,6 +48,10 @@ Completed in this Codex pass:
 - Updated live OpenAI sandbox fixtures to a more realistic 2,000-character article scale and richer first-party/source context.
 - Re-ran the real OpenAI live sandbox test twice after quota recovery; the final run passed on the current code.
 - Re-ran the full local quality gate; it passed.
+- Attempted Supabase live write/delete readiness again after the user explicitly allowed production execution.
+- Confirmed `.env.local` has `NEXT_PUBLIC_SUPABASE_URL` for host `npdyfhqugniuxfxpgngh.supabase.co` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, but `SUPABASE_SERVICE_ROLE_KEY` is empty.
+- Ran `npm.cmd run test:live:readiness:supabase`; it failed closed before any write/delete operation.
+- Did not set `AIO_LIVE_CONFIRM_NON_PRODUCTION=1` for a production target, because that would misrepresent the environment.
 
 ## 4. Files Changed
 
@@ -70,13 +74,14 @@ Main files changed in this pass:
   - full `npm.cmd run test` passes
   - full `npm.cmd run quality` passes
   - live OpenAI sandbox test passes
-- Supabase live write/delete testing remains intentionally not run against the current production-labeled project.
+- Supabase live write/delete testing remains not run. The user has now allowed production execution, but the required `SUPABASE_SERVICE_ROLE_KEY` is missing locally and the existing readiness script is intentionally sandbox/non-production oriented.
 - The current implementation commit is pushed and green on PR #1.
 - If a later handoff-only commit follows this file update, re-check PR #1 at that newer head. Runtime code changed last in `6a4d7f0`.
 
 ## 6. Known Issues
 
-- Supabase `test:live:supabase` is still blocked until a disposable non-production project is configured with the app schema and explicit live-write flags.
+- Supabase `test:live:supabase` is still blocked because `SUPABASE_SERVICE_ROLE_KEY` is empty locally.
+- The user explicitly allowed production execution on 2026-07-08, but the current readiness guard still requires non-production confirmation and should not be bypassed by falsely setting `AIO_LIVE_CONFIRM_NON_PRODUCTION=1`.
 - WordPress live posting was not run in this pass.
 - Real generated article quality still needs human review on representative customer inputs even though the live sandbox contract now passes.
 - The live OpenAI test incurs provider cost and takes roughly 3 minutes for the current fixture set.
@@ -119,6 +124,7 @@ $env:AIO_LIVE_CONTRACT_TESTS='1'; npm.cmd run test:live:openai
 git commit -m "Stabilize live OpenAI article quality"
 git push
 gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
+npm.cmd run test:live:readiness:supabase
 ```
 
 Results:
@@ -156,10 +162,16 @@ Results:
 - PR #1 checks at `6a4d7f0`: passed.
   - CodeRabbit passed.
   - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m39s.
+- `npm.cmd run test:live:readiness:supabase`: failed closed.
+  - `AIO_LIVE_CONTRACT_TESTS` is missing.
+  - `SUPABASE_SERVICE_ROLE_KEY` is missing.
+  - `AIO_LIVE_SUPABASE_ALLOW_WRITE` is missing.
+  - `AIO_LIVE_CONFIRM_NON_PRODUCTION` is missing.
+  - `NEXT_PUBLIC_SUPABASE_URL` host `npdyfhqugniuxfxpgngh.supabase.co` does not look like a sandbox/staging host.
 
 Not run:
 
-- `npm.cmd run test:live:supabase`: intentionally not run. The configured Supabase project was previously verified in Chrome as production-labeled, and the live readiness guard had failed closed.
+- `npm.cmd run test:live:supabase`: not run. It requires a service role key and currently insists on non-production confirmation.
 - `npm.cmd run test:live:wordpress`: not requested in this pass.
 
 ## 10. Next Recommended Action
@@ -173,8 +185,9 @@ Next Claude Code should:
    - sentence boundary handling for English and HTML block boundaries
 2. Confirm the new live OpenAI fixture scale and assertions are appropriate for sandbox cost and runtime.
 3. Re-check PR #1 only if this handoff status update is pushed as a new head after `6a4d7f0`.
-4. Keep Supabase live write/delete tests blocked unless a non-production Supabase project is configured and explicitly confirmed.
-5. If all checks remain green, move next toward human review of representative generated articles or a staging-only Supabase contract test setup.
+4. For Supabase production write/delete testing, first provide `SUPABASE_SERVICE_ROLE_KEY` locally without printing or committing it.
+5. Decide whether to add an explicit, auditable production override such as `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1` rather than misusing `AIO_LIVE_CONFIRM_NON_PRODUCTION=1`.
+6. If all checks remain green, move next toward human review of representative generated articles or a staging-only Supabase contract test setup.
 
 ## 11. Suggested Review Scope for Claude Code
 
@@ -188,7 +201,7 @@ Next Claude Code should:
 - The source fallback appends sanitized text and escaped attributes, and now only links `http:` / `https:` URLs.
 - `isQuestionLikeAuxiliaryHeading` may filter genuine question-style H2/H3 headings from the thin-section check. This was intentional for FAQ-like generated headings, but Claude Code should review whether the heuristic is too broad.
 - The OpenAI live test passed, but provider/model behavior can drift. Keep the deterministic local quality cap.
-- Supabase production data must not be touched by live tests.
+- Supabase production write/delete has now been explicitly allowed by the user, but should still be limited to the disposable `live-contract-*` generation job row and verified cleanup. Do not use the non-production confirmation flag for production.
 
 ## 13. Do Not Touch
 
