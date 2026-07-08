@@ -87,7 +87,7 @@ describe("OpenAI server wrapper", () => {
     await expect(generateImageBase64("prompt")).rejects.toMatchObject({
       status: 429,
       message:
-        "OpenAIの利用上限またはレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+        "OpenAIのレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
       detail: "rate_limit / quota exceeded",
     });
     expect(fetch).toHaveBeenCalledTimes(3);
@@ -246,8 +246,33 @@ describe("OpenAI server wrapper", () => {
     await expect(generateImageBase64("prompt")).rejects.toMatchObject({
       status: 429,
       message:
-        "OpenAIの利用上限またはレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+        "OpenAIの請求枠または利用上限に達しています。OpenAI PlatformのBilling/Usageと、このアプリで使っているAPIキーのプロジェクトを確認してください。",
       detail: "insufficient_quota / You exceeded your current quota.",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("maps OpenAI billing hard-limit errors to project billing guidance", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error: {
+              message: "Billing hard limit has been reached.",
+              code: "billing_hard_limit_reached",
+            },
+          },
+          { status: 429 },
+        ),
+      ),
+    );
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 429,
+      message:
+        "OpenAIの請求枠または利用上限に達しています。OpenAI PlatformのBilling/Usageと、このアプリで使っているAPIキーのプロジェクトを確認してください。",
+      detail: "billing_hard_limit_reached / Billing hard limit has been reached.",
     });
     expect(fetch).toHaveBeenCalledTimes(1);
   });

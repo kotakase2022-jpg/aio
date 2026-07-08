@@ -32,6 +32,39 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex pass on 2026-07-08 15:09 +09:00:
+
+- Split OpenAI 429 error guidance into two clearer product-facing paths:
+  - `insufficient_quota` / `billing_hard_limit_reached`: tells the operator to check OpenAI
+    Platform Billing/Usage and the API-key project used by the app.
+  - transient rate limits: tells the operator to wait or reduce image count / input size.
+- Updated unit and contract coverage for the new OpenAI error classification.
+- Adjusted the live OpenAI test so generated JSON/HTML artifacts are written before quality
+  assertions. If a future sample falls below the quality threshold, the failed output remains
+  available for editorial diagnosis.
+- Focused verification passed:
+  - `npx.cmd vitest run tests/unit/openai.test.ts tests/contract/openai.contract.test.ts`
+  - `npm.cmd run typecheck`
+- Re-ran artifact-producing OpenAI live generation:
+  - `AIO_LIVE_CONTRACT_TESTS=1`
+  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
+  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
+- `npm.cmd run test:live:openai` passed, 1 file / 1 test, in 196.88s.
+- Live article artifact scores:
+  - one-person contractor workers compensation: 88
+  - SaaS onboarding operations: 84
+  - AIO content operations: 90
+- Ignored live artifacts were written under `test-results/live-openai/` for human editorial review.
+- `npm.cmd run quality` passed:
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 343 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.4%, branches 76.46%, functions 92.35%, lines 88.84%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
+
 Latest Codex pass on 2026-07-08 14:47 +09:00:
 
 - Re-checked PR #1 at head `e3022f7` before this pass:
@@ -501,11 +534,10 @@ Additional manual PC browser smoke on 2026-07-06:
 
 These gaps prevent a true 100/100 completion claim:
 
-- Live OpenAI generation quality has passed in a prior run, but the latest artifact-producing live
-  retry on 2026-07-08 14:46 +09:00 failed at the initial API health call. A direct diagnostic call
-  showed HTTP 429 `insufficient_quota` for `gpt-5.5`, so the `.env.local` OpenAI key/project still
-  lacks usable quota for this test. Human review artifacts still need to be generated after the
-  provider limit recovers for the exact key/project in use.
+- Live OpenAI generation quality now has fresh artifact-producing evidence from 2026-07-08
+  15:05 +09:00. Three representative samples passed the live threshold and wrote ignored JSON/HTML
+  artifacts. A final human editorial review of those artifacts is still useful before claiming
+  perfect non-commodity article quality.
 - Supabase production write/delete verification passed again on 2026-07-08 14:45 +09:00 with
   explicit user approval and a production-specific confirmation flag. A long-term staging-only
   procedure is still preferable for routine release checks.
@@ -541,11 +573,11 @@ Highest-value next actions:
 
 1. Re-check hosted Actions and CodeRabbit after any subsequent handoff-only push.
 2. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
-3. Update or recover the OpenAI API key/project quota used by `.env.local`, then re-run
-   `npm run test:live:openai` with `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` and review the generated
-   JSON/HTML artifacts.
-4. If the user confirms a different OpenAI project/key should be used, update `.env.local` locally
-   without printing the secret, then repeat OpenAI readiness and live generation.
+3. Review the latest `test-results/live-openai/*.html` outputs for editorial naturalness, not just
+   machine score. Pay particular attention to FAQ specificity and whether the target reader is
+   obvious in the opening and headings.
+4. If a future OpenAI run fails with `insufficient_quota`, verify that the recovered billing/quota
+   belongs to the same API-key project stored in `.env.local`.
 5. Prepare disposable WordPress sandbox settings in `.env.live.local`, including
    `AIO_LIVE_WORDPRESS_ALLOW_DELETE=1`, then rerun
    `npm run test:live:readiness:wordpress`.

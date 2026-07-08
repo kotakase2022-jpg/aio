@@ -211,10 +211,22 @@ function formatOpenAIError(
     };
   }
 
+  if (
+    code === "insufficient_quota" ||
+    code === "billing_hard_limit_reached" ||
+    /insufficient[_\s-]*quota|billing[_\s-]*hard[_\s-]*limit|current quota|billing/i.test(combined)
+  ) {
+    return {
+      message:
+        "OpenAIの請求枠または利用上限に達しています。OpenAI PlatformのBilling/Usageと、このアプリで使っているAPIキーのプロジェクトを確認してください。",
+      detail,
+    };
+  }
+
   if (status === 429 || /rate|quota|limit/i.test(combined)) {
     return {
       message:
-        "OpenAIの利用上限またはレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+        "OpenAIのレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
       detail,
     };
   }

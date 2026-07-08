@@ -80,19 +80,6 @@ describe("OpenAI live sandbox contract", () => {
           competitorResearch: sample.competitorResearch ?? null,
         });
 
-        const improvements = result.aio_score_self_evaluation.improvements.join(" ");
-
-        expect(result.selected_title, sample.name).toBeTruthy();
-        expect(result.body_html, sample.name).toContain("<h2");
-        expect(result.faq_items.length, sample.name).toBeGreaterThanOrEqual(3);
-        expect(result.image_prompts, sample.name).toHaveLength(0);
-        expect(result.aio_score_self_evaluation.score, sample.name).toBeGreaterThanOrEqual(
-          minScore,
-        );
-        expect(improvements, sample.name).not.toContain("テーマ・キーワードの固有語彙");
-        expect(improvements, sample.name).not.toContain("一次情報の固有語彙");
-        expect(improvements, sample.name).not.toContain("参照情報の固有語彙");
-
         const artifact = await writeOpenAILiveArtifact({
           sampleName: sample.name,
           textModel: getTextModel(),
@@ -106,6 +93,19 @@ describe("OpenAI live sandbox contract", () => {
         if (artifact) {
           console.log(`OpenAI live artifact written: ${artifact.htmlPath}`);
         }
+
+        const improvements = result.aio_score_self_evaluation.improvements.join(" ");
+
+        expect(result.selected_title, sample.name).toBeTruthy();
+        expect(result.body_html, sample.name).toContain("<h2");
+        expect(result.faq_items.length, sample.name).toBeGreaterThanOrEqual(3);
+        expect(result.image_prompts, sample.name).toHaveLength(0);
+        expect(result.aio_score_self_evaluation.score, sample.name).toBeGreaterThanOrEqual(
+          minScore,
+        );
+        expect(improvements, sample.name).not.toContain("テーマ・キーワードの固有語彙");
+        expect(improvements, sample.name).not.toContain("一次情報の固有語彙");
+        expect(improvements, sample.name).not.toContain("参照情報の固有語彙");
       }
     },
     480_000,

@@ -88,7 +88,7 @@ describe("OpenAI API contract", () => {
       ).rejects.toMatchObject({
         status: 429,
         message:
-          "OpenAIの利用上限またはレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+          "OpenAIのレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
         detail: "rate_limit_exceeded / quota exceeded",
       });
       expect(server.requests).toHaveLength(1);
