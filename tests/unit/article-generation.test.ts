@@ -121,6 +121,7 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("human editor who has interviewed the business");
     expect(call?.instructions).toContain("Do not paste long reference or competitor passages");
     expect(call?.instructions).toContain("Do not paste primaryInfo verbatim");
+    expect(call?.instructions).toContain("Break it into observed problem");
     expect(call?.instructions).toContain("absence of AI-like generic phrasing");
     expect(call?.instructions).toContain("0-100 scale");
     expect(call?.instructions).toContain("not 8.6");
@@ -318,6 +319,7 @@ describe("generateAioArticle", () => {
 
     const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
     const input = JSON.parse(String(call?.input)) as {
+      task: string;
       payload: { form: { imageCount: number; wordCount: number } };
     };
 
@@ -346,17 +348,29 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("enhance productivity");
     expect(call?.instructions).toContain("leverage");
     expect(call?.instructions).toContain("Each answer should include a condition");
+    expect(call?.instructions).toContain("At least two FAQ items");
+    expect(call?.instructions).toContain("concrete input terms");
     expect(call?.instructions).toContain("Do not use vague heading patterns");
     expect(call?.instructions).toContain("Avoid thin H2/H3 sections");
     expect(call?.instructions).toContain("at least two concrete signals");
+    expect(call?.instructions).toContain("at least three concrete anchor words");
     expect(call?.instructions).toContain("concrete reader decision");
     expect(call?.instructions).toContain("Treat payload.form.theme as the editorial brief");
+    expect(call?.instructions).toContain("preserve at least one role phrase");
+    expect(call?.instructions).toContain("same audience signal");
     expect(call?.instructions).toContain("comparison axes");
     expect(call?.instructions).toContain("Do not merely summarize competitors");
     expect(call?.instructions).toContain("Do not state uncertain facts as facts");
     expect(call?.instructions).toContain("When using numbers, percentages, costs");
+    expect(call?.instructions).toContain("keyword numerals");
     expect(call?.instructions).toContain("keep the actual URLs visible in body_html");
     expect(call?.instructions).toContain("Respect payload.form.wordCount");
+    expect(call?.instructions).toContain("target visible Japanese body text length");
+    expect(call?.instructions).toContain("90-110%");
+    expect(call?.instructions).toContain("hard maximum");
+    expect(call?.instructions).toContain("2,600 characters");
+    expect(input.task).toContain("目標の90〜110%");
+    expect(input.task).toContain("想定読者に役割名や職種名");
     expect(call?.instructions).toContain("Respect payload.form.imageCount");
     expect(call?.instructions).toContain("Return zero image_prompts when imageCount is 0");
     expect(call?.instructions).toContain("Do not start many consecutive sentences");

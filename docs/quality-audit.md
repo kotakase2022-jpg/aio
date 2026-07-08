@@ -32,6 +32,49 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex pass on 2026-07-08 16:33 +09:00:
+
+- Tightened OpenAI article-generation instructions for non-commodity output:
+  - primary information must be broken into observed problem, affected reader, operational cause,
+    decision criterion, and caveat instead of being pasted as long clauses.
+  - FAQ items must visibly reuse concrete input terms while explaining them through a decision,
+    condition, caveat, field example, or source boundary.
+  - target reader role phrases must appear in the opening and at least one heading, example, or
+    FAQ item.
+  - visible body length now targets 90-110% of the requested length with a 130% hard maximum buffer.
+  - body HTML should include concrete anchors such as decision criteria, caveats, failure examples,
+    field observations, sources, conditions, cost, timing, or owners.
+- Focused verification passed:
+  - `npx.cmd vitest run tests/unit/article-generation.test.ts`
+  - `npm.cmd run typecheck`
+- `npm.cmd run quality` passed:
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 343 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.4%, branches 76.46%, functions 92.35%, lines 88.84%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
+- Re-ran OpenAI live generation with artifact writing enabled:
+  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
+  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
+- `npm.cmd run test:live:openai` passed after the final prompt update, 1 file / 1 test, in 191.28s.
+- Latest live article artifact scores:
+  - one-person contractor workers compensation: 88
+  - SaaS onboarding operations: 90
+  - AIO content operations: 88
+- Latest deterministic artifact review details:
+  - one-person contractor workers compensation: article body 88, title 100, FAQ 100, meta 100
+    - remaining body issue: `unsupported-claims`
+  - SaaS onboarding operations: article body 100, title 100, FAQ 100, meta 100
+  - AIO content operations: article body 92, title 100, FAQ 100, meta 100
+    - remaining body issue: `concrete-detail`
+- The previous AIO content failures for `target-length-alignment`, `numeric-claim-support`, and
+  `target-reader-reflection` did not recur in the latest live run.
+- The live quality samples remain above the configured minimum score, but they are not yet a human
+  editorial 100/100 claim.
+
 Latest Codex pass on 2026-07-08 15:54 +09:00:
 
 - Added deterministic quality review output to OpenAI live artifacts:

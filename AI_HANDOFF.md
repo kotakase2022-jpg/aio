@@ -5,88 +5,90 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase by adding deterministic quality evidence to OpenAI live artifacts and rerunning approved live checks.
-- Phase: Article Quality Evidence / Live Verification / Handoff
-- Last updated: 2026-07-08 16:00 +09:00
+- Loop number inferred from: The previous handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the Codex implementation phase by tightening OpenAI article-generation prompts and rerunning deterministic plus live checks.
+- Phase: Article Quality Improvement / Live Verification / Handoff
+- Last updated: 2026-07-08 16:33 +09:00
 
 ## 1. Current Goal
 
 Current objective:
 
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
-- This pass focused on making OpenAI live article artifacts more useful for repeatable editorial review, then re-running live OpenAI and approved Supabase write/delete checks.
-- Overall goal is still not complete. Do not call the goal complete until WordPress live/sandbox posting is proven and a human editorial review of representative live artifacts is complete.
+- This pass focused on reducing commodity AI writing in live OpenAI article outputs by hardening prompts around primary information digestion, FAQ specificity, target-reader reflection, concrete article anchors, numeric/claim support, and target length control.
+- Overall goal is still not complete. Do not call the goal complete until WordPress live/sandbox posting is proven and representative live artifacts receive human editorial review.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `806847a Add deterministic quality review to OpenAI artifacts`
-- Latest checked PR implementation head: `806847a05daea9ef236173d22e4b689d49cdf91a`
-- Last known good local quality commit: `806847a`
+- Latest checked base before this pass: `4c5419e Refresh handoff after deterministic artifact review`
+- Current local implementation changes at handoff writing:
+  - `src/lib/server/article-generation.ts`
+  - `tests/unit/article-generation.test.ts`
+  - `docs/quality-audit.md`
+  - `AI_HANDOFF.md`
+- Latest implementation commit: pending commit for the current pass at the time this file was written. After pulling, run `git log -1 --oneline` to see the final pushed head.
+- Last known good local quality state: current worktree after this pass, verified by `npm.cmd run quality`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed at PR head `806847a`.
-- GitHub Actions status: Passed at PR head `806847a`.
-- Note: this file may be followed by a handoff-only commit. If so, re-check hosted PR automation on that final head as a docs-only confirmation.
+- CodeRabbit OSS review status: previous PR head `4c5419e` passed. Re-check CodeRabbit after the current pass is pushed.
+- GitHub Actions status: previous PR head `4c5419e` passed. Re-check GitHub Actions after the current pass is pushed.
 
 ## 3. What Was Done
 
 Completed in this Codex pass:
 
 - Re-read `AGENTS.md`, `CLAUDE.md`, `AI_HANDOFF.md`, `README.md`, and `package.json`.
-- Confirmed PR #1 was green at prior head `582a823` before new work:
+- Confirmed PR #1 was green at prior head `4c5419e` before new work:
   - GitHub Actions `Typecheck, lint, tests, E2E, build`: success.
-- Added deterministic quality-review output to OpenAI live artifacts:
-  - `buildOpenAILiveArtifact` now includes `qualityReview`.
-  - `qualityReview` includes article body, title, FAQ, and meta description scores.
-  - Failed deterministic checks are preserved with id, label, and detail for human follow-up.
-  - Artifact HTML now includes a `Deterministic Quality Checks` section.
-- Updated unit coverage for the new artifact JSON/HTML fields.
-- Updated `docs/quality-audit.md` with current mechanical evidence and remaining proof gaps.
-- Re-ran OpenAI live generation with artifact writing enabled after the provider quota was restored.
-- Re-ran the explicitly approved production Supabase write/delete contract path.
-- Confirmed WordPress live readiness still fails closed before live calls because sandbox credentials and allow flags are missing.
-- Committed and pushed implementation commit `806847a Add deterministic quality review to OpenAI artifacts`.
-- Watched PR #1 automation to completion at `806847a`:
-  - CodeRabbit: success
-  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m40s
+  - CodeRabbit: success.
+- Parsed the latest OpenAI live artifacts and found that the previous AIO sample failures for `target-length-alignment` and `numeric-claim-support` had improved, while live runs still showed weaker cases around generic openings, primary information digestion, FAQ input reflection, target reader reflection, unsupported claims, and concrete detail.
+- Tightened OpenAI article-generation instructions:
+  - primary information must be broken into observed problem, affected reader, operational cause, decision criterion, and caveat instead of being pasted as long clauses.
+  - FAQ items must visibly reuse concrete input terms from theme, primary information, references, or competitors while explaining them through decisions, conditions, caveats, field examples, or source boundaries.
+  - target-reader role phrases must appear in the opening answer and at least one heading, example, or FAQ item.
+  - visible body length now targets 90-110% of the requested length with a 130% hard maximum buffer below the evaluator's 135% limit.
+  - body HTML should include concrete anchors such as decision criteria, caveats, failure examples, field observations, sources, conditions, cost, timing, or owners.
+- Updated unit coverage so the new generation constraints are protected.
+- Updated `docs/quality-audit.md` with the latest OpenAI live evidence and remaining proof gaps.
+- Re-ran focused tests, full local quality gate, and OpenAI live generation with artifact writing enabled.
 
 Relevant prior completed work that still matters:
 
 - Optional live OpenAI artifact capture exists via:
   - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
   - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
-- Supabase production live write/delete verification is guarded by `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1` and should only be used with explicit user approval.
+- Supabase production live write/delete verification previously passed under explicit user approval with `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1`.
 - `.env.local` contains live provider credentials locally and remains gitignored. Do not print or commit secrets.
 
 ## 4. Files Changed
 
 Main files changed in this pass:
 
-- `tests/live/openai-live-artifacts.ts`
-- `tests/unit/openai-live-artifacts.test.ts`
+- `src/lib/server/article-generation.ts`
+- `tests/unit/article-generation.test.ts`
 - `docs/quality-audit.md`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
-- PR #1 is green at implementation head `806847a`.
+- Local focused tests are green.
 - Local full quality gate is green.
-- OpenAI live generation passed with ignored JSON/HTML artifacts written under `test-results/live-openai/`.
-- OpenAI live artifact scores from this pass:
+- OpenAI live generation passed after the final prompt update with artifacts written under ignored `test-results/live-openai/`.
+- Latest OpenAI live article artifact scores from the final run:
   - one-person contractor workers compensation: 88
-  - SaaS onboarding operations: 88
-  - AIO content operations: 82
-- Deterministic artifact review from this pass:
-  - one-person contractor workers compensation: article body 98, title 100, FAQ 100, meta 100
-  - SaaS onboarding operations: article body 98, title 100, FAQ 100, meta 100
-  - AIO content operations: article body 82, title 100, FAQ 100, meta 100
-- The AIO content operations sample still flagged article-body `target-length-alignment` and `numeric-claim-support`, so it should be inspected during editorial review.
-- Supabase production write/delete live verification passed again for the disposable generation-job path under explicit user approval.
-- WordPress live readiness is not configured locally and fails closed before live calls.
+  - SaaS onboarding operations: 90
+  - AIO content operations: 88
+- Latest deterministic artifact review from the final run:
+  - one-person contractor workers compensation: article body 88, title 100, FAQ 100, meta 100
+    - remaining body issue: `unsupported-claims`
+  - SaaS onboarding operations: article body 100, title 100, FAQ 100, meta 100
+  - AIO content operations: article body 92, title 100, FAQ 100, meta 100
+    - remaining body issue: `concrete-detail`
+- The previous AIO content failures for `target-length-alignment`, `numeric-claim-support`, and `target-reader-reflection` did not recur in the latest live run.
+- WordPress live readiness is still not configured locally and fails closed before live calls.
 
 ## 6. Known Issues
 
-- `npm.cmd run test:live:readiness:wordpress` currently fails because sandbox WordPress credentials and allow flags are missing:
+- `npm.cmd run test:live:readiness:wordpress` is still expected to fail until sandbox WordPress credentials and allow flags are configured:
   - `WORDPRESS_SANDBOX_SITE_URL`
   - `WORDPRESS_SANDBOX_USERNAME`
   - `WORDPRESS_SANDBOX_APPLICATION_PASSWORD`
@@ -95,8 +97,9 @@ Main files changed in this pass:
   - `AIO_LIVE_WORDPRESS_ALLOW_DELETE`
   - `AIO_LIVE_CONFIRM_NON_PRODUCTION`
 - WordPress live posting was not run in this pass.
-- Real generated article quality has fresh live artifacts, but still needs final human review before claiming perfect article-quality completion.
-- Supabase production live write/delete has passed, but keep using `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1` only when explicitly authorized. Do not set `AIO_LIVE_CONFIRM_NON_PRODUCTION=1` for the production project.
+- OpenAI live samples remain above the configured minimum score, but they are not a human editorial 100/100 claim.
+- The latest live run still flagged one unsupported-claims issue and one concrete-detail issue in different samples.
+- Supabase production live write/delete has passed in a prior approved run, but keep using `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1` only when explicitly authorized. Do not set `AIO_LIVE_CONFIRM_NON_PRODUCTION=1` for the production project.
 - `.env.local` contains a production Supabase service role key. Do not print, commit, or paste it anywhere.
 - Do not mark the active 100/100 goal complete yet.
 
@@ -104,10 +107,10 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed at PR head `806847a`.
+- Review status: previous PR head `4c5419e` passed before this pass. Current pass needs CodeRabbit re-check after push.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
-- Deferred findings: none known after `806847a`.
+- Deferred findings: none known.
 - False positives / not applicable: none.
 
 ## 8. Optional Bugbot Findings
@@ -124,20 +127,15 @@ Cursor Bugbot optional review:
 Commands run during this pass:
 
 ```bash
-npx.cmd vitest run tests/unit/openai-live-artifacts.test.ts
+npx.cmd vitest run tests/unit/article-generation.test.ts
 npm.cmd run typecheck
-npm.cmd run quality
 AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1 AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai npm.cmd run test:live:openai
-AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1 npm.cmd run test:live:supabase
-npm.cmd run test:live:readiness:wordpress
-git commit -m "Add deterministic quality review to OpenAI artifacts"
-git push
-gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
+npm.cmd run quality
 ```
 
 Results:
 
-- Focused Vitest: passed, 1 file / 3 tests.
+- Focused Vitest: passed, 1 file / 25 tests.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run quality`: passed.
   - typecheck passed
@@ -148,51 +146,40 @@ Results:
   - coverage passed: statements 88.4%, branches 76.46%, functions 92.35%, lines 88.84%
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
-- `npm.cmd run test:live:openai`: passed, 1 file / 1 test, in 197.19s.
-- `npm.cmd run test:live:supabase`: passed, 1 file / 1 test. It created and cleaned up disposable Supabase test data.
-- `npm.cmd run test:live:readiness:wordpress`: failed closed before live calls because sandbox WordPress credentials and allow flags are missing.
-- Pre-commit hook for `806847a`: passed.
-  - lint passed
-  - test integrity passed, 48 files
-- Pre-push hook for `806847a`: passed.
-  - lint passed
-  - typecheck passed
-  - test integrity passed, 48 files
-  - unit/integration tests passed, 44 files / 343 tests
-  - contract tests passed, 3 files / 13 tests
-- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed at PR head `806847a`.
-  - CodeRabbit passed.
-  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m40s.
+- `npm.cmd run test:live:openai`: passed after the final prompt update, 1 file / 1 test, in 191.28s.
 
 Not run in this pass:
 
+- `npm.cmd run test:live:supabase` because production Supabase write/delete had already passed in the prior explicitly approved run and this pass did not touch Supabase behavior.
+- `npm.cmd run test:live:readiness:wordpress` because known missing sandbox credentials and allow flags remain unchanged.
 - `npm.cmd run test:live:wordpress` because sandbox WordPress credentials and allow flags are still not configured.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Review `tests/live/openai-live-artifacts.ts` and confirm the deterministic artifact `qualityReview` is useful, not too noisy, and remains free of secrets.
-2. Open the latest ignored `test-results/live-openai/*.html` artifacts locally, especially the AIO content operations sample, and inspect the article-body failures:
-   - `target-length-alignment`
-   - `numeric-claim-support`
-3. Decide whether the lower live score 82 for AIO content operations needs prompt/evaluator tightening or is acceptable as a useful review artifact.
+1. Review the prompt changes in `src/lib/server/article-generation.ts` for overconstraint, token bloat, and whether the instructions match the deterministic article-quality checks.
+2. Open the latest ignored `test-results/live-openai/*.html` artifacts locally and inspect the two remaining article-body issues:
+   - one-person contractor workers compensation: `unsupported-claims`
+   - AIO content operations: `concrete-detail`
+3. Decide whether the remaining live score range of 88-90 is acceptable for the next product increment or whether one more prompt/evaluator adjustment is needed.
 4. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 5. Continue with WordPress sandbox live verification or focused editorial review of the live artifacts.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `tests/live/openai-live-artifacts.ts`: confirm deterministic quality scoring context uses the right input sources and does not leak secrets.
-- `tests/unit/openai-live-artifacts.test.ts`: confirm artifact JSON/HTML coverage is sufficient.
-- `docs/quality-audit.md`: confirm live OpenAI/Supabase evidence and remaining proof gaps are accurate.
-- WordPress live sandbox readiness: confirm missing credentials and allow flags before attempting any live posting.
+- `src/lib/server/article-generation.ts`: check whether prompt constraints are clear, non-contradictory, and practical for OpenAI live generation.
+- `tests/unit/article-generation.test.ts`: confirm the new prompt constraints are covered without overfitting to wording.
+- `docs/quality-audit.md`: confirm live OpenAI evidence and remaining proof gaps are accurate.
+- Latest `test-results/live-openai/*.html` artifacts: human-read the current outputs before claiming article-quality completion.
 
 ## 12. Risk Notes
 
-- OpenAI live artifact generation passed in this pass, but provider quota/model behavior can drift.
+- OpenAI live artifact generation passed, but provider behavior is stochastic and can drift.
+- The prompt is now stricter; monitor whether future live runs become too formulaic or overfilled with labels.
 - WordPress live posting still needs sandbox credentials before execution.
 - The live WordPress test creates and deletes disposable resources; keep post, media, delete, and non-production confirmations explicit.
-- Production Supabase live verification was explicitly authorized and passed again, but should remain guarded and should not become the routine release path.
+- Production Supabase live verification was previously explicitly authorized and passed, but should remain guarded and should not become the routine release path.
 
 ## 13. Do Not Touch
 
