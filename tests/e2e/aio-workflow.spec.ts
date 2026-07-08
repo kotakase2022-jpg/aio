@@ -684,7 +684,7 @@ test("editing the title to a generic label updates the quality checklist", async
     /修正方針: 冒頭400字以内で、結論、定義、読者が最初に判断すべきこと/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
-    /修正方針: 近年、重要です、注目されています、わかりやすく解説/,
+    /修正方針: 近年、重要です、一般的に、多くの場合、注目されています、わかりやすく解説/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /fast-paced digital landscape[\s\S]*unlock the potential/,

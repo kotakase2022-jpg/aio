@@ -82,11 +82,15 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("Avoid commodity content");
     expect(call?.instructions).toContain("generic AI-like filler");
     expect(call?.instructions).toContain("重要になります");
+    expect(call?.instructions).toContain("一般的に");
+    expect(call?.instructions).toContain("多くの場合");
     expect(call?.instructions).toContain("求められます");
     expect(call?.instructions).toContain("欠かせません");
     expect(call?.instructions).toContain("わかりやすく解説");
     expect(call?.instructions).toContain("詳しく解説");
     expect(call?.instructions).toContain("を紹介します");
+    expect(call?.instructions).toContain("効率化につながります");
+    expect(call?.instructions).toContain("品質向上につながります");
     expect(call?.instructions).toContain("in this article");
     expect(call?.instructions).toContain("this article explains");
     expect(call?.instructions).toContain("it is important to");

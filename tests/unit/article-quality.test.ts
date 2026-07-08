@@ -961,6 +961,28 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
+  test("flags broadly qualified efficiency boilerplate as AI-like filler", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>
+      <p>一般的に、AIO記事は多くの場合、効率化につながります。品質向上につながります。</p>
+      <p>当社の支援現場では12件の相談で、承認担当と出典確認の手順が曖昧でした。</p>
+      <table><tr><th>判断基準</th><td>担当者、期限、出典、未確認情報の扱いを公開前に比較します。</td></tr></table>
+      <ul><li>失敗例として、出典と一次情報を混ぜて公開前に差し戻されるケースがあります。</li><li>注意点は、数字の近くに条件と確認時点を残すことです。</li></ul>
+      <h2>公開前レビューでは一次情報と出典を分けて確認する</h2>
+      <p>FAQとして、参照情報は出典注記へ、一次情報は現場観察として分けます。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-phrases", passed: false }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "generic-opening-frame", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("凡庸表現");
+    expect(result.improvements.join(" ")).toContain("一般的に");
+    expect(result.score).toBeLessThan(100);
+  });
+
   test("flags boilerplate opening frames even when the article has some concrete details", () => {
     const result = evaluateArticleQuality(`
       <h2>AIO記事とは、参照情報と一次情報をAI検索で引用しやすく整理する記事を指します</h2>

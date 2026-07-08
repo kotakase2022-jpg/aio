@@ -31,7 +31,7 @@ export function qualityRegenerationAction(checkId: string) {
   }
 
   if (checkId === "generic-phrases") {
-    return "近年、重要です、注目されています、わかりやすく解説、today's fast-paced digital landscape、today's rapidly evolving landscape、comprehensive guide、delve into、navigate the complexities、unlock the potential、in conclusion、it is worth noting that、at the end of the day等の汎用句を削り、参照元の事実、一次情報、固有名詞、現場例、判断基準に置き換える。";
+    return "近年、重要です、一般的に、多くの場合、注目されています、わかりやすく解説、効率化につながります、品質向上につながります、today's fast-paced digital landscape、today's rapidly evolving landscape、comprehensive guide、delve into、navigate the complexities、unlock the potential、in conclusion、it is worth noting that、at the end of the day等の汎用句を削り、参照元の事実、一次情報、固有名詞、現場例、判断基準に置き換える。";
   }
 
   if (checkId === "verbose-ai-phrasing") {
