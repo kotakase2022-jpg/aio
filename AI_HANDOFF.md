@@ -5,9 +5,9 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase by making live OpenAI artifacts easier to review for non-commodity quality.
+- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase by making live OpenAI artifacts easier to review for non-commodity quality and re-checking PR automation.
 - Phase: Article Quality Evidence / Handoff
-- Last updated: 2026-07-08 15:32 +09:00
+- Last updated: 2026-07-08 15:38 +09:00
 
 ## 1. Current Goal
 
@@ -20,12 +20,12 @@ Current objective:
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit before this pass: `9538ffa Clarify OpenAI quota failures and preserve live artifacts`
-- Latest head before this pass: `1ec2b4a Clarify latest handoff-only PR head`
-- Last known good local quality commit before this pass: `9538ffa`
+- Latest implementation commit: `d3e202a Add editorial checklist to OpenAI live artifacts`
+- Latest head: `d3e202a` before this final handoff-only refresh.
+- Last known good local quality commit: `d3e202a`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed on the latest pushed PR head after this handoff refresh.
-- GitHub Actions status: Passed on the latest pushed PR head after this handoff refresh.
+- CodeRabbit OSS review status: Passed at PR head `d3e202a`.
+- GitHub Actions status: Passed at PR head `d3e202a`.
 
 ## 3. What Was Done
 
@@ -42,6 +42,9 @@ Completed in this Codex pass:
 - Updated artifact unit coverage so JSON and HTML review aids are asserted and secrets are still not exposed.
 - Ran full local quality successfully.
 - Ran WordPress live readiness; it failed closed before any live calls because sandbox WordPress credentials and explicit allow flags remain unset.
+- Committed `d3e202a Add editorial checklist to OpenAI live artifacts`, pushed it, and watched PR #1 automation to completion:
+  - CodeRabbit: success
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m42s
 
 Relevant prior completed work that still matters:
 
@@ -62,7 +65,7 @@ Main files changed in this pass:
 
 ## 5. Current Status
 
-- PR #1 is green on the latest pushed PR head. The runtime implementation change is `9538ffa`; later head commits are handoff/docs-only.
+- PR #1 is green at implementation head `d3e202a` before this final handoff-only refresh.
 - Supabase production write/delete live verification is proven for the disposable generation-job path under explicit approval.
 - OpenAI live generation now passes for the three representative samples with artifact writing enabled.
 - OpenAI provider errors now distinguish quota/billing/project issues from transient rate limits.
@@ -83,10 +86,10 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed on the latest pushed PR head after this handoff refresh.
+- Review status: Passed at PR head `d3e202a`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
-- Deferred findings: none known after the latest pushed PR check.
+- Deferred findings: none known after `d3e202a`.
 - False positives / not applicable: none.
 
 ## 8. Optional Bugbot Findings
@@ -107,6 +110,9 @@ npx.cmd vitest run tests/unit/openai-live-artifacts.test.ts
 npm.cmd run typecheck
 npm.cmd run quality
 npm.cmd run test:live:readiness:wordpress
+git commit -m "Add editorial checklist to OpenAI live artifacts"
+git push
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 ```
 
 Results:
@@ -126,6 +132,18 @@ Results:
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
 - `npm.cmd run test:live:readiness:wordpress`: failed closed before live calls because `WORDPRESS_SANDBOX_SITE_URL`, `WORDPRESS_SANDBOX_USERNAME`, `WORDPRESS_SANDBOX_APPLICATION_PASSWORD`, `AIO_LIVE_WORDPRESS_ALLOW_POST`, `AIO_LIVE_WORDPRESS_ALLOW_MEDIA`, `AIO_LIVE_WORDPRESS_ALLOW_DELETE`, and `AIO_LIVE_CONFIRM_NON_PRODUCTION` are missing.
+- Pre-commit hook for `d3e202a`: passed.
+  - lint passed
+  - test integrity passed, 48 files
+- Pre-push hook for `d3e202a`: passed.
+  - lint passed
+  - typecheck passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 343 tests
+  - contract tests passed, 3 files / 13 tests
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed at PR head `d3e202a`.
+  - CodeRabbit passed.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m42s.
 
 Not run in this pass:
 
