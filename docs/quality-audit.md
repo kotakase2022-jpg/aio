@@ -52,8 +52,17 @@ evolving landscape`, `comprehensive guide`, `delve into`, and `navigate the comp
 
 The current local branch includes implementation commit `96ef26b`, which respects saved
 `imageCount` when showing missing-image recovery prompts and adds E2E coverage for extra prompts
-beyond the requested image count. Hosted CodeRabbit and Actions must be re-checked after the
-handoff/docs update is pushed.
+beyond the requested image count.
+
+The latest pushed head containing that image-recovery prompt-scope pass and handoff update was
+checked:
+
+- Commit: `df451fe`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m30s
+
+Later status-only handoff commits should be re-checked on the current PR head; they do not change
+runtime code.
 
 The latest verified pushed PR head before the image-alt HTML sync pass was:
 

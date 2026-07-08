@@ -7,7 +7,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this remains a narrow continuation rather than a new loop.
 - Phase: Autonomous Improvement / Image Recovery Prompt Scope / Handoff
-- Last updated: 2026-07-08 09:18 +09:00
+- Last updated: 2026-07-08 09:24 +09:00
 
 ## 1. Current Goal
 
@@ -38,7 +38,10 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - PR status before this pass at pushed head `0b57f5a`:
   - CodeRabbit: pass
   - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m30s
-- PR status after `96ef26b`: not yet checked on GitHub until this handoff/docs update is pushed.
+- PR status after this pass at pushed head `df451fe`:
+  - CodeRabbit: pass
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m30s
+- If this file is included in a later status-only handoff commit, re-check the latest PR head; status-only handoff commits do not change runtime code.
 - CodeRabbit OSS review status: CodeRabbit is installed and responding on PR #1. Current local code addresses the older duplicate review history about partial image recovery and parallel image regeneration. This pass further addresses the review note about considering `imageCount` when showing missing-image recovery.
 
 ## 3. What Was Done
@@ -66,8 +69,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 - Implementation/test commit `96ef26b` exists locally and passed focused checks plus the full local quality gate.
 - Handoff/docs updates are prepared in this file and `docs/quality-audit.md`.
-- Local branch is ahead of origin until the handoff/docs commit is pushed.
-- Hosted CodeRabbit and GitHub Actions are green on the previous pushed head `0b57f5a`; they need to be re-checked after pushing this implementation and handoff/docs update.
+- Hosted CodeRabbit and GitHub Actions are green on pushed head `df451fe`.
+- If a later status-only handoff commit is pushed, Claude Code should re-check the latest PR head.
 
 ## 6. Known Issues
 
@@ -81,7 +84,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `0b57f5a`.
-- Review status after this pass: not yet checked on GitHub until the current local commits are pushed.
+- Review status after this pass: CodeRabbit SUCCESS and GitHub Actions SUCCESS at pushed head `df451fe`.
 - Current pass:
   - Addresses the still-relevant part of the older image recovery feedback about respecting requested `imageCount`.
   - Keeps the fix narrow to preview/recovery behavior and one E2E regression.
@@ -113,6 +116,9 @@ git diff --check
 npx.cmd playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc -g "missing generated image recovery"
 npm.cmd run quality
 git commit -m "Respect requested image count in recovery prompts"
+git commit -m "Update handoff after image recovery prompt scope"
+git push
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 ```
 
 Results:
@@ -134,24 +140,32 @@ Results:
   - `npm run test:e2e`: passed, 49 PC Chromium tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
 - Commit pre-commit hook for `96ef26b`: passed, `npm run lint` and `npm run test:integrity`.
+- Handoff/docs commit `df451fe`: passed pre-commit, `npm run lint` and `npm run test:integrity`.
+- `git push`: passed pre-push.
+  - `npm run lint`: passed.
+  - `npm run typecheck`: passed.
+  - `npm run test:integrity`: passed, 47 files.
+  - `npm run test`: passed, 43 files / 328 tests.
+  - `npm run test:contract`: passed, 3 files / 13 tests.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed at head `df451fe`.
+  - CodeRabbit: pass.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m30s.
 
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials and explicit non-production confirmation are required.
-- Hosted PR checks after pushing this pass. Claude Code should re-check after the handoff/docs commit is pushed.
+- Hosted PR checks after any later status-only handoff commit.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Re-check PR #1 after the latest commits are pushed:
-   - `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`
-2. Review the image recovery prompt-scope change:
+1. Review the image recovery prompt-scope change:
    - `src/components/aio/article-generator-app.tsx`
    - `tests/e2e/aio-workflow.spec.ts`
-3. Confirm CodeRabbit does not raise a new concern around image recovery or prompt scoping.
-4. If checks stay green, decide whether the next pass should focus on live/sandbox readiness or another small generated-output quality regression test.
-5. Run `npm.cmd run quality` after any code changes and record the result here.
+2. Confirm CodeRabbit does not raise a new concern around image recovery or prompt scoping.
+3. If checks stay green, decide whether the next pass should focus on live/sandbox readiness or another small generated-output quality regression test.
+4. Run `npm.cmd run quality` after any code changes and record the result here.
 
 ## 11. Suggested Review Scope for Claude Code
 
