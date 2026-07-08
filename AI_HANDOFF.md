@@ -7,7 +7,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase and closed a known article-quality risk before handing off to Claude Code.
 - Phase: Article Quality Hardening / Handoff
-- Last updated: 2026-07-08 13:16 +09:00
+- Last updated: 2026-07-08 13:23 +09:00
 
 ## 1. Current Goal
 
@@ -24,8 +24,8 @@ Current objective:
 - Latest implementation commit before this pass: `53415fb Record Supabase production live verification success`
 - Last known good local quality commit: `403b1b7`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed previously at PR head `53415fb`; needs re-check on the new head after this handoff/code push.
-- GitHub Actions status: Passed previously at PR head `53415fb`; needs re-check on the new head after this handoff/code push.
+- CodeRabbit OSS review status: Passed on PR #1 after this pass was pushed.
+- GitHub Actions status: `Typecheck, lint, tests, E2E, build` passed on PR #1 after this pass was pushed in 3m37s.
 
 ## 3. What Was Done
 
@@ -60,7 +60,7 @@ Main files changed in this pass:
   - focused `article-quality` unit test passes
   - full `npm.cmd run quality` passes
 - Current handoff update is documentation-only.
-- PR #1 should be rechecked after pushing the new implementation/handoff commits.
+- PR #1 is green after this pass was pushed.
 
 ## 6. Known Issues
 
@@ -75,10 +75,10 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed previously on PR #1 at head `53415fb`.
+- Review status: Passed on PR #1 after this pass was pushed.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
-- Deferred findings: current head needs CodeRabbit review after push.
+- Deferred findings: none for this pass.
 - False positives / not applicable: none.
 
 ## 8. Optional Bugbot Findings
@@ -99,6 +99,8 @@ gh pr checks 1 --repo kotakase2022-jpg/aio
 npx.cmd vitest run tests/unit/article-quality.test.ts
 npm.cmd run quality
 git commit -m "Tighten question heading quality checks"
+git push
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 ```
 
 Results:
@@ -119,6 +121,15 @@ Results:
 - Pre-commit hook for `403b1b7`: passed.
   - lint passed
   - test integrity passed
+- Pre-push hook after the article-quality and handoff commits: passed.
+  - lint passed
+  - typecheck passed
+  - test integrity passed
+  - unit/integration tests passed, 43 files / 336 tests
+  - contract tests passed, 3 files / 13 tests
+- PR #1 checks after push: passed.
+  - CodeRabbit passed.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m37s.
 
 Not run in this pass:
 
