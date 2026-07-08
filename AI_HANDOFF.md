@@ -5,43 +5,48 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase and closed a known article-quality risk before handing off to Claude Code.
-- Phase: Article Quality Hardening / Handoff
-- Last updated: 2026-07-08 13:23 +09:00
+- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase and added human-review evidence support for live OpenAI generated articles.
+- Phase: Live OpenAI Review Artifact Hardening / Handoff
+- Last updated: 2026-07-08 13:34 +09:00
 
 ## 1. Current Goal
 
 Current objective:
 
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
-- This pass addressed the previously documented risk that normal question-style H2/H3 article sections could be over-filtered from the section-specificity quality check.
-- Overall goal is still not complete. Do not call the goal complete until representative article quality, WordPress live/sandbox posting, and remaining high-risk flows are proven.
+- This pass targeted the remaining generated-output quality proof gap by making live OpenAI outputs reviewable as ignored JSON/HTML artifacts.
+- Overall goal is still not complete. Do not call the goal complete until representative article quality artifacts are generated/reviewed, WordPress live/sandbox posting is proven, and remaining high-risk flows are verified.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `403b1b7 Tighten question heading quality checks`
-- Latest implementation commit before this pass: `53415fb Record Supabase production live verification success`
-- Last known good local quality commit: `403b1b7`
+- Latest implementation commit: `a113787 Add OpenAI live review artifacts`
+- Latest implementation commit before this pass: `403b1b7 Tighten question heading quality checks`
+- Last known good local quality commit: `a113787`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed on PR #1 after this pass was pushed.
-- GitHub Actions status: `Typecheck, lint, tests, E2E, build` passed on PR #1 after this pass was pushed in 3m37s.
+- CodeRabbit OSS review status: Passed on PR #1 before this pass at head `061e115`; needs re-check after this pass is pushed.
+- GitHub Actions status: Passed on PR #1 before this pass at head `061e115`; needs re-check after this pass is pushed.
 
 ## 3. What Was Done
 
 Completed in this Codex pass:
 
-- Re-read `AGENTS.md`, `CLAUDE.md`, `AI_HANDOFF.md`, `README.md`, `package.json`, recent commits, working tree state, and PR check status.
-- Confirmed PR #1 was green before this pass at head `53415fb`.
-- Tightened article quality scoring so managed auxiliary blocks are removed before heading-section specificity checks.
-- Removed the broad question-heading auxiliary heuristic. Normal question-style H2/H3 headings are now evaluated as main article sections instead of being ignored.
-- Kept managed FAQ/source/author blocks excluded from weak-prose and thin-section checks by relying on `removeAuxiliaryQualityHtml`.
-- Added regression coverage proving regular question-style headings are still evaluated by the `section-specificity` check.
-- Ran the focused unit test and full local quality gate successfully.
+- Re-read `AGENTS.md`, `CLAUDE.md`, `AI_HANDOFF.md`, `README.md`, `package.json`, `docs/quality-audit.md`, recent commits, working tree state, and PR check status.
+- Confirmed PR #1 was green before this pass at head `061e115`.
+- Added optional live OpenAI artifact capture:
+  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
+  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
+- When enabled, `npm run test:live:openai` now writes ignored JSON and HTML artifacts for each representative live generation sample.
+- The artifacts include the sample name, model, minimum score, generated score, key input context, title/meta/body/FAQ/source outputs, strengths, and improvement notes. They intentionally do not include provider secrets or raw environment values.
+- Refactored the live OpenAI test to reuse typed `form`, `fetchedReferences`, and `fetchedCompetitors` objects for both generation and artifact writing.
+- Added unit coverage for the artifact helper.
+- Updated `.env.live.example`, `docs/testing.md`, and `docs/quality-audit.md`.
+- Ran full local quality successfully.
+- Confirmed OpenAI live readiness passed, then attempted `test:live:openai` with artifact writing enabled. The live test failed at the initial Responses API health call with the app's Japanese OpenAI quota/rate-limit error. No artifact files were produced.
 
 Relevant prior completed work that still matters:
 
-- Live OpenAI sandbox verification passed after quota recovery.
+- Live OpenAI sandbox verification passed in a prior run after quota recovery, but not with artifact writing enabled.
 - Supabase production live write/delete verification passed with explicit user approval and a production-specific confirmation flag.
 - `.env.local` contains live provider credentials locally and remains gitignored. Do not print or commit secrets.
 
@@ -49,24 +54,29 @@ Relevant prior completed work that still matters:
 
 Main files changed in this pass:
 
-- `src/lib/article-quality.ts`
-- `tests/unit/article-quality.test.ts`
+- `.env.live.example`
+- `docs/testing.md`
+- `docs/quality-audit.md`
+- `tests/live/openai.live.test.ts`
+- `tests/live/openai-live-artifacts.ts`
+- `tests/unit/openai-live-artifacts.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
-- Working tree after the implementation commit was ahead of origin by one commit before this handoff update.
-- Local quality gate is green for the article-quality implementation:
-  - focused `article-quality` unit test passes
-  - full `npm.cmd run quality` passes
-- Current handoff update is documentation-only.
-- PR #1 is green after this pass was pushed.
+- Local quality gate is green for this implementation.
+- The artifact helper is covered by unit tests and does not affect normal CI because live OpenAI tests are manual/live-only.
+- OpenAI live readiness is green.
+- The artifact-producing live OpenAI run is currently blocked by provider quota/rate limiting.
+- PR #1 needs CodeRabbit/GitHub Actions re-check after the new implementation and handoff commits are pushed.
 
 ## 6. Known Issues
 
+- `npm.cmd run test:live:openai` with artifact writing enabled failed on 2026-07-08 at the initial Responses API health call due to OpenAI quota/rate limiting. Re-run after the provider limit recovers.
+- No live OpenAI review artifacts were produced in this pass.
 - WordPress live posting was not run in this pass.
-- Real generated article quality still needs human review on representative customer inputs, even though the live OpenAI sandbox contract passed previously.
-- The live OpenAI test incurs provider cost and takes roughly 3 minutes for the current fixture set.
+- Real generated article quality still needs human review on representative customer inputs.
+- The live OpenAI test incurs provider cost and takes roughly 3 minutes when provider quota is available.
 - Supabase production live write/delete has passed, but keep using `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1` only when explicitly authorized. Do not set `AIO_LIVE_CONFIRM_NON_PRODUCTION=1` for the production project.
 - `.env.local` contains a production Supabase service role key. Do not print, commit, or paste it anywhere.
 - Do not mark the active 100/100 goal complete yet.
@@ -75,10 +85,10 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed on PR #1 after this pass was pushed.
+- Review status: Passed before this pass at PR head `061e115`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
-- Deferred findings: none for this pass.
+- Deferred findings: current head needs CodeRabbit review after push.
 - False positives / not applicable: none.
 
 ## 8. Optional Bugbot Findings
@@ -96,44 +106,40 @@ Commands run during this pass:
 
 ```bash
 gh pr checks 1 --repo kotakase2022-jpg/aio
-npx.cmd vitest run tests/unit/article-quality.test.ts
+npx.cmd vitest run tests/unit/openai-live-artifacts.test.ts
+npm.cmd run typecheck
 npm.cmd run quality
-git commit -m "Tighten question heading quality checks"
-git push
-gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
+npm.cmd run test:live:readiness:openai
+$env:AIO_LIVE_OPENAI_WRITE_ARTIFACTS='1'; $env:AIO_LIVE_OPENAI_ARTIFACT_DIR='test-results/live-openai'; npm.cmd run test:live:openai
+git commit -m "Add OpenAI live review artifacts"
 ```
 
 Results:
 
-- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at pre-pass PR head `53415fb`.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at pre-pass PR head `061e115`.
   - CodeRabbit passed.
-  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m45s.
-- Focused Vitest: passed, 1 file / 76 tests.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m35s.
+- Focused Vitest: passed, 1 file / 2 tests.
+- `npm.cmd run typecheck`: passed.
 - `npm.cmd run quality`: passed.
   - typecheck passed
   - lint passed
-  - test integrity passed, 47 files
-  - unit/integration tests passed, 43 files / 336 tests
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 338 tests
   - contract tests passed, 3 files / 13 tests
   - coverage passed: statements 88.39%, branches 76.39%, functions 92.35%, lines 88.83%
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
-- Pre-commit hook for `403b1b7`: passed.
+- `npm.cmd run test:live:readiness:openai`: passed.
+- `npm.cmd run test:live:openai` with artifact writing enabled: failed before generation samples.
+  - Failure: OpenAI quota/rate-limit `ApiError`.
+  - Artifact files: none produced.
+- Pre-commit hook for `a113787`: passed.
   - lint passed
   - test integrity passed
-- Pre-push hook after the article-quality and handoff commits: passed.
-  - lint passed
-  - typecheck passed
-  - test integrity passed
-  - unit/integration tests passed, 43 files / 336 tests
-  - contract tests passed, 3 files / 13 tests
-- PR #1 checks after push: passed.
-  - CodeRabbit passed.
-  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m37s.
 
 Not run in this pass:
 
-- `npm.cmd run test:live:openai`
 - `npm.cmd run test:live:supabase`
 - `npm.cmd run test:live:wordpress`
 
@@ -141,28 +147,31 @@ Not run in this pass:
 
 Next Claude Code should:
 
-1. Review `src/lib/article-quality.ts` and `tests/unit/article-quality.test.ts` for the new heading-section logic.
-2. Confirm managed FAQ/source/author blocks remain excluded from quality false positives while normal question-style article sections are no longer hidden.
-3. Re-check PR #1 CodeRabbit and GitHub Actions on the final pushed head.
-4. If checks remain green, move next toward human review of representative generated articles or WordPress live/sandbox verification if explicitly requested.
+1. Review the new live OpenAI artifact helper for secret hygiene and path safety.
+2. Re-check PR #1 CodeRabbit and GitHub Actions after this handoff is pushed.
+3. After OpenAI quota/rate limiting recovers, run:
+
+```bash
+$env:AIO_LIVE_OPENAI_WRITE_ARTIFACTS='1'
+$env:AIO_LIVE_OPENAI_ARTIFACT_DIR='test-results/live-openai'
+npm.cmd run test:live:openai
+```
+
+4. Inspect the generated JSON/HTML artifacts for human editorial quality, not just machine score.
+5. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `src/lib/article-quality.ts`: verify `removeAuxiliaryQualityHtml(html)` before `extractHeadingSections` is the right boundary for managed helper blocks.
-- `tests/unit/article-quality.test.ts`: verify the new regression test checks behavior rather than implementation details.
-- Existing OpenAI article-generation changes from the prior pass remain worth reviewing:
-  - managed FAQ/key-takeaway/source fallback HTML
-  - source URL safety filtering
-  - sentence boundary handling for English and HTML block boundaries
-- Supabase production live guard from the prior pass remains worth reviewing:
-  - `scripts/check-live-readiness.mjs`
-  - `tests/live/live-test-helpers.ts`
-  - `tests/live/supabase.live.test.ts`
-  - `tests/unit/live-readiness-script.test.ts`
+- `tests/live/openai-live-artifacts.ts`: confirm artifacts are useful for human review and do not leak secrets.
+- `tests/live/openai.live.test.ts`: confirm the generated sample data is reused consistently between generation assertions and artifact writing.
+- `tests/unit/openai-live-artifacts.test.ts`: confirm the behavior tests cover disabled/enabled artifact writing and payload contents.
+- `docs/testing.md` and `.env.live.example`: confirm the new flags are clear.
+- `docs/quality-audit.md`: confirm the current score and remaining proof gaps match the actual state.
 
 ## 12. Risk Notes
 
-- The old `isQuestionLikeAuxiliaryHeading` risk is addressed in this pass by removing the heuristic and pre-removing managed auxiliary blocks before heading-section extraction.
+- Artifact HTML includes `result.body_html`; `generateAioArticle` sanitizes this before returning. Keep this assumption in mind if future tests write raw provider output.
+- Artifact files are written under ignored `test-results/` by default. Do not move them into tracked paths unless they are manually scrubbed and intentionally committed.
 - Provider/model behavior can drift. Keep deterministic local article-quality scoring as the final safety cap.
 - WordPress live posting still needs sandbox or explicit production approval before execution.
 - Production Supabase live verification was explicitly authorized and passed previously, but should remain guarded.
