@@ -129,7 +129,7 @@ reference information, and competitor-signal reflection.
 Set `OPENAI_LIVE_TEXT_MODEL` when the live sandbox should use a different model from the app's
 normal `OPENAI_TEXT_MODEL` setting.
 
-Supabase live checks require a non-production project:
+Supabase live checks should normally use a non-production project:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
@@ -144,6 +144,20 @@ appears in logs, and deletes the row in cleanup. Use only a staging project with
 installed. If the sandbox host does not contain an obvious sandbox marker such as `sandbox`,
 `staging`, `test`, `dev`, `preview`, or `demo` (for example a randomly named Supabase project),
 add the exact hostname to `AIO_LIVE_SANDBOX_HOST_ALLOWLIST` after verifying it is not production.
+
+If the user explicitly approves production write/delete verification, do not set
+`AIO_LIVE_CONFIRM_NON_PRODUCTION=1`. Use the production-specific confirmation instead:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+AIO_LIVE_SUPABASE_ALLOW_WRITE=1
+AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1
+```
+
+Production live verification must remain limited to the disposable `live-contract-*` generation job
+row created by the test and its cleanup delete. Never commit `SUPABASE_SERVICE_ROLE_KEY`, and never
+set both `AIO_LIVE_CONFIRM_NON_PRODUCTION=1` and `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1`.
 
 WordPress live checks require a sandbox WordPress site and Application Password:
 

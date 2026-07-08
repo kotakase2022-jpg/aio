@@ -58,6 +58,22 @@ export function expectNonProductionConfirmed() {
   ).toBe("1");
 }
 
+export function expectSupabaseWriteTargetConfirmed() {
+  const nonProductionConfirmed =
+    cleanEnvValue(process.env.AIO_LIVE_CONFIRM_NON_PRODUCTION) === "1";
+  const productionWriteConfirmed =
+    cleanEnvValue(process.env.AIO_LIVE_CONFIRM_PRODUCTION_WRITE) === "1";
+
+  expect(
+    nonProductionConfirmed && productionWriteConfirmed,
+    "Set only one Supabase live write confirmation flag.",
+  ).toBe(false);
+  expect(
+    nonProductionConfirmed || productionWriteConfirmed,
+    "Set AIO_LIVE_CONFIRM_NON_PRODUCTION=1 for sandbox/staging Supabase, or AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1 only after explicit production write/delete approval.",
+  ).toBe(true);
+}
+
 export function cleanEnvValue(value: string | undefined) {
   return (value ?? "")
     .replace(/^\uFEFF/, "")

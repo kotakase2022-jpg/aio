@@ -1,10 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import type { GenerationJob } from "@/types/aio";
 import {
   cleanEnvValue,
   expectLiveContractEnabled,
-  expectNonProductionConfirmed,
   expectRequiredEnv,
+  expectSupabaseWriteTargetConfirmed,
   loadLiveEnv,
 } from "./live-test-helpers";
 
@@ -14,7 +15,7 @@ describe("Supabase live sandbox contract", () => {
     async () => {
       loadLiveEnv();
       expectLiveContractEnabled();
-      expectNonProductionConfirmed();
+      expectSupabaseWriteTargetConfirmed();
       expect(cleanEnvValue(process.env.AIO_LIVE_SUPABASE_ALLOW_WRITE)).toBe("1");
       expectRequiredEnv(["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
       vi.resetModules();
@@ -26,16 +27,17 @@ describe("Supabase live sandbox contract", () => {
         markGenerationJobWordpressPost,
         saveGenerationJob,
       } = await import("@/lib/server/generation-jobs");
-      const id = `live-contract-${Date.now()}`;
+      const id = randomUUID();
+      const draftId = `live-contract-${Date.now()}-${id}`;
       const baseJob = createCompletedGenerationJob();
       const job = {
         ...baseJob,
         id,
-        draftId: `${id}-draft`,
+        draftId,
         draft: baseJob.draft
           ? {
               ...baseJob.draft,
-              id: `${id}-draft`,
+              id: draftId,
             }
           : baseJob.draft,
         createdAt: new Date().toISOString(),
@@ -51,7 +53,7 @@ describe("Supabase live sandbox contract", () => {
         expect(listed.some((item) => item.id === job.id)).toBe(true);
 
         await markGenerationJobWordpressPost({
-          draftId: `${id}-draft`,
+          draftId,
           status: "draft",
           postUrl: "https://sandbox.example.com/live-contract-draft/",
         });

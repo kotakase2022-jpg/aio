@@ -142,6 +142,51 @@ describe("check-live-readiness script", () => {
       expect(result.stdout).toContain("- supabase: ready");
     });
   });
+
+  test("allows Supabase production writes only with the explicit production confirmation flag", async () => {
+    await withTempProject(async (projectDir) => {
+      await writeFile(
+        path.join(projectDir, ".env.live.local"),
+        [
+          "AIO_LIVE_CONTRACT_TESTS=1",
+          "NEXT_PUBLIC_SUPABASE_URL=https://production.example.com",
+          "SUPABASE_SERVICE_ROLE_KEY=production-service-role",
+          "AIO_LIVE_SUPABASE_ALLOW_WRITE=1",
+          "AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await runReadiness(projectDir, "supabase");
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("- supabase: ready");
+    });
+  });
+
+  test("fails closed when Supabase production and non-production confirmations are both set", async () => {
+    await withTempProject(async (projectDir) => {
+      await writeFile(
+        path.join(projectDir, ".env.live.local"),
+        [
+          "AIO_LIVE_CONTRACT_TESTS=1",
+          "NEXT_PUBLIC_SUPABASE_URL=https://production.example.com",
+          "SUPABASE_SERVICE_ROLE_KEY=production-service-role",
+          "AIO_LIVE_SUPABASE_ALLOW_WRITE=1",
+          "AIO_LIVE_CONFIRM_NON_PRODUCTION=1",
+          "AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await runReadiness(projectDir, "supabase");
+
+      expect(result.code).toBe(1);
+      expect(result.stdout).toContain(
+        "Set only one of AIO_LIVE_CONFIRM_NON_PRODUCTION=1 or AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1.",
+      );
+    });
+  });
 });
 
 async function withTempProject(callback: (projectDir: string) => Promise<void>) {

@@ -56,12 +56,10 @@ function checkProvider(provider) {
           "NEXT_PUBLIC_SUPABASE_URL",
           "SUPABASE_SERVICE_ROLE_KEY",
           "AIO_LIVE_SUPABASE_ALLOW_WRITE",
-          "AIO_LIVE_CONFIRM_NON_PRODUCTION",
         ]),
         ...requireValue("AIO_LIVE_CONTRACT_TESTS", "1"),
         ...requireValue("AIO_LIVE_SUPABASE_ALLOW_WRITE", "1"),
-        ...requireValue("AIO_LIVE_CONFIRM_NON_PRODUCTION", "1"),
-        ...warnProductionLikeUrl("NEXT_PUBLIC_SUPABASE_URL"),
+        ...supabaseTargetConfirmationErrors("NEXT_PUBLIC_SUPABASE_URL"),
       ],
     };
   }
@@ -122,6 +120,31 @@ function warnProductionLikeUrl(name) {
 
   return [
     `${name} host (${host}) does not look like a sandbox/staging host. Add the exact host to AIO_LIVE_SANDBOX_HOST_ALLOWLIST only after verifying it is not production.`,
+  ];
+}
+
+function supabaseTargetConfirmationErrors(urlName) {
+  const nonProductionConfirmed =
+    cleanEnvValue(process.env.AIO_LIVE_CONFIRM_NON_PRODUCTION) === "1";
+  const productionWriteConfirmed =
+    cleanEnvValue(process.env.AIO_LIVE_CONFIRM_PRODUCTION_WRITE) === "1";
+
+  if (nonProductionConfirmed && productionWriteConfirmed) {
+    return [
+      "Set only one of AIO_LIVE_CONFIRM_NON_PRODUCTION=1 or AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1.",
+    ];
+  }
+
+  if (productionWriteConfirmed) {
+    return [];
+  }
+
+  if (nonProductionConfirmed) {
+    return warnProductionLikeUrl(urlName);
+  }
+
+  return [
+    "Set AIO_LIVE_CONFIRM_NON_PRODUCTION=1 for sandbox/staging Supabase, or AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1 only after explicit production write/delete approval.",
   ];
 }
 
