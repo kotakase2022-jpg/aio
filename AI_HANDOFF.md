@@ -5,9 +5,9 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: Previous handoffs kept Loop 3 continuation for the long-running reliability / live-verification / non-commodity article-quality objective. This pass continued Loop 3 by addressing a human editorial quality issue found in fresh OpenAI live artifacts.
+- Loop number inferred from: Previous handoffs kept Loop 3 continuation for the long-running reliability / live-verification / non-commodity article-quality objective. This pass continued Loop 3 by turning the latest human editorial article-quality findings into deterministic checks and repair guidance.
 - Phase: Article Quality Improvement / Live Verification / Handoff
-- Last updated: 2026-07-08 18:14 +09:00
+- Last updated: 2026-07-08 18:35 +09:00
 
 ## 1. Current Goal
 
@@ -15,16 +15,16 @@ Current objective:
 
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
 - This continuation focused on the next article-quality proof gap that could be executed safely:
-  - regenerate representative OpenAI live artifacts;
-  - human-read the openings and first H2s for AI-like repetition;
-  - tighten the article-generation prompt so a definition-style opening is not followed by a first H2/H3 that repeats the same definition angle.
+  - promote the repeated opening-definition / first-heading issue from prompt-only guidance into deterministic article-quality evaluation;
+  - keep quality edit guidance and regeneration actions specialized for the new check id;
+  - recognize concrete SaaS onboarding operational FAQ answers as practical specificity instead of generic filler.
 - Overall goal is still not complete. Do not call the goal complete until WordPress sandbox/live posting is proven and representative generated outputs receive human editorial review.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `f6d1c24 Reduce repetitive opening heading in article drafts`
-- Latest checked local quality state: `f6d1c24`, verified by `npm.cmd run quality`.
+- Latest implementation commit: `ee1a9de Add deterministic checks for repetitive heading quality`
+- Latest checked local quality state: `ee1a9de`, verified by `npm.cmd run quality`.
 - Latest pushed code-bearing / handoff head checked before this final status-only update: `5abd638 Record hosted checks after live article cleanup`
 - Hosted state checked for `5abd638`:
   - CodeRabbit: success
@@ -67,6 +67,13 @@ Completed in this Codex pass:
   - "初期設定完了をゴールにすると3週目で利用が止まる"
   - "BtoBマーケティングチームが最初に決めるべき分離ルール"
 - Re-ran focused verification and full `npm.cmd run quality`; both passed.
+- Promoted the first-heading repetition issue into deterministic quality evaluation:
+  - `src/lib/article-quality.ts` now emits `opening-heading-angle` when a definition-style opening paragraph is followed by a first H2/H3 that repeats the definition angle.
+  - `quality-edit-guidance` and `quality-regeneration-action` now provide specialized instructions for that check id.
+- Updated FAQ specificity so concrete SaaS operational terms such as management education, usage logs, work outputs, approval flow, approval owners, and continuation decisions count as practical answer specificity.
+- Added unit coverage for the new article-quality check, the valid first-heading decision-angle case, SaaS onboarding FAQ specificity, and the quality-guidance / regeneration-action coverage guard.
+- Re-ran OpenAI live generation after these deterministic evaluator updates. The latest three representative artifacts have no failed article, title, FAQ, or meta checks.
+- Re-ran full `npm.cmd run quality`; it passed.
 
 ## 4. Files Changed
 
@@ -76,6 +83,10 @@ Main files changed:
 - `src/lib/server/article-generation.ts`
 - `tests/unit/article-quality.test.ts`
 - `tests/unit/article-generation.test.ts`
+- `src/lib/faq-quality.ts`
+- `src/lib/quality-edit-guidance.ts`
+- `src/lib/quality-regeneration-action.ts`
+- `tests/unit/faq-quality.test.ts`
 - `docs/quality-audit.md`
 - `AI_HANDOFF.md`
 
@@ -86,11 +97,11 @@ Current state:
 - Focused tests are green.
 - Local full quality gate is green.
 - OpenAI live generation passed after the numeric-context and main-body-length pass.
-- Latest OpenAI live artifacts from the final successful post-prompt run:
-  - `2026-07-08T09-06-29-174Z-one-person-contractor-workers-compensation.json`: score 88; article body 98, title 100, FAQ 100, meta 100; article-body failed checks: none.
-  - `2026-07-08T09-07-49-202Z-saas-onboarding-operations.json`: score 88; article body 100, title 100, FAQ 100, meta 100; article-body failed checks: none.
-  - `2026-07-08T09-08-48-443Z-aio-content-operations.json`: score 90; article body 100, title 100, FAQ 100, meta 100; article-body failed checks: none.
-- The latest human-read artifact sample no longer repeats the opening definition angle in the first H2.
+- Latest OpenAI live artifacts from the final successful deterministic-check run:
+  - `2026-07-08T09-28-51-571Z-one-person-contractor-workers-compensation.json`: score 88; article body 100, title 100, FAQ 100, meta 100; failed checks: none.
+  - `2026-07-08T09-30-02-161Z-saas-onboarding-operations.json`: score 88; article body 98, title 100, FAQ 100, meta 100; failed checks: none.
+  - `2026-07-08T09-31-06-515Z-aio-content-operations.json`: score 88; article body 100, title 100, FAQ 100, meta 100; failed checks: none.
+- The latest artifact sample no longer repeats the opening definition angle in the first H2, and FAQ specificity now recognizes concrete SaaS operational answers.
 - WordPress live readiness is still not configured locally and is expected to fail closed before live calls.
 - Supabase production write/delete passed again in this continuation with explicit user approval and the production-specific confirmation flag.
 
@@ -107,7 +118,7 @@ Known issues:
   - `AIO_LIVE_WORDPRESS_ALLOW_DELETE`
   - `AIO_LIVE_CONFIRM_NON_PRODUCTION`
 - WordPress live posting was not run in this pass.
-- OpenAI live samples now have no deterministic article-body failed checks, but model self-evaluation remains 88-91 because the model honestly notes missing real public/sandbox data. Do not inflate the score by hiding those caveats.
+- OpenAI live samples now have no deterministic article-body / FAQ / title / meta failed checks, but model self-evaluation remains 88 because the model honestly notes missing real public/sandbox data. Do not inflate the score by hiding those caveats.
 - Supabase production live write/delete has passed again in this continuation, but keep using `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1` only when explicitly authorized. Do not set `AIO_LIVE_CONFIRM_NON_PRODUCTION=1` for the production project.
 - `.env.local` contains live provider credentials locally. Do not print, commit, or paste secrets anywhere.
 - Do not mark the active 100/100 goal complete yet.
@@ -152,6 +163,13 @@ AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1 AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live
 npx.cmd vitest run tests/unit/article-generation.test.ts
 npm.cmd run typecheck
 AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1 AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai npm.cmd run test:live:openai
+npm.cmd run quality
+npx.cmd vitest run tests/unit/article-quality.test.ts
+npx.cmd vitest run tests/unit/article-quality.test.ts tests/unit/faq-quality.test.ts
+AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1 AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai npm.cmd run test:live:openai
+npm.cmd run quality
+npx.cmd vitest run tests/unit/article-quality.test.ts tests/unit/faq-quality.test.ts tests/unit/quality-edit-guidance.test.ts tests/unit/quality-regeneration-action-coverage.test.ts
+npm.cmd run typecheck
 npm.cmd run quality
 ```
 
@@ -200,6 +218,25 @@ Results:
   - coverage passed: statements 88.53%, branches 76.51%, functions 92.48%, lines 88.96%
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
+- `npx.cmd vitest run tests/unit/article-quality.test.ts`: passed, 1 file / 82 tests.
+- `npx.cmd vitest run tests/unit/article-quality.test.ts tests/unit/faq-quality.test.ts`: passed, 2 files / 91 tests.
+- Artifact-producing `npm.cmd run test:live:openai`: passed, 1 file / 1 test, in 246.71s; exposed a SaaS FAQ specificity false negative in deterministic review.
+- First `npm.cmd run quality` after adding `opening-heading-angle`: failed as designed because `quality-edit-guidance` and `quality-regeneration-action` had no specialized handling for the new check id.
+- After adding specialized guidance/actions, `npx.cmd vitest run tests/unit/article-quality.test.ts tests/unit/faq-quality.test.ts tests/unit/quality-edit-guidance.test.ts tests/unit/quality-regeneration-action-coverage.test.ts`: passed, 4 files / 106 tests.
+- `npm.cmd run typecheck`: passed.
+- Final artifact-producing `npm.cmd run test:live:openai`: passed, 1 file / 1 test, in 212.52s.
+  - `2026-07-08T09-28-51-571Z-one-person-contractor-workers-compensation.json`: score 88; article body 100, title 100, FAQ 100, meta 100; failed checks: none.
+  - `2026-07-08T09-30-02-161Z-saas-onboarding-operations.json`: score 88; article body 98, title 100, FAQ 100, meta 100; failed checks: none.
+  - `2026-07-08T09-31-06-515Z-aio-content-operations.json`: score 88; article body 100, title 100, FAQ 100, meta 100; failed checks: none.
+- Final `npm.cmd run quality`: passed.
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 349 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.6%, branches 76.64%, functions 92.52%, lines 89.03%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
 
 Not run in this pass:
 
@@ -209,17 +246,20 @@ Not run in this pass:
 
 Next Claude Code should:
 
-1. Review implementation commits `4b58edc` and `f6d1c24`, especially whether previous-sentence numeric support is narrow enough and whether the first-heading-angle prompt improves editorial naturalness without overconstraining.
-2. Human-read the latest ignored OpenAI live HTML artifacts for editorial naturalness, because the deterministic checks are now clean but the model still self-scores 88-90.
+1. Review implementation commits `4b58edc`, `f6d1c24`, and `ee1a9de`, especially whether previous-sentence numeric support, first-heading-angle evaluation, and SaaS FAQ operational specificity are narrow enough.
+2. Human-read the latest ignored OpenAI live HTML artifacts for editorial naturalness, because the deterministic checks are now clean but the model still self-scores 88.
 3. Prepare a disposable WordPress sandbox and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 
 ## 11. Suggested Review Scope for Claude Code
 
 Suggested review scope:
 
-- `src/lib/article-quality.ts`: verify previous-sentence numeric support cannot hide unsupported performance claims.
+- `src/lib/article-quality.ts`: verify previous-sentence numeric support cannot hide unsupported performance claims, and `opening-heading-angle` only flags repeated definition-style first headings after a definition opening.
+- `src/lib/faq-quality.ts`: verify SaaS operational terms are specific enough without allowing short generic answers to pass.
 - `src/lib/server/article-generation.ts`: verify the main-body-length and first-heading-angle prompts help without encouraging filler or mechanical headings.
 - `tests/unit/article-quality.test.ts`: verify the new numeric support test reflects a real live false positive.
+- `tests/unit/faq-quality.test.ts`: verify the SaaS onboarding FAQ specificity case reflects a real live false negative.
+- `src/lib/quality-edit-guidance.ts` and `src/lib/quality-regeneration-action.ts`: verify the new check id has useful repair guidance.
 - `tests/unit/article-generation.test.ts`: verify the prompt contracts are useful and not overfit.
 - `docs/quality-audit.md`: confirm live OpenAI evidence and remaining proof gaps are accurate.
 - Latest `test-results/live-openai/*.html` artifacts: editorial-read current outputs before claiming article-quality completion.
@@ -229,7 +269,7 @@ Suggested review scope:
 Risks / human confirmation needed:
 
 - OpenAI live artifact generation passed, but provider behavior is stochastic and can drift.
-- The latest deterministic body checks are clean, and the first H2s in the current sample no longer repeat the opening definition angle. The model's self-evaluation still reflects missing real source data. Do not treat that as a bug unless product requirements prefer deterministic scoring over model self-review.
+- The latest deterministic body, FAQ, title, and meta checks are clean, and the first H2s in the current sample no longer repeat the opening definition angle. The model's self-evaluation still reflects missing real source data. Do not treat that as a bug unless product requirements prefer deterministic scoring over model self-review.
 - WordPress live posting still needs sandbox credentials before execution.
 - The live WordPress test creates and deletes disposable resources; keep post, media, delete, and non-production confirmations explicit.
 - Production Supabase live verification was previously explicitly authorized and passed, but should remain guarded and should not become the routine release path.
