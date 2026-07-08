@@ -25,7 +25,7 @@ Current objective:
 - Last known good local quality commit: `7ca6e71`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - CodeRabbit OSS review status: Passed on PR #1 after this pass was pushed.
-- GitHub Actions status: `Typecheck, lint, tests, E2E, build` passed on PR #1 after this pass was pushed in 3m50s.
+- GitHub Actions status: `Typecheck, lint, tests, E2E, build` passed on PR #1 after this pass was pushed.
 
 ## 3. What Was Done
 
@@ -154,7 +154,7 @@ Results:
   - contract tests passed, 3 files / 13 tests
 - PR #1 checks after push: passed.
   - CodeRabbit passed.
-  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m50s.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed.
 
 Not run in this pass:
 
