@@ -95,15 +95,29 @@ describe("WordPress live sandbox contract", () => {
         expect(postId).toBeGreaterThan(0);
         expect(mediaId).toBeGreaterThan(0);
       } finally {
+        const cleanupFailures: string[] = [];
         if (postId) {
-          const cleanup = await deleteWordpressPost(siteUrl, authHeader, postId);
-          expect(cleanup.ok).toBe(true);
+          try {
+            const cleanup = await deleteWordpressPost(siteUrl, authHeader, postId);
+            if (!cleanup.ok) {
+              cleanupFailures.push(formatCleanupFailure("post", postId, cleanup));
+            }
+          } catch (error) {
+            cleanupFailures.push(formatCleanupException("post", postId, error));
+          }
         }
         if (mediaId) {
-          const mediaCleanup = await deleteWordpressMedia(siteUrl, authHeader, mediaId);
-          expect(mediaCleanup.ok).toBe(true);
+          try {
+            const mediaCleanup = await deleteWordpressMedia(siteUrl, authHeader, mediaId);
+            if (!mediaCleanup.ok) {
+              cleanupFailures.push(formatCleanupFailure("media", mediaId, mediaCleanup));
+            }
+          } catch (error) {
+            cleanupFailures.push(formatCleanupException("media", mediaId, error));
+          }
         }
         await rm(tempDir, { recursive: true, force: true });
+        expect(cleanupFailures).toEqual([]);
       }
     },
     120_000,
@@ -148,4 +162,24 @@ async function deleteWordpressMedia(siteUrl: string, authHeader: string, mediaId
     status: response.status,
     detail: await response.text().catch(() => ""),
   };
+}
+
+function formatCleanupFailure(
+  resource: "post" | "media",
+  id: number,
+  result: { status: number; detail: string },
+) {
+  return `${resource} ${id} cleanup failed with HTTP ${result.status}: ${summarizeCleanupDetail(
+    result.detail,
+  )}`;
+}
+
+function formatCleanupException(resource: "post" | "media", id: number, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return `${resource} ${id} cleanup threw: ${summarizeCleanupDetail(message)}`;
+}
+
+function summarizeCleanupDetail(detail: string) {
+  const trimmed = detail.trim();
+  return trimmed.length > 500 ? `${trimmed.slice(0, 500)}...` : trimmed;
 }
