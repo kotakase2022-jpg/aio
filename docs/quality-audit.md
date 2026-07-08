@@ -633,6 +633,17 @@ quality checks and live OpenAI timeout handling:
 - Article generation uses a 150 second request timeout, still inside the `/api/generate-article`
   route's 180 second maximum duration.
 
+The current local branch also includes implementation commit `4b58edc`, which addresses the next
+OpenAI live artifact weaknesses:
+
+- Numeric-claim support now recognizes a short previous sentence when it gives real first-party,
+  estimate, condition, caveat, or field-observation context. This fixes the live FAQ case where
+  "3回目" was preceded by "当社支援で相談が出やすい目安です。"
+- The article-generation prompt now requires the main body before FAQ, author, source, and other
+  auxiliary blocks to carry enough substance. For a 2,000-character request it asks for roughly
+  1,500+ visible Japanese characters in the main body, using source-backed examples, decision
+  criteria, caveats, table rows, or field observations rather than filler.
+
 Additional manual PC browser smoke on 2026-07-06:
 
 - Started a local dev server with dummy test credentials only.
@@ -661,17 +672,19 @@ Additional manual PC browser smoke on 2026-07-06:
 These gaps prevent a true 100/100 completion claim:
 
 - Live OpenAI generation quality now has fresh artifact-producing evidence from 2026-07-08
-  17:01-17:04 +09:00 after the timeout and evaluator hardening pass. Three representative samples
-  passed the live threshold and wrote ignored JSON/HTML artifacts:
-  - `2026-07-08T08-02-32-424Z-one-person-contractor-workers-compensation.json`: score 88; article
-    body 92, title 100, FAQ 100, meta 100; remaining body issue was `target-length-alignment`.
-  - `2026-07-08T08-03-39-283Z-saas-onboarding-operations.json`: score 88; article body 92, title
-    100, FAQ 100, meta 100; remaining body issue was `section-specificity`.
-  - `2026-07-08T08-04-38-293Z-aio-content-operations.json`: score 88; article body 100, title 100,
-    FAQ 100, meta 100.
+  17:30-17:34 +09:00 after the numeric-context and main-body-length pass. Three representative
+  samples passed the live threshold and wrote ignored JSON/HTML artifacts:
+  - `2026-07-08T08-32-08-408Z-one-person-contractor-workers-compensation.json`: score 88; article
+    body 98, title 100, FAQ 100, meta 100; article-body failed checks: none.
+  - `2026-07-08T08-33-19-923Z-saas-onboarding-operations.json`: score 91; article body 100, title
+    100, FAQ 100, meta 100; article-body failed checks: none.
+  - `2026-07-08T08-34-27-812Z-aio-content-operations.json`: score 91; article body 98, title 100,
+    FAQ 100, meta 100; article-body failed checks: none.
   These artifacts include the repeatable editorial checklist, reader/structure snapshot, and
-  deterministic quality-check breakdown. A final human editorial review remains useful before
-  claiming perfect non-commodity article quality.
+  deterministic quality-check breakdown. The deterministic body checks no longer show failed
+  checks in the latest run, but the model's own self-evaluation still scores 88-91 because it
+  honestly notes missing real public/sandbox data. A final human editorial review remains useful
+  before claiming perfect non-commodity article quality.
 - Supabase production write/delete verification passed again on 2026-07-08 15:53 +09:00 with
   explicit user approval and a production-specific confirmation flag. A long-term staging-only
   procedure is still preferable for routine release checks.
@@ -690,9 +703,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  were green at PR head `4431f35` after the `89fe2b5` implementation pass and the first follow-up
-  handoff update. GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m46s, and
-  CodeRabbit completed successfully. Re-check any subsequent status-only handoff commit if pushed.
+  were green at PR head `2bd2b69` before the local `4b58edc` implementation pass. Re-check hosted
+  Actions and CodeRabbit after the current local commits are pushed.
 
 ## Current Self Score
 
