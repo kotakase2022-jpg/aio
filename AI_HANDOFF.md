@@ -5,25 +5,26 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: Previous handoffs kept Loop 3 continuation for the long-running reliability / live-verification / non-commodity article-quality objective. This short continuation stayed in Loop 3 because it only rechecked the remaining live provider proof gaps and refreshed handoff evidence.
-- Phase: Live Verification / Handoff
-- Last updated: 2026-07-08 17:50 +09:00
+- Loop number inferred from: Previous handoffs kept Loop 3 continuation for the long-running reliability / live-verification / non-commodity article-quality objective. This pass continued Loop 3 by addressing a human editorial quality issue found in fresh OpenAI live artifacts.
+- Phase: Article Quality Improvement / Live Verification / Handoff
+- Last updated: 2026-07-08 18:14 +09:00
 
 ## 1. Current Goal
 
 Current objective:
 
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
-- This short continuation focused on the next remaining proof gap that could be executed safely:
-  - rerun Supabase live readiness and the explicitly approved production write/delete contract test;
-  - confirm WordPress live posting still fails closed before live calls until sandbox credentials and allow flags are configured.
+- This continuation focused on the next article-quality proof gap that could be executed safely:
+  - regenerate representative OpenAI live artifacts;
+  - human-read the openings and first H2s for AI-like repetition;
+  - tighten the article-generation prompt so a definition-style opening is not followed by a first H2/H3 that repeats the same definition angle.
 - Overall goal is still not complete. Do not call the goal complete until WordPress sandbox/live posting is proven and representative generated outputs receive human editorial review.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `4b58edc Tighten numeric and body length quality checks`
-- Latest checked local quality state: `4b58edc`, verified by `npm.cmd run quality`.
+- Latest implementation commit: `f6d1c24 Reduce repetitive opening heading in article drafts`
+- Latest checked local quality state: `f6d1c24`, verified by `npm.cmd run quality`.
 - Latest pushed code-bearing / handoff head checked before this final status-only update: `5abd638 Record hosted checks after live article cleanup`
 - Hosted state checked for `5abd638`:
   - CodeRabbit: success
@@ -57,6 +58,15 @@ Completed in this Codex pass:
 - Ran `npm.cmd run test:live:supabase` with the previously approved production write/delete path; it passed and cleaned up the disposable generation-job record.
 - Ran `npm.cmd run test:live:readiness:wordpress`; it failed closed before live calls because sandbox WordPress credentials and explicit allow flags are not configured.
 - Updated `docs/quality-audit.md` and this handoff with the latest live-provider evidence.
+- Re-ran OpenAI live artifact generation with artifact writing enabled after the Supabase verification pass.
+- Human-read the latest generated openings and first H2s. The deterministic quality checks were clean, but the pre-change live artifacts showed a subtle editorial quality risk: definition-style openings could be followed by a first H2 that repeated the same "Xとは..." angle.
+- Updated `src/lib/server/article-generation.ts` so after a definition-style opening, the first H2/H3 must use a different editorial angle such as the reader's first decision, a failure pattern, a comparison axis, or an operational checkpoint.
+- Added prompt-contract coverage in `tests/unit/article-generation.test.ts`.
+- Re-ran post-change OpenAI live artifact generation. The latest first H2s moved toward decision/failure/operation angles:
+  - "建設業の一人親方が最初に分けるべき確認事項"
+  - "初期設定完了をゴールにすると3週目で利用が止まる"
+  - "BtoBマーケティングチームが最初に決めるべき分離ルール"
+- Re-ran focused verification and full `npm.cmd run quality`; both passed.
 
 ## 4. Files Changed
 
@@ -76,10 +86,11 @@ Current state:
 - Focused tests are green.
 - Local full quality gate is green.
 - OpenAI live generation passed after the numeric-context and main-body-length pass.
-- Latest OpenAI live artifacts from the final successful run:
-  - `2026-07-08T08-32-08-408Z-one-person-contractor-workers-compensation.json`: score 88; article body 98, title 100, FAQ 100, meta 100; article-body failed checks: none.
-  - `2026-07-08T08-33-19-923Z-saas-onboarding-operations.json`: score 91; article body 100, title 100, FAQ 100, meta 100; article-body failed checks: none.
-  - `2026-07-08T08-34-27-812Z-aio-content-operations.json`: score 91; article body 98, title 100, FAQ 100, meta 100; article-body failed checks: none.
+- Latest OpenAI live artifacts from the final successful post-prompt run:
+  - `2026-07-08T09-06-29-174Z-one-person-contractor-workers-compensation.json`: score 88; article body 98, title 100, FAQ 100, meta 100; article-body failed checks: none.
+  - `2026-07-08T09-07-49-202Z-saas-onboarding-operations.json`: score 88; article body 100, title 100, FAQ 100, meta 100; article-body failed checks: none.
+  - `2026-07-08T09-08-48-443Z-aio-content-operations.json`: score 90; article body 100, title 100, FAQ 100, meta 100; article-body failed checks: none.
+- The latest human-read artifact sample no longer repeats the opening definition angle in the first H2.
 - WordPress live readiness is still not configured locally and is expected to fail closed before live calls.
 - Supabase production write/delete passed again in this continuation with explicit user approval and the production-specific confirmation flag.
 
@@ -136,6 +147,12 @@ gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 npm.cmd run test:live:readiness:supabase
 npm.cmd run test:live:readiness:wordpress
 npm.cmd run test:live:supabase
+npm.cmd run test:live:readiness:openai
+AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1 AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai npm.cmd run test:live:openai
+npx.cmd vitest run tests/unit/article-generation.test.ts
+npm.cmd run typecheck
+AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1 AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai npm.cmd run test:live:openai
+npm.cmd run quality
 ```
 
 Results:
@@ -169,18 +186,31 @@ Results:
 - `npm.cmd run test:live:readiness:supabase`: passed.
 - `npm.cmd run test:live:readiness:wordpress`: failed closed before live calls because sandbox WordPress credentials and explicit post/media/delete/non-production allow flags are not configured.
 - `npm.cmd run test:live:supabase`: passed, 1 file / 1 test, in 891ms after readiness; disposable generation-job record was cleaned up.
+- `npm.cmd run test:live:readiness:openai`: passed.
+- Pre-change artifact-producing `npm.cmd run test:live:openai`: passed, 1 file / 1 test, in 247.75s; exposed the human editorial risk that definition openings could be followed by repetitive first H2s.
+- `npx.cmd vitest run tests/unit/article-generation.test.ts`: passed, 1 file / 25 tests.
+- `npm.cmd run typecheck`: passed.
+- Post-change artifact-producing `npm.cmd run test:live:openai`: passed, 1 file / 1 test, in 227.55s.
+- Final `npm.cmd run quality`: passed.
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 346 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.53%, branches 76.51%, functions 92.48%, lines 88.96%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
 
 Not run in this pass:
 
 - `npm.cmd run test:live:wordpress` because sandbox WordPress credentials and allow flags are still not configured.
-- Full `npm.cmd run quality` was not rerun in this short continuation because no application code or tests changed after the already-green local and hosted quality gates.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Review implementation commit `4b58edc`, especially whether previous-sentence numeric support is narrow enough and whether the main-body-length prompt is not overconstraining.
-2. Human-read the latest ignored OpenAI live HTML artifacts for editorial naturalness, because the deterministic checks are now clean but the model still self-scores 88-91.
+1. Review implementation commits `4b58edc` and `f6d1c24`, especially whether previous-sentence numeric support is narrow enough and whether the first-heading-angle prompt improves editorial naturalness without overconstraining.
+2. Human-read the latest ignored OpenAI live HTML artifacts for editorial naturalness, because the deterministic checks are now clean but the model still self-scores 88-90.
 3. Prepare a disposable WordPress sandbox and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 
 ## 11. Suggested Review Scope for Claude Code
@@ -188,9 +218,9 @@ Next Claude Code should:
 Suggested review scope:
 
 - `src/lib/article-quality.ts`: verify previous-sentence numeric support cannot hide unsupported performance claims.
-- `src/lib/server/article-generation.ts`: verify the main-body-length prompt helps without encouraging filler.
+- `src/lib/server/article-generation.ts`: verify the main-body-length and first-heading-angle prompts help without encouraging filler or mechanical headings.
 - `tests/unit/article-quality.test.ts`: verify the new numeric support test reflects a real live false positive.
-- `tests/unit/article-generation.test.ts`: verify the prompt contract is useful and not overfit.
+- `tests/unit/article-generation.test.ts`: verify the prompt contracts are useful and not overfit.
 - `docs/quality-audit.md`: confirm live OpenAI evidence and remaining proof gaps are accurate.
 - Latest `test-results/live-openai/*.html` artifacts: editorial-read current outputs before claiming article-quality completion.
 
@@ -199,7 +229,7 @@ Suggested review scope:
 Risks / human confirmation needed:
 
 - OpenAI live artifact generation passed, but provider behavior is stochastic and can drift.
-- The latest deterministic body checks are clean, but the model's self-evaluation still reflects missing real source data. Do not treat that as a bug unless product requirements prefer deterministic scoring over model self-review.
+- The latest deterministic body checks are clean, and the first H2s in the current sample no longer repeat the opening definition angle. The model's self-evaluation still reflects missing real source data. Do not treat that as a bug unless product requirements prefer deterministic scoring over model self-review.
 - WordPress live posting still needs sandbox credentials before execution.
 - The live WordPress test creates and deletes disposable resources; keep post, media, delete, and non-production confirmations explicit.
 - Production Supabase live verification was previously explicitly authorized and passed, but should remain guarded and should not become the routine release path.
