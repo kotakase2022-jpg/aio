@@ -77,6 +77,7 @@ import type {
 const activeGenerationJobStorageKey = "aio-active-generation-job-id";
 const lastClosingTextStorageKey = "aio-last-closing-text";
 const lastAuthorStorageKey = "aio-last-author";
+const generatedImageSlotOrder = ["featured", "inline-1", "inline-2"] as const;
 
 function getGeneratedImageSlots(images: ArticleImage[]) {
   return new Set(
@@ -89,9 +90,16 @@ function getGeneratedImageSlots(images: ArticleImage[]) {
 function getMissingGeneratedImagePrompts(
   imagePrompts: ArticleGenerationResult["image_prompts"],
   images: ArticleImage[],
+  requestedImageCount?: ImageCount,
 ) {
+  const expectedPrompts =
+    typeof requestedImageCount === "number"
+      ? imagePrompts.filter((prompt) =>
+          generatedImageSlotOrder.slice(0, requestedImageCount).includes(prompt.slot),
+        )
+      : imagePrompts;
   const generatedImageSlots = getGeneratedImageSlots(images);
-  return imagePrompts.filter((prompt) => !generatedImageSlots.has(prompt.slot));
+  return expectedPrompts.filter((prompt) => !generatedImageSlots.has(prompt.slot));
 }
 
 const tonePresets = [
@@ -903,6 +911,7 @@ export function ArticleGeneratorApp() {
     const missingImagePrompts = getMissingGeneratedImagePrompts(
       draft.aiResult.image_prompts,
       draft.images,
+      draft.inputPayload.imageCount,
     );
     if (generatedImages.length === 0 && missingImagePrompts.length === 0) {
       setActiveError("再作成できる生成画像または画像プロンプトがありません。");
@@ -2395,8 +2404,9 @@ function ArticlePreview({
       getMissingGeneratedImagePrompts(
         draft.aiResult.image_prompts,
         draft.images,
+        draft.inputPayload.imageCount,
       ),
-    [draft.aiResult.image_prompts, draft.images],
+    [draft.aiResult.image_prompts, draft.images, draft.inputPayload.imageCount],
   );
   const canRegenerateImages =
     generatedImageSlots.size > 0 || missingGeneratedImagePrompts.length > 0;

@@ -1232,6 +1232,53 @@ test("missing generated image recovery is visible when only some image slots fai
   expect(errors()).toEqual([]);
 });
 
+test("missing generated image recovery ignores prompts beyond requested image count", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft = {
+    ...completedJob.draft!,
+    inputPayload: {
+      ...completedJob.draft!.inputPayload,
+      imageCount: 1,
+    },
+    aiResult: {
+      ...completedJob.draft!.aiResult,
+      image_prompts: [
+        ...completedJob.draft!.aiResult.image_prompts,
+        {
+          slot: "inline-1",
+          purpose: "Extra prompt beyond requested image count",
+          prompt: "Extra workflow visual that should not be required",
+          alt_text: "Extra workflow image",
+        },
+      ],
+    },
+    images: [
+      {
+        ...completedJob.draft!.images[0],
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      },
+    ],
+  };
+  await mockCommonApiRoutes(page, completedJob);
+
+  await login(page);
+  await page.getByRole("button", { name: "1枚" }).click();
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text for intentionally single image generation.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
+  ).toBeVisible();
+
+  await expect(page.getByTestId("missing-generated-images-recovery")).toHaveCount(0);
+  await expect(page.locator('img[alt="AIO workflow hero image"]').first()).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("drafts with failed initial image generation can regenerate from saved prompts", async ({
   page,
 }) => {
