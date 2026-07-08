@@ -494,7 +494,7 @@ export function evaluateArticleQuality(
   const mechanicalSequenceHeadingHits = headings.filter(isMechanicalSequenceHeading).length;
   const hasEditorialHeadings = headings.length >= 2 && mechanicalHeadingHits === 0;
   const hasHeadingStoryline = headings.length < 3 || mechanicalSequenceHeadingHits <= 1;
-  const headingSections = extractHeadingSections(html).filter(
+  const headingSections = extractHeadingSections(removeAuxiliaryQualityHtml(html)).filter(
     (section) => !isAuxiliaryHeading(section.heading),
   );
   const thinSections = headingSections.filter(isThinHeadingSection);
@@ -1283,18 +1283,7 @@ function isAuxiliaryHeading(heading: string) {
     normalized === "source" ||
     normalized === "sources" ||
     normalized === "author" ||
-    normalized === "abouttheauthor" ||
-    isQuestionLikeAuxiliaryHeading(normalized)
-  );
-}
-
-function isQuestionLikeAuxiliaryHeading(normalizedHeading: string) {
-  return (
-    normalizedHeading.endsWith("?") ||
-    normalizedHeading.endsWith("？") ||
-    normalizedHeading.includes("ですか") ||
-    normalizedHeading.includes("ますか") ||
-    normalizedHeading.includes("でしょうか")
+    normalized === "abouttheauthor"
   );
 }
 

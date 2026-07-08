@@ -1344,6 +1344,24 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
+  test("still evaluates regular question-style headings as main article sections", () => {
+    const result = evaluateArticleQuality(`
+      <h2>Should contractors publish AIO articles before source review?</h2>
+      <p>Only after a quick check.</p>
+      <h2>What evidence should editors verify before approval?</h2>
+      <p>Source links and owner notes.</p>
+      <h2>Operational review workflow with source accountability</h2>
+      <p>Answer first: editors should verify source links, field observations, and competitor claims before WordPress approval. In 12 review cases, assigning a source owner and a publish owner reduced unsupported pricing and timeline claims.</p>
+      <table><tr><th>Criterion</th><td>Owner, source URL, timing, cost, and risk are compared before approval.</td></tr></table>
+      <ul><li>Use field observations only when their origin is clear.</li><li>Mark unsupported numbers as estimates or remove them.</li></ul>
+      <p>Source: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "section-specificity", passed: false }),
+    );
+  });
+
   test("penalizes mechanical headings even when the body has structure", () => {
     const result = evaluateArticleQuality(`
       <h2>重要なポイント</h2>
