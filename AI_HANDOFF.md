@@ -5,9 +5,9 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase by improving OpenAI failure guidance and producing fresh live article artifacts.
-- Phase: OpenAI Reliability / Article Quality Evidence
-- Last updated: 2026-07-08 15:09 +09:00
+- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase by improving OpenAI failure guidance, producing fresh live article artifacts, and confirming PR automation.
+- Phase: OpenAI Reliability / Article Quality Evidence / Handoff
+- Last updated: 2026-07-08 15:18 +09:00
 
 ## 1. Current Goal
 
@@ -20,12 +20,12 @@ Current objective:
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit before this pass: `f023931 Tighten generic AI filler detection`
+- Latest implementation commit: `9538ffa Clarify OpenAI quota failures and preserve live artifacts`
 - Latest handoff/docs commit before this pass: `f870d2d Refresh handoff after live provider checks`
-- Last known good local quality commit: `f023931`
+- Last known good local quality commit: `9538ffa`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed at PR head `f870d2d` before this implementation pass.
-- GitHub Actions status: Passed at PR head `f870d2d` before this implementation pass.
+- CodeRabbit OSS review status: Passed at PR head `9538ffa`.
+- GitHub Actions status: Passed at PR head `9538ffa`.
 
 ## 3. What Was Done
 
@@ -51,6 +51,9 @@ Completed in this Codex pass:
   - AIO content operations: 90
 - `npm.cmd run quality` passed after the OpenAI error and live-test changes.
 - Updated `docs/quality-audit.md` and this handoff with the new OpenAI live evidence.
+- Pushed `9538ffa` and watched PR #1 automation to completion:
+  - CodeRabbit: success
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m54s
 
 Relevant prior completed work that still matters:
 
@@ -73,7 +76,7 @@ Main files changed in this pass:
 
 ## 5. Current Status
 
-- PR #1 was green at `f870d2d` before this pass.
+- PR #1 is green at `9538ffa`.
 - Supabase production write/delete live verification is proven for the disposable generation-job path under explicit approval.
 - OpenAI live generation now passes for the three representative samples with artifact writing enabled.
 - OpenAI provider errors now distinguish quota/billing/project issues from transient rate limits.
@@ -94,10 +97,10 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed before this pass at PR head `f870d2d`; current implementation head needs re-check after push.
+- Review status: Passed at PR head `9538ffa`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
-- Deferred findings: re-check CodeRabbit after push.
+- Deferred findings: none known after `9538ffa`.
 - False positives / not applicable: none.
 
 ## 8. Optional Bugbot Findings
@@ -119,6 +122,9 @@ npx.cmd vitest run tests/unit/openai.test.ts tests/contract/openai.contract.test
 npm.cmd run typecheck
 npm.cmd run test:live:openai
 npm.cmd run quality
+git commit -m "Clarify OpenAI quota failures and preserve live artifacts"
+git push
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 ```
 
 Results:
@@ -139,6 +145,18 @@ Results:
   - coverage passed: statements 88.4%, branches 76.46%, functions 92.35%, lines 88.84%
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
+- Pre-commit hook for `9538ffa`: passed.
+  - lint passed
+  - test integrity passed, 48 files
+- Pre-push hook for `9538ffa`: passed.
+  - lint passed
+  - typecheck passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 343 tests
+  - contract tests passed, 3 files / 13 tests
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed at PR head `9538ffa`.
+  - CodeRabbit passed.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m54s.
 
 Not run in this pass:
 
@@ -152,7 +170,7 @@ Next Claude Code should:
 2. Review the live OpenAI artifact ordering in `tests/live/openai.live.test.ts`.
 3. Inspect the latest `test-results/live-openai/*.html` outputs for editorial naturalness if local ignored artifacts are available.
 4. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
-5. Re-check PR #1 CodeRabbit and GitHub Actions after this implementation is pushed.
+5. Continue with WordPress sandbox live verification or focused editorial review of the live artifacts.
 
 ## 11. Suggested Review Scope for Claude Code
 
