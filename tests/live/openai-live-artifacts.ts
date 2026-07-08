@@ -1,6 +1,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  evaluateArticleQuality,
+  type ArticleQualityEvaluation,
+} from "@/lib/article-quality";
+import { evaluateFaqQuality } from "@/lib/faq-quality";
+import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
+import { evaluateTitleQuality } from "@/lib/title-quality";
 import type {
   ArticleFormPayload,
   ArticleGenerationResult,
@@ -26,6 +33,16 @@ type OpenAILiveArtifactWriteResult = {
 };
 
 type LiveArtifactEnv = Record<string, string | undefined>;
+
+type QualityReviewItem = {
+  category: string;
+  score: number;
+  failedChecks: {
+    id: string;
+    label: string;
+    detail: string;
+  }[];
+};
 
 export function shouldWriteOpenAILiveArtifacts(env: LiveArtifactEnv = process.env) {
   return cleanEnvValue(env.AIO_LIVE_OPENAI_WRITE_ARTIFACTS) === "1";
@@ -106,6 +123,7 @@ export function buildOpenAILiveArtifact(input: OpenAILiveArtifactInput) {
       strengths: input.result.aio_score_self_evaluation.strengths,
       bodyHtml: input.result.body_html,
     },
+    qualityReview: buildQualityReview(input),
     reviewChecklist: [
       "冒頭400字以内で、対象読者の判断に必要な結論・定義・条件が具体的に分かるか。",
       "一次情報が単なる引用ではなく、現場観察、判断基準、失敗例、注意点として本文に溶け込んでいるか。",
@@ -114,6 +132,97 @@ export function buildOpenAILiveArtifact(input: OpenAILiveArtifactInput) {
       "近年、重要です、一般的に、多くの場合などのAI風・汎用表現が目立たないか。",
       "未確認の数値・制度・効果を断定せず、出典URL、条件、時点、推定、注意書きを添えているか。",
     ],
+  };
+}
+
+function buildQualityReview(input: OpenAILiveArtifactInput): QualityReviewItem[] {
+  const themeText = input.form.theme;
+  const primaryInfo = input.form.primaryInfo ?? "";
+  const referenceTexts = [
+    ...input.fetchedReferences.map((item) => item.text),
+    ...input.form.references.map((item) => item.text),
+    ...(input.form.referenceFiles ?? []).map((item) => item.text),
+  ].filter(isNonEmptyString);
+  const competitorTexts = [
+    ...input.fetchedCompetitors.map((item) => item.text),
+    ...input.form.competitors.map((item) => item.text),
+    ...(input.form.competitorFiles ?? []).map((item) => item.text),
+    input.competitorResearch?.summary,
+    ...(
+      input.competitorResearch?.insights.flatMap((insight) => [
+        insight.title,
+        ...insight.majorPoints,
+        ...insight.differentiationPoints,
+        ...insight.recommendations,
+      ]) ?? []
+    ),
+  ].filter(isNonEmptyString);
+  const sourceUrls = uniqueNonEmptyStrings([
+    ...input.fetchedReferences.map((item) => item.url),
+    ...input.fetchedCompetitors.map((item) => item.url),
+    ...input.result.sources.map((item) => item.url),
+    ...(input.competitorResearch?.insights.map((item) => item.url) ?? []),
+  ]);
+
+  return [
+    toQualityReviewItem(
+      "Article body",
+      evaluateArticleQuality(input.result.body_html, {
+        themeText,
+        targetReaderText: input.result.target_reader,
+        searchIntentText: input.result.search_intent,
+        primaryInfo,
+        closingText: input.form.closingText,
+        referenceTexts,
+        sourceUrls,
+        competitorTexts,
+        targetWordCount: input.form.wordCount,
+      }),
+    ),
+    toQualityReviewItem(
+      "Title",
+      evaluateTitleQuality({
+        selectedTitle: input.result.selected_title,
+        titleCandidates: input.result.title_candidates,
+        themeText,
+        primaryInfo,
+      }),
+    ),
+    toQualityReviewItem(
+      "FAQ",
+      evaluateFaqQuality({
+        faqItems: input.result.faq_items,
+        themeText,
+        primaryInfo,
+        referenceTexts,
+        competitorTexts,
+      }),
+    ),
+    toQualityReviewItem(
+      "Meta description",
+      evaluateMetaDescriptionQuality({
+        metaDescription: input.result.meta_description,
+        themeText,
+        primaryInfo,
+      }),
+    ),
+  ];
+}
+
+function toQualityReviewItem(
+  category: string,
+  evaluation: ArticleQualityEvaluation,
+): QualityReviewItem {
+  return {
+    category,
+    score: evaluation.score,
+    failedChecks: evaluation.checks
+      .filter((check) => !check.passed)
+      .map((check) => ({
+        id: check.id,
+        label: check.label,
+        detail: check.detail,
+      })),
   };
 }
 
@@ -166,6 +275,12 @@ function renderArtifactHtml(payload: ReturnType<typeof buildOpenAILiveArtifact>)
     "</ul>",
     "</section>",
     "<section>",
+    "<h2>Deterministic Quality Checks</h2>",
+    "<ul>",
+    ...payload.qualityReview.map(renderQualityReviewItem),
+    "</ul>",
+    "</section>",
+    "<section>",
     "<h2>Reader And Structure Snapshot</h2>",
     "<dl>",
     `<dt>Target reader</dt><dd>${escapeHtml(payload.output.targetReader)}</dd>`,
@@ -183,6 +298,20 @@ function renderArtifactHtml(payload: ReturnType<typeof buildOpenAILiveArtifact>)
   ].join("\n");
 }
 
+function renderQualityReviewItem(item: QualityReviewItem) {
+  const failed =
+    item.failedChecks.length > 0
+      ? `<ul>${item.failedChecks
+          .map(
+            (check) =>
+              `<li><strong>${escapeHtml(check.id)}</strong>: ${escapeHtml(check.detail)}</li>`,
+          )
+          .join("")}</ul>`
+      : "<p>All deterministic checks passed.</p>";
+
+  return `<li><strong>${escapeHtml(item.category)}</strong>: ${item.score} / 100${failed}</li>`;
+}
+
 function cleanEnvValue(value: string | undefined) {
   return (value ?? "")
     .replace(/^\uFEFF/, "")
@@ -197,6 +326,14 @@ function pathIsInsideOrEqual(child: string, parent: string) {
     normalizedChild === normalizedParent ||
     normalizedChild.startsWith(`${normalizedParent}${path.sep}`)
   );
+}
+
+function isNonEmptyString(value: string | undefined): value is string {
+  return Boolean(value?.trim());
+}
+
+function uniqueNonEmptyStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
 function escapeHtml(value: string) {

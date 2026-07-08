@@ -32,6 +32,48 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex pass on 2026-07-08 15:54 +09:00:
+
+- Added deterministic quality review output to OpenAI live artifacts:
+  - JSON artifacts now include `qualityReview` entries for article body, title, FAQ, and meta
+    description.
+  - Each quality review entry stores the deterministic score and failed check ids/details.
+  - HTML artifacts now include a `Deterministic Quality Checks` section before the reader/structure
+    snapshot.
+- Focused verification passed:
+  - `npx.cmd vitest run tests/unit/openai-live-artifacts.test.ts`
+  - `npm.cmd run typecheck`
+- `npm.cmd run quality` passed:
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 343 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.4%, branches 76.46%, functions 92.35%, lines 88.84%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
+- Re-ran OpenAI live generation with artifact writing enabled after provider quota was restored:
+  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
+  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
+- `npm.cmd run test:live:openai` passed, 1 file / 1 test, in 197.19s.
+- Live article artifact scores:
+  - one-person contractor workers compensation: 88
+  - SaaS onboarding operations: 88
+  - AIO content operations: 82
+- Deterministic artifact review details:
+  - one-person contractor workers compensation: article body 98, title 100, FAQ 100, meta 100
+  - SaaS onboarding operations: article body 98, title 100, FAQ 100, meta 100
+  - AIO content operations: article body 82, title 100, FAQ 100, meta 100
+  - AIO content operations still flagged `target-length-alignment` and `numeric-claim-support` in
+    the article body, so it remains useful for editorial follow-up even though it passed the live
+    minimum score.
+- Re-ran the explicitly approved production Supabase write/delete contract path:
+  - `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1`
+- `npm.cmd run test:live:supabase` passed, 1 file / 1 test. The test created and cleaned up a
+  disposable generation-job record.
+- `npm.cmd run test:live:readiness:wordpress` failed closed before live calls because sandbox
+  WordPress credentials and explicit post/media/delete/non-production allow flags are not configured.
+
 Latest Codex pass on 2026-07-08 15:32 +09:00:
 
 - Improved OpenAI live article artifacts for human editorial review:
@@ -565,11 +607,12 @@ Additional manual PC browser smoke on 2026-07-06:
 These gaps prevent a true 100/100 completion claim:
 
 - Live OpenAI generation quality now has fresh artifact-producing evidence from 2026-07-08
-  15:05 +09:00. Three representative samples passed the live threshold and wrote ignored JSON/HTML
-  artifacts. New artifact output includes a repeatable editorial checklist and reader/structure
-  snapshot, but a final human editorial review of those artifacts is still useful before claiming
-  perfect non-commodity article quality.
-- Supabase production write/delete verification passed again on 2026-07-08 14:45 +09:00 with
+  15:50 +09:00. Three representative samples passed the live threshold and wrote ignored JSON/HTML
+  artifacts. New artifact output includes a repeatable editorial checklist, reader/structure
+  snapshot, and deterministic quality-check breakdown. One sample still flagged target-length and
+  numeric-claim support improvements, so a final human editorial review remains useful before
+  claiming perfect non-commodity article quality.
+- Supabase production write/delete verification passed again on 2026-07-08 15:53 +09:00 with
   explicit user approval and a production-specific confirmation flag. A long-term staging-only
   procedure is still preferable for routine release checks.
 - WordPress posting remains guarded by a sandbox live test, but sandbox WordPress credentials are
@@ -587,8 +630,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  were green after the OpenAI error-guidance and live-artifact preservation pass was pushed. The
-  runtime implementation commit is `9538ffa`; later head commits are handoff/docs-only.
+  were green after the prior OpenAI live-artifact checklist pass. The current deterministic
+  quality-review artifact pass still needs hosted PR automation confirmation after it is pushed.
 
 ## Current Self Score
 
