@@ -5,39 +5,42 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase and hardened WordPress live-test cleanup before sandbox credentials are available.
-- Phase: WordPress Live Cleanup Safety / Handoff
-- Last updated: 2026-07-08 14:20 +09:00
+- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase, retried OpenAI artifact-producing live verification, then improved local anti-commodity article-quality checks after the provider remained rate/quota limited.
+- Phase: Article Quality Hardening / Handoff
+- Last updated: 2026-07-08 14:36 +09:00
 
 ## 1. Current Goal
 
 Current objective:
 
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
-- This pass reduced risk around WordPress live verification by ensuring cleanup attempts both disposable WordPress resources even if one cleanup step fails.
+- This pass tightened detection and regeneration guidance for generic AI-like filler such as `一般的に`, `多くの場合`, `効率化につながります`, and `品質向上につながります`.
 - Overall goal is still not complete. Do not call the goal complete until representative article quality artifacts are generated/reviewed, WordPress live/sandbox posting is proven, and remaining high-risk flows are verified.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `2fae1eb Ensure WordPress live cleanup attempts all resources`
-- Latest implementation commit before this pass: `dd53a90 Require explicit WordPress live delete permission`
-- Last known good local quality commit: `2fae1eb`
+- Latest implementation commit: `f023931 Tighten generic AI filler detection`
+- Latest implementation commit before this pass: `2fae1eb Ensure WordPress live cleanup attempts all resources`
+- Last known good local quality commit: `f023931`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed on PR #1 before this pass at head `3333353`; needs re-check after this pass is pushed.
-- GitHub Actions status: Passed on PR #1 before this pass at head `3333353`; needs re-check after this pass is pushed.
+- CodeRabbit OSS review status: Passed on PR #1 before this pass at head `b570b2c`; needs re-check after this pass is pushed.
+- GitHub Actions status: Passed on PR #1 before this pass at head `b570b2c`; needs re-check after this pass is pushed.
 
 ## 3. What Was Done
 
 Completed in this Codex pass:
 
 - Re-read current handoff, quality audit, package scripts, branch status, and PR check status.
-- Confirmed PR #1 was green before this pass at head `3333353`.
-- Hardened `tests/live/wordpress.live.test.ts` cleanup so disposable post cleanup and media cleanup are both attempted even when one of them fails or throws.
-- Added bounded cleanup failure messages that include the resource type, resource id, HTTP status or thrown error, and a truncated detail string.
-- Ran `npm.cmd run test:live:readiness:wordpress`; it failed closed because local sandbox WordPress settings are not configured. No WordPress live call was made.
-- Ran full local quality successfully.
-- Committed the implementation as `2fae1eb Ensure WordPress live cleanup attempts all resources`.
+- Confirmed PR #1 was green before this pass at head `b570b2c`.
+- Ran OpenAI live readiness with artifact writing enabled; readiness passed without printing secrets.
+- Retried `npm.cmd run test:live:openai` with `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` and `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`.
+- The OpenAI live run failed at the initial Responses API health call with the existing Japanese quota/rate-limit error. No live article artifacts were produced.
+- Added generic AI-like filler coverage for `一般的に`, `多くの場合`, `効率化につながります`, and `品質向上につながります`.
+- Updated generation instructions and quality-regeneration action text so detected filler is also discouraged during generation/regeneration.
+- Added unit coverage for the new filler pattern and updated E2E coverage for the regenerated instruction text.
+- Ran full local quality successfully after fixing the expected E2E instruction text.
+- Committed the implementation as `f023931 Tighten generic AI filler detection`.
 
 Relevant prior completed work that still matters:
 
@@ -53,21 +56,25 @@ Relevant prior completed work that still matters:
 Main files changed in this pass:
 
 - `docs/quality-audit.md`
-- `tests/live/wordpress.live.test.ts`
+- `src/lib/article-quality.ts`
+- `src/lib/quality-regeneration-action.ts`
+- `src/lib/server/article-generation.ts`
+- `tests/e2e/aio-workflow.spec.ts`
+- `tests/unit/article-generation.test.ts`
+- `tests/unit/article-quality.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
 - Local quality gate is green for this implementation.
-- WordPress live readiness still fails closed unless post/media/delete permissions are all explicit.
-- WordPress live cleanup now attempts both disposable resource deletions before asserting cleanup success.
+- Article-quality checks now catch an additional class of generic Japanese AI filler and propagate the repair wording into article regeneration.
 - WordPress live readiness is not configured locally and fails closed before live calls.
-- OpenAI artifact-producing live generation is still blocked by provider quota/rate limiting from the prior pass unless the external state has recovered.
+- OpenAI artifact-producing live generation is still blocked by provider quota/rate limiting after a fresh retry in this pass.
 - PR #1 needs CodeRabbit/GitHub Actions re-check after the new implementation and handoff commits are pushed.
 
 ## 6. Known Issues
 
-- `npm.cmd run test:live:openai` with artifact writing enabled failed in a prior pass at the initial Responses API health call due to OpenAI quota/rate limiting. Re-run after the provider limit recovers.
+- `npm.cmd run test:live:openai` with artifact writing enabled failed again in this pass at the initial Responses API health call due to OpenAI quota/rate limiting. Re-run after the provider limit recovers.
 - No live OpenAI review artifacts have been produced yet.
 - `npm.cmd run test:live:readiness:wordpress` currently fails because sandbox WordPress credentials and allow flags are missing.
 - WordPress live posting was not run in this pass.
@@ -81,7 +88,7 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed before this pass at PR head `3333353`.
+- Review status: Passed before this pass at PR head `b570b2c`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
 - Deferred findings: current head needs CodeRabbit review after push.
@@ -102,44 +109,43 @@ Commands run during this pass:
 
 ```bash
 gh pr checks 1 --repo kotakase2022-jpg/aio
+npm.cmd run test:live:readiness:openai
+npm.cmd run test:live:openai
+npx.cmd vitest run tests/unit/article-quality.test.ts tests/unit/article-generation.test.ts tests/unit/quality-regeneration-action-coverage.test.ts
 npm.cmd run typecheck
 npm.cmd run lint
-npm.cmd run test:live:readiness:wordpress
+npx.cmd playwright test tests/e2e/aio-workflow.spec.ts:454 --project=chromium-pc
 npm.cmd run quality
-git commit -m "Ensure WordPress live cleanup attempts all resources"
+git commit -m "Tighten generic AI filler detection"
 ```
 
 Results:
 
-- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at pre-pass PR head `3333353`.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at pre-pass PR head `b570b2c`.
   - CodeRabbit passed.
   - GitHub Actions `Typecheck, lint, tests, E2E, build` passed.
+- `npm.cmd run test:live:readiness:openai`: passed with artifact writing variables set.
+- `npm.cmd run test:live:openai`: failed at the initial Responses API health call with the app's Japanese OpenAI quota/rate-limit error. No artifact files were produced.
+- Focused Vitest for article-quality, article-generation, and quality-regeneration action: passed, 3 files / 113 tests.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed.
-- `npm.cmd run test:live:readiness:wordpress`: failed closed before live calls.
-  - Missing `WORDPRESS_SANDBOX_SITE_URL`.
-  - Missing `WORDPRESS_SANDBOX_USERNAME`.
-  - Missing `WORDPRESS_SANDBOX_APPLICATION_PASSWORD`.
-  - Missing `AIO_LIVE_WORDPRESS_ALLOW_POST`.
-  - Missing `AIO_LIVE_WORDPRESS_ALLOW_MEDIA`.
-  - Missing `AIO_LIVE_WORDPRESS_ALLOW_DELETE`.
-  - Missing `AIO_LIVE_CONFIRM_NON_PRODUCTION`.
+- First `npm.cmd run quality`: failed only because one E2E assertion expected the old regeneration-instruction phrase order. The product text already showed the new generic filler list. The E2E expectation was updated to match the intended new wording.
+- Focused Playwright rerun for `tests/e2e/aio-workflow.spec.ts:454`: passed.
 - `npm.cmd run quality`: passed.
   - typecheck passed
   - lint passed
   - test integrity passed, 48 files
-  - unit/integration tests passed, 44 files / 341 tests
+  - unit/integration tests passed, 44 files / 342 tests
   - contract tests passed, 3 files / 13 tests
   - coverage passed: statements 88.39%, branches 76.39%, functions 92.35%, lines 88.83%
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
-- Pre-commit hook for `2fae1eb`: passed.
+- Pre-commit hook for `f023931`: passed.
   - lint passed
   - test integrity passed
 
 Not run in this pass:
 
-- `npm.cmd run test:live:openai`
 - `npm.cmd run test:live:supabase`
 - `npm.cmd run test:live:wordpress`
 
@@ -147,7 +153,7 @@ Not run in this pass:
 
 Next Claude Code should:
 
-1. Review the WordPress live cleanup hardening in `tests/live/wordpress.live.test.ts`, especially that post and media cleanup are both attempted before the test reports cleanup failures.
+1. Review the generic AI-filler additions in `src/lib/article-quality.ts`, `src/lib/server/article-generation.ts`, and `src/lib/quality-regeneration-action.ts`.
 2. Re-check PR #1 CodeRabbit and GitHub Actions after this handoff is pushed.
 3. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 4. After OpenAI quota/rate limiting recovers, run:
@@ -164,7 +170,9 @@ npm.cmd run test:live:openai
 
 - `scripts/check-live-readiness.mjs`: confirm WordPress live tests require all explicit mutation permissions.
 - `tests/live/wordpress.live.test.ts`: confirm cleanup attempts both post and media deletion and reports bounded failure details.
-- `docs/quality-audit.md`: confirm the new cleanup-safety evidence and remaining proof gaps are clear.
+- `src/lib/article-quality.ts`: confirm the new Japanese generic filler terms are neither too broad nor too narrow.
+- `tests/unit/article-quality.test.ts` and `tests/e2e/aio-workflow.spec.ts`: confirm the regression coverage matches the intended quality guidance.
+- `docs/quality-audit.md`: confirm the new article-quality evidence and remaining proof gaps are clear.
 
 ## 12. Risk Notes
 

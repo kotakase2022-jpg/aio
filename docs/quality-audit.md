@@ -32,6 +32,38 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex pass on 2026-07-08 14:36 +09:00:
+
+- Retried OpenAI live generation with artifact writing enabled:
+  - `AIO_LIVE_CONTRACT_TESTS=1`
+  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
+  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
+- `npm.cmd run test:live:readiness:openai` passed.
+- `npm.cmd run test:live:openai` failed at the initial Responses API health call with the app's
+  Japanese OpenAI quota/rate-limit error. No generated JSON/HTML artifacts were produced.
+- Tightened generic AI-filler detection and regeneration guidance for:
+  - `一般的に`
+  - `多くの場合`
+  - `効率化につながります`
+  - `品質向上につながります`
+- Updated generation instructions to discourage those phrases before drafting, and updated the
+  quality-regeneration action so the UI repair instruction tells users exactly what to replace.
+- Added unit coverage for the new filler pattern and updated the E2E assertion for the regenerated
+  instruction text.
+- Focused Vitest passed: 3 files / 113 tests.
+- `npm.cmd run typecheck` passed.
+- `npm.cmd run lint` passed.
+- Focused Playwright rerun for `tests/e2e/aio-workflow.spec.ts:454` passed.
+- `npm.cmd run quality` passed after updating the E2E assertion:
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 342 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.39%, branches 76.39%, functions 92.35%, lines 88.83%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
+
 Latest Codex pass on 2026-07-08 14:20 +09:00:
 
 - Hardened `tests/live/wordpress.live.test.ts` cleanup so the disposable WordPress post deletion
@@ -444,8 +476,8 @@ Additional manual PC browser smoke on 2026-07-06:
 These gaps prevent a true 100/100 completion claim:
 
 - Live OpenAI generation quality has passed in a prior run, but the latest artifact-producing live
-  run on 2026-07-08 failed at the initial API health call due to provider quota/rate limiting. Human
-  review artifacts still need to be generated after the provider limit recovers.
+  retry on 2026-07-08 14:29 +09:00 failed at the initial API health call due to provider quota/rate
+  limiting. Human review artifacts still need to be generated after the provider limit recovers.
 - Supabase production write/delete verification has passed with explicit user approval and a
   production-specific confirmation flag. A long-term staging-only procedure is still preferable for
   routine release checks.
@@ -464,7 +496,7 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  were green at pre-pass head `3333353`; re-check the current head after this cleanup-safety pass
+  were green at pre-pass head `b570b2c`; re-check the current head after this article-quality pass
   and handoff update are pushed.
 
 ## Current Self Score
@@ -480,8 +512,8 @@ for real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit after the WordPress cleanup-safety pass and handoff update
-   are pushed.
+1. Re-check hosted Actions and CodeRabbit after the article-quality pass and handoff update are
+   pushed.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Re-run `npm run test:live:openai` with `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` after provider quota
