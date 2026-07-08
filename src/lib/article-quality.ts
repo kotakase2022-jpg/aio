@@ -169,6 +169,9 @@ const numericClaimSupportPattern =
 const adjacentNumericSupportPattern =
   /^(出典|参照|参考|source|sources|調査|公表|資料|データ|統計|アンケート|ヒアリング|推定|目安|約|およそ|条件|場合|時点|根拠)[:：、\s]|^(未確認|断定しない|可能性|傾向|照合)/i;
 
+const previousNumericSupportPattern =
+  /(当社支援|弊社支援|支援現場|現場観察|相談|ヒアリング|推定|目安|約|およそ|条件|場合|時点|未確認|断定しない|可能性|傾向|照合)/i;
+
 const longSentenceCharacterLimit = 130;
 const sentenceBoundaryPattern = /[。．.!！？?]+/;
 
@@ -1253,12 +1256,40 @@ function hasNearbyNumericClaimSupport(text: string, index: number) {
     return true;
   }
 
+  const previousSentence = extractPreviousSentence(text, sentenceStart);
+  if (
+    previousSentence &&
+    countVisibleCharacters(previousSentence) <= 90 &&
+    previousNumericSupportPattern.test(previousSentence)
+  ) {
+    return true;
+  }
+
   const adjacentSentence = extractNextSentence(text, sentenceEnd);
   return Boolean(
     adjacentSentence &&
       countVisibleCharacters(adjacentSentence) <= 90 &&
       adjacentNumericSupportPattern.test(adjacentSentence),
   );
+}
+
+function extractPreviousSentence(text: string, sentenceStart: number) {
+  const beforeCurrentSentence = text.slice(0, Math.max(0, sentenceStart - 1)).trimEnd();
+  if (!beforeCurrentSentence) {
+    return "";
+  }
+
+  const previousStart =
+    Math.max(
+      beforeCurrentSentence.lastIndexOf("。"),
+      beforeCurrentSentence.lastIndexOf("！"),
+      beforeCurrentSentence.lastIndexOf("？"),
+      beforeCurrentSentence.lastIndexOf("."),
+      beforeCurrentSentence.lastIndexOf("!"),
+      beforeCurrentSentence.lastIndexOf("?"),
+    ) + 1;
+
+  return beforeCurrentSentence.slice(previousStart).trim();
 }
 
 function extractNextSentence(text: string, sentenceEnd: number) {

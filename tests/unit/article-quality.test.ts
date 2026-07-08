@@ -1594,6 +1594,22 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
+  test("allows numeric claims when the previous short sentence gives first-party estimate context", () => {
+    const result = evaluateArticleQuality(`
+      <h2>SaaSオンボーディング改善とは、初期設定後の定着条件を確認する運用を指します</h2>
+      <p>結論として、管理者教育、承認フロー、利用部門の初回タスクを分けて確認します。当社支援で相談が出やすい目安です。導入スケジュールが長い商材では、初回利用後の3回目の定例や初回月次報告で確認します。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>失敗例として、ログインだけを定着扱いにするケースがあります。</li><li>注意点は、顧客の業務リズムに合わせて確認日を変えることです。</li></ul>
+      <h2>公開前レビューで確認する手順</h2>
+      <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。</p>
+      <p>出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "numeric-claim-support", passed: true }),
+    );
+  });
+
   test("allows numeric claims when nearby text provides first-party context or caveats", () => {
     const result = evaluateArticleQuality(`
       <h2>AIO記事とは、AI検索で引用されやすい構造を持つ記事を指します</h2>
