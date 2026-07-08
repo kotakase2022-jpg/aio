@@ -21,12 +21,12 @@ Current objective:
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `6a4d7f0 Stabilize live OpenAI article quality`
+- Latest implementation commit: `94b7194 Allow explicit Supabase production live verification`
 - Latest implementation commit before this pass: `712cdc4 Detect English conclusion boilerplate`
-- Last known good checked commit: `6a4d7f0`
+- Last known good checked commit: `94b7194`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed on PR #1 at head `6a4d7f0`.
-- GitHub Actions status: `Typecheck, lint, tests, E2E, build` passed on PR #1 at head `6a4d7f0` in 3m39s.
+- CodeRabbit OSS review status: Passed on PR #1 at head `94b7194`.
+- GitHub Actions status: `Typecheck, lint, tests, E2E, build` passed on PR #1 at head `94b7194` in 3m37s.
 
 ## 3. What Was Done
 
@@ -93,7 +93,7 @@ Main files changed in this pass:
 - Supabase production live write/delete testing passed with explicit user approval.
 - `.env.local` now contains the Supabase service role key and production live-test flags locally. It is gitignored and must not be printed or committed.
 - The current implementation commit is pushed and green on PR #1.
-- If a later handoff-only commit follows this file update, re-check PR #1 at that newer head. Runtime code changed last in `6a4d7f0`.
+- If a later handoff-only commit follows this file update, re-check PR #1 at that newer head. Runtime/live-test guard code changed last in `94b7194`.
 
 ## 6. Known Issues
 
@@ -108,7 +108,7 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: CodeRabbit passed on PR #1 at head `6a4d7f0`.
+- Review status: CodeRabbit passed on PR #1 at head `94b7194`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
 - Deferred findings: none in this pass.
@@ -145,6 +145,8 @@ npm.cmd run test:live:readiness:supabase
 npx.cmd vitest run tests/unit/live-readiness-script.test.ts
 npm.cmd run test:live:supabase
 npm.cmd run quality
+git commit -m "Allow explicit Supabase production live verification"
+git push
 ```
 
 Results:
@@ -202,6 +204,19 @@ Results:
     - coverage passed: statements 88.4%, branches 76.48%, functions 92.37%, lines 88.83%
     - E2E passed, 49 Chromium PC tests
     - build passed
+- Implementation commit `94b7194`: created and pushed.
+- Pre-commit hook for `94b7194`: passed.
+  - lint passed
+  - test integrity passed
+- Pre-push hook for `94b7194`: passed.
+  - lint passed
+  - typecheck passed
+  - test integrity passed
+  - test passed, 43 files / 335 tests
+  - contract tests passed, 3 files / 13 tests
+- PR #1 checks at `94b7194`: passed.
+  - CodeRabbit passed.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m37s.
 
 Not run:
 
@@ -217,7 +232,7 @@ Next Claude Code should:
    - article-quality auxiliary heading filtering
    - sentence boundary handling for English and HTML block boundaries
 2. Confirm the new live OpenAI fixture scale and assertions are appropriate for sandbox cost and runtime.
-3. Re-check PR #1 only if this handoff status update is pushed as a new head after `6a4d7f0`.
+3. Re-check PR #1 only if this handoff status update is pushed as a new head after `94b7194`.
 4. Review the Supabase production write/delete guard change:
    - `scripts/check-live-readiness.mjs`
    - `tests/live/live-test-helpers.ts`
