@@ -21,16 +21,17 @@ Current objective:
 
 - Branch: `codex/persistent-quality-gate-operations`
 - Latest checked base before this pass: `4c5419e Refresh handoff after deterministic artifact review`
-- Current local implementation changes at handoff writing:
+- Current implementation commit: `5f46bb5 Tighten article generation quality prompts`
+- Current implementation changes:
   - `src/lib/server/article-generation.ts`
   - `tests/unit/article-generation.test.ts`
   - `docs/quality-audit.md`
   - `AI_HANDOFF.md`
-- Latest implementation commit: pending commit for the current pass at the time this file was written. After pulling, run `git log -1 --oneline` to see the final pushed head.
-- Last known good local quality state: current worktree after this pass, verified by `npm.cmd run quality`.
+- Latest implementation commit: `5f46bb5`
+- Last known good local quality state: `5f46bb5`, verified by `npm.cmd run quality`.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: previous PR head `4c5419e` passed. Re-check CodeRabbit after the current pass is pushed.
-- GitHub Actions status: previous PR head `4c5419e` passed. Re-check GitHub Actions after the current pass is pushed.
+- CodeRabbit OSS review status: previous PR head `4c5419e` passed. Re-check CodeRabbit after `5f46bb5` and this handoff update are pushed.
+- GitHub Actions status: previous PR head `4c5419e` passed. Re-check GitHub Actions after `5f46bb5` and this handoff update are pushed.
 
 ## 3. What Was Done
 
@@ -131,6 +132,7 @@ npx.cmd vitest run tests/unit/article-generation.test.ts
 npm.cmd run typecheck
 AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1 AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai npm.cmd run test:live:openai
 npm.cmd run quality
+git commit -m "Tighten article generation quality prompts"
 ```
 
 Results:
@@ -147,6 +149,9 @@ Results:
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
 - `npm.cmd run test:live:openai`: passed after the final prompt update, 1 file / 1 test, in 191.28s.
+- Pre-commit hook for `5f46bb5`: passed.
+  - lint passed
+  - test integrity passed, 48 files
 
 Not run in this pass:
 
