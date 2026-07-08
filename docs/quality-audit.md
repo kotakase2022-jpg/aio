@@ -53,6 +53,9 @@ Latest Codex pass on 2026-07-08 14:47 +09:00:
 - A direct non-secret diagnostic call confirmed the provider response was HTTP 429
   `insufficient_quota` for the app default model `gpt-5.5`. No generated JSON/HTML artifacts were
   produced.
+- Pushed the live-verification docs update as `06028d0` and watched PR #1 automation:
+  - CodeRabbit: success
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m29s
 - No runtime code changed in this pass.
 
 Latest Codex pass on 2026-07-08 14:36 +09:00:
@@ -521,8 +524,7 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  were green at PR head `e3022f7` before this docs-only live-verification update; re-check the
-  current head after this handoff update is pushed.
+  were green at PR head `06028d0` after this docs-only live-verification update was pushed.
 
 ## Current Self Score
 
@@ -537,7 +539,7 @@ for real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit after this docs-only live-verification update is pushed.
+1. Re-check hosted Actions and CodeRabbit after any subsequent handoff-only push.
 2. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 3. Update or recover the OpenAI API key/project quota used by `.env.local`, then re-run
    `npm run test:live:openai` with `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` and review the generated

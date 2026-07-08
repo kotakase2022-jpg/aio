@@ -5,9 +5,9 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass executed the next approved live checks without changing runtime code.
+- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass executed the next approved live checks, recorded the results, and re-checked PR automation without changing runtime code.
 - Phase: Live Verification / Handoff
-- Last updated: 2026-07-08 14:47 +09:00
+- Last updated: 2026-07-08 14:54 +09:00
 
 ## 1. Current Goal
 
@@ -21,11 +21,11 @@ Current objective:
 
 - Branch: `codex/persistent-quality-gate-operations`
 - Latest implementation commit: `f023931 Tighten generic AI filler detection`
-- Latest handoff/docs commit before this pass: `e3022f7 Refresh handoff after generic filler hardening`
+- Latest live-verification docs commit: `06028d0 Record live provider verification status`
 - Last known good local quality commit: `f023931`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed at PR head `e3022f7` before this docs-only pass.
-- GitHub Actions status: Passed at PR head `e3022f7` before this docs-only pass.
+- CodeRabbit OSS review status: Passed at PR head `06028d0` after the live-verification docs update was pushed.
+- GitHub Actions status: Passed at PR head `06028d0` after the live-verification docs update was pushed.
 
 ## 3. What Was Done
 
@@ -49,6 +49,9 @@ Completed in this Codex pass:
 - `npm.cmd run test:live:openai` failed at the initial minimal Responses API health call.
 - Ran a direct non-secret diagnostic request. The provider returned HTTP 429 `insufficient_quota` for the app default model `gpt-5.5`.
 - Updated `docs/quality-audit.md` and this handoff with the live verification results.
+- Pushed `06028d0` and watched PR #1 checks to completion:
+  - CodeRabbit: success
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m29s
 
 Relevant prior completed work that still matters:
 
@@ -69,12 +72,12 @@ No runtime code changed in this pass.
 
 ## 5. Current Status
 
-- PR #1 was green at `e3022f7` before this docs-only update.
+- PR #1 was green at `06028d0` after this docs-only live-verification update was pushed.
 - Supabase production write/delete live verification is proven for the disposable generation-job path under explicit approval.
 - OpenAI live readiness passes, but the current `.env.local` API key/project still cannot complete even a minimal Responses API call because the provider returns 429 `insufficient_quota`.
 - No OpenAI generated article artifacts were produced in this pass.
 - WordPress live readiness is not configured locally and fails closed before live calls.
-- This docs-only handoff update should be pushed and PR checks re-checked.
+- This final handoff refresh is docs-only and contains no runtime code change.
 
 ## 6. Known Issues
 
@@ -92,10 +95,10 @@ No runtime code changed in this pass.
 
 CodeRabbit OSS review status:
 
-- Review status: Passed before this pass at PR head `e3022f7`.
+- Review status: Passed after this pass at PR head `06028d0`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
-- Deferred findings: current docs-only head needs CodeRabbit review after push.
+- Deferred findings: none known after `06028d0`.
 - False positives / not applicable: none.
 
 ## 8. Optional Bugbot Findings
@@ -119,11 +122,16 @@ npm.cmd run test:live:supabase
 npm.cmd run test:live:readiness:openai
 npm.cmd run test:live:openai
 node --input-type=module - # direct non-secret OpenAI diagnostic request
+npm.cmd run lint
+npm.cmd run typecheck
+git commit -m "Record live provider verification status"
+git push
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 ```
 
 Results:
 
-- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at PR head `e3022f7`.
+- Initial `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at PR head `e3022f7`.
   - CodeRabbit passed.
   - GitHub Actions `Typecheck, lint, tests, E2E, build` passed.
 - `npm.cmd run test:live:readiness:supabase`: passed.
@@ -131,6 +139,20 @@ Results:
 - `npm.cmd run test:live:readiness:openai`: passed.
 - `npm.cmd run test:live:openai`: failed at the initial Responses API health call with the app's Japanese OpenAI quota/rate-limit error.
 - Direct non-secret OpenAI diagnostic: HTTP 429 `insufficient_quota` for `gpt-5.5`.
+- `npm.cmd run lint`: passed.
+- `npm.cmd run typecheck`: passed.
+- Pre-commit hook for `06028d0`: passed.
+  - lint passed
+  - test integrity passed, 48 files
+- Pre-push hook for `06028d0`: passed.
+  - lint passed
+  - typecheck passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 342 tests
+  - contract tests passed, 3 files / 13 tests
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed at PR head `06028d0`.
+  - CodeRabbit passed.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m29s.
 
 Not run in this pass:
 
