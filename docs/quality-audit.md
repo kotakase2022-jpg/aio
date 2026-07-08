@@ -32,18 +32,17 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 09:18 +09:00 after scoping missing generated-image
-recovery to the image slots requested by `imageCount`. A one-image draft with an extra `inline-1`
-prompt no longer shows an unnecessary recovery banner, while real partial failures inside the
-requested slots remain visible and recoverable. This sits on top of the existing English
-commodity-AI boilerplate detection and regeneration guidance for phrases such as `today's rapidly
-evolving landscape`, `comprehensive guide`, `delve into`, and `navigate the complexities`:
+The latest local full gate passed on 2026-07-08 09:37 +09:00 after strengthening English conclusion
+boilerplate detection and regeneration guidance. The quality checklist now flags obvious
+AI-written English endings such as `in conclusion`, `it is worth noting that`, and
+`at the end of the day`, while keeping the previous image-recovery and English opening/generic
+phrase protections:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 47 files
-  - `npm run test`: passed, 43 files / 328 tests
+  - `npm run test`: passed, 43 files / 329 tests
   - `npm run test:contract`: passed, 3 files / 13 tests
   - `npm run test:coverage`: passed, statements 88.2%, branches 76.19%, functions 92.13%,
     lines 88.64%
@@ -63,6 +62,10 @@ checked:
 
 Later status-only handoff commits should be re-checked on the current PR head; they do not change
 runtime code.
+
+The current local branch also includes implementation commit `712cdc4`, which detects English
+conclusion boilerplate, aligns generation/regeneration instructions, and adds focused unit coverage.
+Hosted CodeRabbit and Actions must be re-checked after the handoff/docs update is pushed.
 
 The latest verified pushed PR head before the image-alt HTML sync pass was:
 
