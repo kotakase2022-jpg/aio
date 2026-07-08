@@ -32,6 +32,29 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex pass on 2026-07-08 14:47 +09:00:
+
+- Re-checked PR #1 at head `e3022f7` before this pass:
+  - CodeRabbit: success
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m40s
+- Ran the explicitly approved production Supabase write/delete contract path:
+  - `AIO_LIVE_CONTRACT_TESTS=1`
+  - `AIO_LIVE_SUPABASE_ALLOW_WRITE=1`
+  - `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1`
+- `npm.cmd run test:live:readiness:supabase` passed.
+- `npm.cmd run test:live:supabase` passed, 1 file / 1 test. The test created, read, listed,
+  updated, and deleted a disposable generation-job record.
+- Re-ran OpenAI live readiness and artifact-producing generation:
+  - `AIO_LIVE_CONTRACT_TESTS=1`
+  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
+  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
+- `npm.cmd run test:live:readiness:openai` passed.
+- `npm.cmd run test:live:openai` failed at the initial minimal Responses API health call.
+- A direct non-secret diagnostic call confirmed the provider response was HTTP 429
+  `insufficient_quota` for the app default model `gpt-5.5`. No generated JSON/HTML artifacts were
+  produced.
+- No runtime code changed in this pass.
+
 Latest Codex pass on 2026-07-08 14:36 +09:00:
 
 - Retried OpenAI live generation with artifact writing enabled:
@@ -476,11 +499,13 @@ Additional manual PC browser smoke on 2026-07-06:
 These gaps prevent a true 100/100 completion claim:
 
 - Live OpenAI generation quality has passed in a prior run, but the latest artifact-producing live
-  retry on 2026-07-08 14:29 +09:00 failed at the initial API health call due to provider quota/rate
-  limiting. Human review artifacts still need to be generated after the provider limit recovers.
-- Supabase production write/delete verification has passed with explicit user approval and a
-  production-specific confirmation flag. A long-term staging-only procedure is still preferable for
-  routine release checks.
+  retry on 2026-07-08 14:46 +09:00 failed at the initial API health call. A direct diagnostic call
+  showed HTTP 429 `insufficient_quota` for `gpt-5.5`, so the `.env.local` OpenAI key/project still
+  lacks usable quota for this test. Human review artifacts still need to be generated after the
+  provider limit recovers for the exact key/project in use.
+- Supabase production write/delete verification passed again on 2026-07-08 14:45 +09:00 with
+  explicit user approval and a production-specific confirmation flag. A long-term staging-only
+  procedure is still preferable for routine release checks.
 - WordPress posting remains guarded by a sandbox live test, but sandbox WordPress credentials are
   not currently proven. The live readiness gate now also requires explicit post, media, and delete
   allow flags because the test creates and cleans up disposable WordPress resources.
@@ -496,8 +521,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  were green at pre-pass head `b570b2c`; re-check the current head after this article-quality pass
-  and handoff update are pushed.
+  were green at PR head `e3022f7` before this docs-only live-verification update; re-check the
+  current head after this handoff update is pushed.
 
 ## Current Self Score
 
@@ -512,12 +537,13 @@ for real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit after the article-quality pass and handoff update are
-   pushed.
-2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
-3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
-4. Re-run `npm run test:live:openai` with `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` after provider quota
-   or rate limiting recovers, then review the generated JSON/HTML artifacts.
+1. Re-check hosted Actions and CodeRabbit after this docs-only live-verification update is pushed.
+2. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
+3. Update or recover the OpenAI API key/project quota used by `.env.local`, then re-run
+   `npm run test:live:openai` with `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` and review the generated
+   JSON/HTML artifacts.
+4. If the user confirms a different OpenAI project/key should be used, update `.env.local` locally
+   without printing the secret, then repeat OpenAI readiness and live generation.
 5. Prepare disposable WordPress sandbox settings in `.env.live.local`, including
    `AIO_LIVE_WORDPRESS_ALLOW_DELETE=1`, then rerun
    `npm run test:live:readiness:wordpress`.

@@ -5,50 +5,57 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase, retried OpenAI artifact-producing live verification, then improved local anti-commodity article-quality checks after the provider remained rate/quota limited.
-- Phase: Article Quality Hardening / Handoff
-- Last updated: 2026-07-08 14:36 +09:00
+- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass executed the next approved live checks without changing runtime code.
+- Phase: Live Verification / Handoff
+- Last updated: 2026-07-08 14:47 +09:00
 
 ## 1. Current Goal
 
 Current objective:
 
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
-- This pass tightened detection and regeneration guidance for generic AI-like filler such as `一般的に`, `多くの場合`, `効率化につながります`, and `品質向上につながります`.
-- Overall goal is still not complete. Do not call the goal complete until representative article quality artifacts are generated/reviewed, WordPress live/sandbox posting is proven, and remaining high-risk flows are verified.
+- This pass focused on live provider proof after the user explicitly authorized the next necessary checks.
+- Overall goal is still not complete. Do not call the goal complete until representative OpenAI article artifacts are generated/reviewed, WordPress live/sandbox posting is proven, and remaining high-risk flows are verified.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
 - Latest implementation commit: `f023931 Tighten generic AI filler detection`
-- Latest implementation commit before this pass: `2fae1eb Ensure WordPress live cleanup attempts all resources`
+- Latest handoff/docs commit before this pass: `e3022f7 Refresh handoff after generic filler hardening`
 - Last known good local quality commit: `f023931`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed on PR #1 before this pass at head `b570b2c`; needs re-check after this pass is pushed.
-- GitHub Actions status: Passed on PR #1 before this pass at head `b570b2c`; needs re-check after this pass is pushed.
+- CodeRabbit OSS review status: Passed at PR head `e3022f7` before this docs-only pass.
+- GitHub Actions status: Passed at PR head `e3022f7` before this docs-only pass.
 
 ## 3. What Was Done
 
 Completed in this Codex pass:
 
-- Re-read current handoff, quality audit, package scripts, branch status, and PR check status.
-- Confirmed PR #1 was green before this pass at head `b570b2c`.
-- Ran OpenAI live readiness with artifact writing enabled; readiness passed without printing secrets.
-- Retried `npm.cmd run test:live:openai` with `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` and `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`.
-- The OpenAI live run failed at the initial Responses API health call with the existing Japanese quota/rate-limit error. No live article artifacts were produced.
-- Added generic AI-like filler coverage for `一般的に`, `多くの場合`, `効率化につながります`, and `品質向上につながります`.
-- Updated generation instructions and quality-regeneration action text so detected filler is also discouraged during generation/regeneration.
-- Added unit coverage for the new filler pattern and updated E2E coverage for the regenerated instruction text.
-- Ran full local quality successfully after fixing the expected E2E instruction text.
-- Committed the implementation as `f023931 Tighten generic AI filler detection`.
+- Re-read `AGENTS.md`, `CLAUDE.md`, `AI_HANDOFF.md`, `README.md`, and `package.json`.
+- Confirmed PR #1 was green at head `e3022f7`:
+  - CodeRabbit: success
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m40s
+- Ran the explicitly approved production Supabase write/delete live contract path:
+  - `AIO_LIVE_CONTRACT_TESTS=1`
+  - `AIO_LIVE_SUPABASE_ALLOW_WRITE=1`
+  - `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1`
+- `npm.cmd run test:live:readiness:supabase` passed.
+- `npm.cmd run test:live:supabase` passed. It created, read, listed, updated, and deleted a disposable generation-job record.
+- Re-ran OpenAI live readiness and artifact-producing generation with:
+  - `AIO_LIVE_CONTRACT_TESTS=1`
+  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
+  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
+- `npm.cmd run test:live:readiness:openai` passed.
+- `npm.cmd run test:live:openai` failed at the initial minimal Responses API health call.
+- Ran a direct non-secret diagnostic request. The provider returned HTTP 429 `insufficient_quota` for the app default model `gpt-5.5`.
+- Updated `docs/quality-audit.md` and this handoff with the live verification results.
 
 Relevant prior completed work that still matters:
 
 - Optional live OpenAI artifact capture exists via:
   - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
   - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
-- Live OpenAI sandbox verification passed in a prior run after quota recovery, but not with artifact writing enabled.
-- Supabase production live write/delete verification passed with explicit user approval and a production-specific confirmation flag.
+- Supabase production live write/delete verification has now passed again with explicit user approval and a production-specific confirmation flag.
 - `.env.local` contains live provider credentials locally and remains gitignored. Do not print or commit secrets.
 
 ## 4. Files Changed
@@ -56,30 +63,27 @@ Relevant prior completed work that still matters:
 Main files changed in this pass:
 
 - `docs/quality-audit.md`
-- `src/lib/article-quality.ts`
-- `src/lib/quality-regeneration-action.ts`
-- `src/lib/server/article-generation.ts`
-- `tests/e2e/aio-workflow.spec.ts`
-- `tests/unit/article-generation.test.ts`
-- `tests/unit/article-quality.test.ts`
 - `AI_HANDOFF.md`
+
+No runtime code changed in this pass.
 
 ## 5. Current Status
 
-- Local quality gate is green for this implementation.
-- Article-quality checks now catch an additional class of generic Japanese AI filler and propagate the repair wording into article regeneration.
+- PR #1 was green at `e3022f7` before this docs-only update.
+- Supabase production write/delete live verification is proven for the disposable generation-job path under explicit approval.
+- OpenAI live readiness passes, but the current `.env.local` API key/project still cannot complete even a minimal Responses API call because the provider returns 429 `insufficient_quota`.
+- No OpenAI generated article artifacts were produced in this pass.
 - WordPress live readiness is not configured locally and fails closed before live calls.
-- OpenAI artifact-producing live generation is still blocked by provider quota/rate limiting after a fresh retry in this pass.
-- PR #1 needs CodeRabbit/GitHub Actions re-check after the new implementation and handoff commits are pushed.
+- This docs-only handoff update should be pushed and PR checks re-checked.
 
 ## 6. Known Issues
 
-- `npm.cmd run test:live:openai` with artifact writing enabled failed again in this pass at the initial Responses API health call due to OpenAI quota/rate limiting. Re-run after the provider limit recovers.
+- `npm.cmd run test:live:openai` with artifact writing enabled still fails at the initial Responses API health call.
+- Direct diagnosis showed HTTP 429 `insufficient_quota` for `gpt-5.5`, so the exact OpenAI key/project used by `.env.local` needs quota/billing recovery or replacement before generated artifacts can be produced.
 - No live OpenAI review artifacts have been produced yet.
 - `npm.cmd run test:live:readiness:wordpress` currently fails because sandbox WordPress credentials and allow flags are missing.
 - WordPress live posting was not run in this pass.
 - Real generated article quality still needs human review on representative customer inputs.
-- The live OpenAI test incurs provider cost and takes roughly 3 minutes when provider quota is available.
 - Supabase production live write/delete has passed, but keep using `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1` only when explicitly authorized. Do not set `AIO_LIVE_CONFIRM_NON_PRODUCTION=1` for the production project.
 - `.env.local` contains a production Supabase service role key. Do not print, commit, or paste it anywhere.
 - Do not mark the active 100/100 goal complete yet.
@@ -88,10 +92,10 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed before this pass at PR head `b570b2c`.
+- Review status: Passed before this pass at PR head `e3022f7`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
-- Deferred findings: current head needs CodeRabbit review after push.
+- Deferred findings: current docs-only head needs CodeRabbit review after push.
 - False positives / not applicable: none.
 
 ## 8. Optional Bugbot Findings
@@ -101,7 +105,7 @@ Cursor Bugbot optional review:
 - Status: Not run.
 - Findings: none.
 - Actions taken: none.
-- Reason: Cursor Bugbot is optional/backup only. This pass did not change auth, credentials, payment, production deployment, or production write/delete behavior.
+- Reason: Cursor Bugbot is optional/backup only. This pass did not change auth, credentials, payment, production deployment, or runtime production write/delete behavior.
 
 ## 9. Verification Results
 
@@ -109,84 +113,70 @@ Commands run during this pass:
 
 ```bash
 gh pr checks 1 --repo kotakase2022-jpg/aio
+gh pr view 1 --repo kotakase2022-jpg/aio --json headRefName,headRefOid,isDraft,url,statusCheckRollup,reviewDecision
+npm.cmd run test:live:readiness:supabase
+npm.cmd run test:live:supabase
 npm.cmd run test:live:readiness:openai
 npm.cmd run test:live:openai
-npx.cmd vitest run tests/unit/article-quality.test.ts tests/unit/article-generation.test.ts tests/unit/quality-regeneration-action-coverage.test.ts
-npm.cmd run typecheck
-npm.cmd run lint
-npx.cmd playwright test tests/e2e/aio-workflow.spec.ts:454 --project=chromium-pc
-npm.cmd run quality
-git commit -m "Tighten generic AI filler detection"
+node --input-type=module - # direct non-secret OpenAI diagnostic request
 ```
 
 Results:
 
-- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at pre-pass PR head `b570b2c`.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at PR head `e3022f7`.
   - CodeRabbit passed.
   - GitHub Actions `Typecheck, lint, tests, E2E, build` passed.
-- `npm.cmd run test:live:readiness:openai`: passed with artifact writing variables set.
-- `npm.cmd run test:live:openai`: failed at the initial Responses API health call with the app's Japanese OpenAI quota/rate-limit error. No artifact files were produced.
-- Focused Vitest for article-quality, article-generation, and quality-regeneration action: passed, 3 files / 113 tests.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed.
-- First `npm.cmd run quality`: failed only because one E2E assertion expected the old regeneration-instruction phrase order. The product text already showed the new generic filler list. The E2E expectation was updated to match the intended new wording.
-- Focused Playwright rerun for `tests/e2e/aio-workflow.spec.ts:454`: passed.
-- `npm.cmd run quality`: passed.
-  - typecheck passed
-  - lint passed
-  - test integrity passed, 48 files
-  - unit/integration tests passed, 44 files / 342 tests
-  - contract tests passed, 3 files / 13 tests
-  - coverage passed: statements 88.39%, branches 76.39%, functions 92.35%, lines 88.83%
-  - E2E passed, 49 Chromium PC tests
-  - build passed, Next.js 16.2.9 production build
-- Pre-commit hook for `f023931`: passed.
-  - lint passed
-  - test integrity passed
+- `npm.cmd run test:live:readiness:supabase`: passed.
+- `npm.cmd run test:live:supabase`: passed, 1 file / 1 test.
+- `npm.cmd run test:live:readiness:openai`: passed.
+- `npm.cmd run test:live:openai`: failed at the initial Responses API health call with the app's Japanese OpenAI quota/rate-limit error.
+- Direct non-secret OpenAI diagnostic: HTTP 429 `insufficient_quota` for `gpt-5.5`.
 
 Not run in this pass:
 
-- `npm.cmd run test:live:supabase`
-- `npm.cmd run test:live:wordpress`
+- `npm.cmd run quality` because no runtime code changed and PR #1 was already green at `e3022f7`; re-run if Claude Code wants a fresh post-docs confirmation.
+- `npm.cmd run test:live:wordpress` because sandbox WordPress credentials and allow flags are still not configured.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Review the generic AI-filler additions in `src/lib/article-quality.ts`, `src/lib/server/article-generation.ts`, and `src/lib/quality-regeneration-action.ts`.
+1. Review this docs-only live verification update.
 2. Re-check PR #1 CodeRabbit and GitHub Actions after this handoff is pushed.
-3. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
-4. After OpenAI quota/rate limiting recovers, run:
+3. Confirm whether the OpenAI billing/quota recovery was applied to the same project/API key currently stored in `.env.local`.
+4. If the user supplies or confirms a corrected key/project, update `.env.local` locally without printing the secret, then re-run:
 
 ```bash
+$env:AIO_LIVE_CONTRACT_TESTS='1'
 $env:AIO_LIVE_OPENAI_WRITE_ARTIFACTS='1'
 $env:AIO_LIVE_OPENAI_ARTIFACT_DIR='test-results/live-openai'
 npm.cmd run test:live:openai
 ```
 
-5. Inspect the generated JSON/HTML artifacts for human editorial quality, not just machine score.
+5. Inspect generated JSON/HTML artifacts for human editorial quality once OpenAI live generation succeeds.
+6. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `scripts/check-live-readiness.mjs`: confirm WordPress live tests require all explicit mutation permissions.
-- `tests/live/wordpress.live.test.ts`: confirm cleanup attempts both post and media deletion and reports bounded failure details.
-- `src/lib/article-quality.ts`: confirm the new Japanese generic filler terms are neither too broad nor too narrow.
-- `tests/unit/article-quality.test.ts` and `tests/e2e/aio-workflow.spec.ts`: confirm the regression coverage matches the intended quality guidance.
-- `docs/quality-audit.md`: confirm the new article-quality evidence and remaining proof gaps are clear.
+- `docs/quality-audit.md`: confirm the live verification evidence and remaining proof gaps are accurate.
+- `AI_HANDOFF.md`: confirm the current owner/next owner and OpenAI/Supabase live status are clear.
+- OpenAI environment setup: verify the `.env.local` key/project is the one whose quota was recovered, without printing secret values.
+- WordPress live sandbox readiness: confirm missing credentials and allow flags before attempting any live posting.
 
 ## 12. Risk Notes
 
+- OpenAI live artifact generation remains blocked by provider quota for the current API key/project.
 - WordPress live posting still needs sandbox credentials before execution.
 - The live WordPress test creates and deletes disposable resources; keep post, media, delete, and non-production confirmations explicit.
-- Provider/model behavior can drift. Keep deterministic local article-quality scoring as the final safety cap.
-- Production Supabase live verification was explicitly authorized and passed previously, but should remain guarded.
+- Provider/model behavior can drift. Keep deterministic local article-quality scoring as the safety cap.
+- Production Supabase live verification was explicitly authorized and passed again, but should remain guarded.
 
 ## 13. Do Not Touch
 
 - `.env*`, OpenAI/Supabase/WordPress/Vercel credentials, and production data.
 - `.claude/` unless the user explicitly asks.
 - Quality gate, test integrity, and CodeRabbit operating docs should not be weakened.
-- Avoid unrelated UI rewrites, screen-transition changes, broad refactors, production deploys, production DB/API writes, `git push --force`, or `git reset --hard`.
+- Avoid unrelated UI rewrites, screen-transition changes, broad refactors, production deploys, production DB/API writes without explicit approval, `git push --force`, or `git reset --hard`.
 
 ## 14. Notes for Claude Code
 
