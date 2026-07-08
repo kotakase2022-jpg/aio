@@ -118,9 +118,53 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("Do not paste long reference or competitor passages");
     expect(call?.instructions).toContain("Do not paste primaryInfo verbatim");
     expect(call?.instructions).toContain("absence of AI-like generic phrasing");
+    expect(call?.instructions).toContain("0-100 scale");
+    expect(call?.instructions).toContain("not 8.6");
+    expect(call?.instructions).toContain("body_html itself");
+    expect(call?.instructions).toContain("FAQ section");
     expect(input.payload.form.primaryInfo?.startsWith(" ")).toBe(false);
     expect(input.payload.form.primaryInfo).toContain("one-person contractors");
     expect(input.payload.form.primaryInfo).toContain("LINE");
+  });
+
+  test("normalizes model self-evaluation scores that use a 0-10 scale", async () => {
+    const { normalizeSelfEvaluationScore } = await import("@/lib/server/article-generation");
+
+    expect(normalizeSelfEvaluationScore(8.6)).toBe(86);
+    expect(normalizeSelfEvaluationScore(86)).toBe(86);
+    expect(normalizeSelfEvaluationScore(Number.NaN)).toBe(0);
+  });
+
+  test("adds managed takeaway and FAQ blocks when the generated body omits them", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      body_html:
+        "<h2>一人親方労災とは加入判断を先に整理する制度です</h2><p>結論として、加入条件、給付基礎日額、補償開始日を先に確認します。</p>",
+      key_takeaways: ["加入条件を先に確認する", "給付基礎日額は収入と費用で判断する"],
+      faq_items: [
+        {
+          question: "一人親方はいつ加入条件を確認すべきですか",
+          answer: "業務開始日と補償開始日の前に、業務実態と費用負担者を確認します。",
+        },
+        ...sampleArticleResult.faq_items.slice(1),
+      ],
+    });
+
+    const result = await generateAioArticle({
+      form: sampleFormPayload,
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.body_html).toContain("aio-key-takeaways");
+    expect(result.body_html).toContain("<ul>");
+    expect(result.body_html).toContain("aio-faq-block");
+    expect(result.body_html).toContain("aio-source-block");
+    expect(result.body_html).toContain("https://example.com/reference");
+    expect(result.body_html).toContain("一人親方はいつ加入条件を確認すべきですか");
   });
 
   test("treats whitespace-only primary information as missing before article generation", async () => {
@@ -722,7 +766,7 @@ describe("generateAioArticle", () => {
     );
   });
 
-  test("caps self-evaluation when competitor source URLs disappear from generated body", async () => {
+  test("keeps competitor source URLs visible when the generated body omits them", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");
     vi.mocked(createStructuredResponse).mockResolvedValueOnce({
@@ -766,10 +810,37 @@ describe("generateAioArticle", () => {
       },
     });
 
-    expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
-    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
-      "https://example.com/competitor-source",
-    );
+    expect(result.body_html).toContain("aio-source-block");
+    expect(result.body_html).toContain("https://example.com/competitor-source");
+  });
+
+  test("does not append unsafe source URLs to generated body HTML", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      body_html:
+        "<h2>AIO content means source-aware article operations.</h2><p>Answer first: editors keep source evidence and field observations separate before approval.</p>",
+      sources: [{ url: "javascript:alert(1)", title: "Unsafe source", usage_notes: "ignored" }],
+    });
+
+    const result = await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        references: [
+          {
+            id: "unsafe-ref",
+            url: "javascript:alert(1)",
+            text: "Unsafe URL should not become a link.",
+          },
+        ],
+      },
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.body_html).not.toContain("javascript:alert");
   });
 
   test("caps self-evaluation when generated body ignores target reader and search intent", async () => {

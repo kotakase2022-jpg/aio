@@ -164,6 +164,7 @@ const adjacentNumericSupportPattern =
   /^(出典|参照|参考|source|sources|調査|公表|資料|データ|統計|アンケート|ヒアリング|推定|目安|約|およそ|条件|場合|時点|根拠)[:：、\s]|^(未確認|断定しない|可能性|傾向|照合)/i;
 
 const longSentenceCharacterLimit = 130;
+const sentenceBoundaryPattern = /[。．.!！？?]+/;
 
 const repetitiveConnectors = [
   "また",
@@ -439,10 +440,11 @@ export function evaluateArticleQuality(
   context: ArticleQualityContext = {},
 ): ArticleQualityEvaluation {
   const text = normalizeText(stripHtml(html));
-  const sentences = extractSentences(text);
-  const sentenceEndings = extractSentenceEndings(text);
-  const leadingConnectors = extractLeadingConnectors(text);
-  const formulaicFrames = extractFormulaicSentenceFrames(text);
+  const proseText = normalizeText(stripHtml(removeAuxiliaryQualityHtml(html)));
+  const sentences = extractSentences(proseText);
+  const sentenceEndings = extractSentenceEndings(proseText);
+  const leadingConnectors = extractLeadingConnectors(proseText);
+  const formulaicFrames = extractFormulaicSentenceFrames(proseText);
   const genericPhraseHits = countPhraseHits(text, genericPhrases);
   const verboseAiPhraseHits = countPhraseHits(text, verboseAiPhrases);
   const repetitiveNecessityPhraseHits = countPhraseHits(text, repetitiveNecessityPhrases);
@@ -482,7 +484,7 @@ export function evaluateArticleQuality(
   const hasSourceUrlPresence =
     !shouldCheckSourceUrls || missingSourceUrls.length === 0;
   const targetWordCount = normalizeTargetWordCount(context.targetWordCount);
-  const visibleCharacterCount = countVisibleCharacters(text);
+  const visibleCharacterCount = countVisibleCharacters(proseText || text);
   const lengthRange = targetWordCount ? targetLengthRange(targetWordCount) : null;
   const hasTargetLengthAlignment =
     !lengthRange ||
@@ -492,7 +494,9 @@ export function evaluateArticleQuality(
   const mechanicalSequenceHeadingHits = headings.filter(isMechanicalSequenceHeading).length;
   const hasEditorialHeadings = headings.length >= 2 && mechanicalHeadingHits === 0;
   const hasHeadingStoryline = headings.length < 3 || mechanicalSequenceHeadingHits <= 1;
-  const headingSections = extractHeadingSections(html);
+  const headingSections = extractHeadingSections(html).filter(
+    (section) => !isAuxiliaryHeading(section.heading),
+  );
   const thinSections = headingSections.filter(isThinHeadingSection);
   const allowedThinSections = headingSections.length >= 2 ? 1 : 0;
   const hasSectionSpecificity =
@@ -959,6 +963,7 @@ export function evaluateArticleQuality(
       Math.min(Math.max(0, repetitiveNecessityPhraseHits - 2), 4) * 2 -
       Math.min(unsupportedClaimHits, 4) * 2 -
       Math.min(unsupportedNumericClaims.length, 4) * 2 -
+      Math.min(mechanicalHeadingHits, 4) * 2 -
       Math.min(mechanicalSequenceHeadingHits, 4) * 2 -
       Math.min(longSentences.length, 4) * 2,
   );
@@ -975,7 +980,18 @@ function stripHtml(html: string) {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "。 ")
+    .replace(/<\/(?:p|li|td|th|tr|h[1-6]|div|section)>/gi, "。 ")
     .replace(/<[^>]+>/g, " ");
+}
+
+function removeAuxiliaryQualityHtml(html: string) {
+  return html
+    .replace(
+      /<section\b[^>]*class=(["'])[^"']*\baio-(?:faq|author|source)-block\b[^"']*\1[^>]*>[\s\S]*?<\/section>/gi,
+      " ",
+    )
+    .replace(/<h[23][^>]*>\s*(?:FAQ(?:[:：][\s\S]*?)?|よくある質問|この記事の執筆者|参照元)\s*<\/h[23]>[\s\S]*?(?=<h[12]\b|$)/gi, " ");
 }
 
 function normalizeText(text: string) {
@@ -1171,21 +1187,21 @@ function extractNextSentence(text: string, sentenceEnd: number) {
 
 function extractSentenceEndings(text: string) {
   return stripUrlText(text)
-    .split(/[。！？!?]/)
+    .split(sentenceBoundaryPattern)
     .map((sentence) => sentence.trim().slice(-3))
     .filter((ending) => ending.length >= 2);
 }
 
 function extractSentences(text: string) {
   return stripUrlText(text)
-    .split(/[。！？!?]+/)
+    .split(sentenceBoundaryPattern)
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length >= 2);
 }
 
 function extractLeadingConnectors(text: string) {
   return stripUrlText(text)
-    .split(/[。！？!?]/)
+    .split(sentenceBoundaryPattern)
     .map((sentence) => sentence.trim().replace(/^[「『（(【\s]+/, ""))
     .map((sentence) =>
       repetitiveConnectors.find((connector) =>
@@ -1197,7 +1213,7 @@ function extractLeadingConnectors(text: string) {
 
 function extractFormulaicSentenceFrames(text: string) {
   return stripUrlText(text)
-    .split(/[。！？!?]/)
+    .split(sentenceBoundaryPattern)
     .map((sentence) => sentence.trim().replace(/^[「『（(【\s]+/, ""))
     .map((sentence) => formulaicSentenceFrames.find((frame) => sentence.startsWith(frame)))
     .filter((frame): frame is string => Boolean(frame));
@@ -1253,6 +1269,33 @@ function extractHeadingSections(html: string) {
       };
     })
     .filter((section) => section.heading);
+}
+
+function isAuxiliaryHeading(heading: string) {
+  const normalized = heading.replace(/\s+/g, "").toLowerCase();
+  return (
+    normalized === "faq" ||
+    normalized.startsWith("faq:") ||
+    normalized.startsWith("faq：") ||
+    normalized === "よくある質問" ||
+    normalized === "この記事の執筆者" ||
+    normalized === "参照元" ||
+    normalized === "source" ||
+    normalized === "sources" ||
+    normalized === "author" ||
+    normalized === "abouttheauthor" ||
+    isQuestionLikeAuxiliaryHeading(normalized)
+  );
+}
+
+function isQuestionLikeAuxiliaryHeading(normalizedHeading: string) {
+  return (
+    normalizedHeading.endsWith("?") ||
+    normalizedHeading.endsWith("？") ||
+    normalizedHeading.includes("ですか") ||
+    normalizedHeading.includes("ますか") ||
+    normalizedHeading.includes("でしょうか")
+  );
 }
 
 function isThinHeadingSection(section: { heading: string; bodyText: string }) {

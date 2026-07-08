@@ -47,6 +47,8 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "Avoid unsupported strong claims such as 必ず, 絶対に, 完全に, 誰でも, 唯一, すべて解決, or 確実に unless the source material proves them and the sentence includes conditions or caveats.",
       "When using numbers, percentages, costs, timing, counts, or performance-like claims, attach a source, condition, date, caveat, estimate, or first-party observation near the number. Do not present unsupported figures as facts.",
       "When reference URLs or source URLs are available, keep the actual URLs visible in body_html as source notes or links so the WordPress draft remains independently checkable after publishing.",
+      "In body_html itself, include at least one <ul> or <ol> and an FAQ section. Do not rely only on separate key_takeaways or faq_items arrays.",
+      "The first paragraph of body_html must be answer-first and include a definition or decision sentence using a natural Japanese form such as '...とは...を指します' when the topic allows it.",
       "Write as a human editor who has interviewed the business: each major section should include at least one concrete decision criterion, field example, operational caveat, failure pattern, or source-backed detail.",
       "Avoid thin H2/H3 sections. Every H2/H3 body should include at least two concrete signals such as a number, field observation, decision criterion, failure/risk note, team/cost/timing detail, or source/caveat note.",
       "Across the full article, include at least three different types of editorial evidence: field observations, decision criteria, failure/risk notes, team/cost/timing details, and source/caveat notes.",
@@ -63,6 +65,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "In aio_score_self_evaluation, explicitly judge concreteness, use of first-party information, source fidelity, and absence of AI-like generic phrasing.",
       "Respect payload.form.wordCount as the target Japanese character count. Natural variance is acceptable, but stay close to the requested scale.",
       "Respect payload.form.imageCount when creating image_prompts. Return zero image_prompts when imageCount is 0, otherwise return exactly that many prompts up to 3.",
+      "Set aio_score_self_evaluation.score on a 0-100 scale. For example, return 86 for a strong draft, not 8.6.",
       "Return only JSON matching the schema. body_html must be safe article HTML, not Markdown.",
     ].join("\n"),
     input: JSON.stringify({
@@ -74,7 +77,17 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     maxOutputTokens: 16_000,
   });
 
-  const sanitizedBodyHtml = sanitizeArticleHtml(result.body_html);
+  const sourceUrls = collectSourceUrls(
+    compactPayload.form,
+    compactPayload.fetchedReferences,
+    compactPayload.fetchedCompetitors,
+    compactPayload.competitorResearch,
+    result.sources,
+  );
+  const sanitizedBodyHtml = ensureGeneratedSourceUrls(
+    ensureGeneratedBodyStructure(sanitizeArticleHtml(result.body_html), result),
+    sourceUrls,
+  );
   const qualityEvaluation = evaluateArticleQuality(sanitizedBodyHtml, {
     primaryInfo:
       typeof compactPayload.form.primaryInfo === "string"
@@ -89,13 +102,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     targetReaderText: result.target_reader,
     searchIntentText: result.search_intent,
     referenceTexts: collectReferenceTexts(compactPayload.form, compactPayload.fetchedReferences),
-    sourceUrls: collectSourceUrls(
-      compactPayload.form,
-      compactPayload.fetchedReferences,
-      compactPayload.fetchedCompetitors,
-      compactPayload.competitorResearch,
-      result.sources,
-    ),
+    sourceUrls,
     competitorTexts: collectCompetitorTexts(
       compactPayload.form,
       compactPayload.fetchedCompetitors,
@@ -139,19 +146,23 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       typeof compactPayload.form.primaryInfo === "string" ? compactPayload.form.primaryInfo : "",
   });
 
+  const normalizedSelfEvaluationScore = normalizeSelfEvaluationScore(
+    result.aio_score_self_evaluation.score,
+  );
+  const deterministicScore = Math.min(
+    qualityEvaluation.score,
+    titleEvaluation.score,
+    faqEvaluation.score,
+    metaDescriptionEvaluation.score,
+    imageAltEvaluation.score,
+  );
+
   return {
     ...result,
     body_html: sanitizedBodyHtml,
     image_prompts: normalizedImagePrompts,
     aio_score_self_evaluation: {
-      score: Math.min(
-        result.aio_score_self_evaluation.score,
-        qualityEvaluation.score,
-        titleEvaluation.score,
-        faqEvaluation.score,
-        metaDescriptionEvaluation.score,
-        imageAltEvaluation.score,
-      ),
+      score: Math.min(normalizedSelfEvaluationScore, deterministicScore),
       strengths: uniqueItems([
         ...result.aio_score_self_evaluation.strengths,
         ...qualityEvaluation.strengths.map((item) => `編集品質チェック: ${item}`),
@@ -170,6 +181,110 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       ]).slice(0, 8),
     },
   } satisfies ArticleGenerationResult;
+}
+
+export function normalizeSelfEvaluationScore(score: number) {
+  if (!Number.isFinite(score)) {
+    return 0;
+  }
+
+  const boundedScore = Math.max(0, Math.min(100, score));
+  if (boundedScore > 0 && boundedScore <= 10) {
+    return Math.round(boundedScore * 10);
+  }
+
+  return boundedScore;
+}
+
+function ensureGeneratedBodyStructure(html: string, result: ArticleGenerationResult) {
+  let nextHtml = html.trim();
+
+  if (!/<(?:ul|ol)[\s>]/i.test(nextHtml) && result.key_takeaways.length > 0) {
+    const items = result.key_takeaways
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 5)
+      .map((item) => `<li>${escapeHtml(item)}</li>`)
+      .join("");
+
+    if (items) {
+      nextHtml = `${nextHtml}\n<section class="aio-key-takeaways"><h2>要点</h2><ul>${items}</ul></section>`;
+    }
+  }
+
+  if (!/(FAQ|よくある質問|<h2[^>]*>[^<]*質問|<h3[^>]*>[^<]*質問)/i.test(nextHtml)) {
+    const faqItems = result.faq_items
+      .map((item) => ({
+        question: item.question.trim(),
+        answer: item.answer.trim(),
+      }))
+      .filter((item) => item.question || item.answer)
+      .slice(0, 5);
+
+    if (faqItems.length > 0) {
+      const faqHtml = faqItems
+        .map(
+          (item) =>
+            `<div class="aio-faq-item"><h3>${escapeHtml(item.question || "FAQ")}</h3><p>${escapeHtml(
+              item.answer,
+            )}</p></div>`,
+        )
+        .join("");
+      nextHtml = `${nextHtml}\n<section class="aio-faq-block" aria-label="FAQ"><h2>FAQ</h2>${faqHtml}</section>`;
+    }
+  }
+
+  return nextHtml;
+}
+
+function ensureGeneratedSourceUrls(html: string, sourceUrls: string[]) {
+  const missingUrls = sourceUrls
+    .map((url) => url.trim())
+    .filter(Boolean)
+    .filter(isSafeHttpUrl)
+    .slice(0, 8)
+    .filter((url) => !html.includes(url));
+
+  if (missingUrls.length === 0) {
+    return html;
+  }
+
+  const items = missingUrls
+    .map(
+      (url) =>
+        `<li><a href="${escapeHtmlAttribute(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
+          url,
+        )}</a></li>`,
+    )
+    .join("");
+
+  return `${html}\n<section class="aio-source-block" aria-label="参照元"><h2>参照元</h2><ul>${items}</ul></section>`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeHtmlAttribute(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function isSafeHttpUrl(value: string) {
+  try {
+    const parsedUrl = new URL(value);
+    return parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function compactFetchResult(value: Record<string, unknown>) {

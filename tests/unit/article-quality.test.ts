@@ -1318,6 +1318,32 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeGreaterThanOrEqual(90);
   });
 
+  test("does not treat managed FAQ, source, list, or table blocks as weak prose", () => {
+    const result = evaluateArticleQuality(`
+      <h2>AIO source strategy means separating source evidence from field observations.</h2>
+      <p>Answer first: an AIO article should state the decision criterion before the detail. In 12 review cases, editors reduced unsupported claims by assigning a reviewer, source owner, and publish owner before WordPress approval.</p>
+      <table><tr><th>Criterion</th><td>Owner, timing, cost, source URL, and risk are compared before approval.</td></tr></table>
+      <ul><li>Use field observations only when the team can explain where they came from.</li><li>Mark unsupported numbers as estimates or remove them before publication.</li></ul>
+      <h2>Approval workflow before publishing</h2>
+      <p>The team checks source links, first-party observations, and competitor claims in separate passes. This makes the final draft easier to audit and lowers the risk of publishing unverified pricing or timing claims.</p>
+      <section class="aio-faq-block" aria-label="FAQ">
+        <h2>FAQ: AIO article approval</h2>
+        <div><h3>Should FAQ items be counted as main sections?</h3><p>No. They support the article and should not make concrete body sections look thin.</p></div>
+      </section>
+      <section class="aio-source-block" aria-label="Sources">
+        <h2>Sources</h2>
+        <ul><li><a href="https://example.com/reference">https://example.com/reference</a></li></ul>
+      </section>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "section-specificity", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "sentence-length", passed: true }),
+    );
+  });
+
   test("penalizes mechanical headings even when the body has structure", () => {
     const result = evaluateArticleQuality(`
       <h2>重要なポイント</h2>

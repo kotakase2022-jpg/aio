@@ -102,26 +102,26 @@ const liveGenerationSamples: LiveGenerationSample[] = [
   {
     name: "one-person contractor workers compensation",
     theme:
-      "一人親方の労災保険。キーワード: 加入条件、給付基礎日額、費用。想定読者: 建設業の一人親方。",
+      "一人親方の労災保険。キーワード: 加入条件、給付基礎日額、費用、補償開始日。想定読者: 建設業の一人親方。",
     primaryInfo:
-      "当社の支援現場では、一人親方から「自分が特別加入の対象か」「給付基礎日額をいくらにすべきか」という相談が多い。LINEで口頭確認が残り、帳票不在のまま進むケースもある。",
+      "当社の支援現場では、一人親方から「自分が特別加入の対象か」「給付基礎日額をいくらにすべきか」という相談が多い。LINEで口頭確認だけが残り、帳票不在のまま進むケースもあるため、加入前に業務内容、開始希望日、費用負担者を整理する必要がある。",
     referenceUrl: "https://sandbox.example.com/reference/oyakata",
     referenceTitle: "Sandbox one-person contractor reference",
     referenceText:
-      "一人親方労災保険では、特別加入、加入条件、給付基礎日額、補償開始日、労働保険事務組合の確認が必要である。未確認の費用や対象範囲は断定しない。",
+      "一人親方労災保険では、特別加入、加入条件、給付基礎日額、補償開始日、労働保険事務組合の確認が重要である。未確認の費用や対象範囲は断定せず、事前に参照元と本人の業務実態を照合する必要がある。",
   },
   {
     name: "SaaS onboarding operations",
     theme:
       "BtoB SaaSのオンボーディング改善。キーワード: 初期設定、利用定着、管理者教育、解約防止。想定読者: カスタマーサクセス責任者。",
     primaryInfo:
-      "当社の支援では、初期設定は完了しても管理者教育が薄く、3週間目に利用定着が止まる相談が多い。解約理由は機能不足より、社内承認と運用担当が曖昧なことに寄りやすい。",
+      "当社の支援では、初期設定が完了していても管理者教育が薄く、3週目に利用定着が止まる相談が多い。解約理由は機能不足よりも、社内承認フローと運用担当が曖昧なことに寄りやすい。",
     referenceUrl: "https://sandbox.example.com/reference/saas-onboarding",
     referenceTitle: "Sandbox SaaS onboarding reference",
     referenceText:
       "BtoB SaaSのオンボーディングでは、初期設定、管理者教育、利用定着、ヘルススコア、解約防止、社内承認フローを分けて確認する必要がある。",
     competitorText:
-      "競合記事はオンボーディングチェックリストと初期設定手順を中心に解説している。差別化ポイントは管理者教育、3週間目の定着確認、社内承認フローの失敗例である。",
+      "競合記事はオンボーディングチェックリストと初期設定手順を中心に解説している。差別化ポイントは、管理者教育、3週目の定着確認、社内承認フローの失敗例である。",
     competitorResearch: {
       summary: "競合は初期設定手順に偏り、利用定着と管理者教育の運用論が薄い。",
       queries: ["SaaS オンボーディング 初期設定", "SaaS 利用定着 管理者教育"],
@@ -130,8 +130,8 @@ const liveGenerationSamples: LiveGenerationSample[] = [
           url: "https://sandbox.example.com/competitor/saas",
           title: "競合オンボーディング記事",
           majorPoints: ["初期設定手順", "チェックリスト"],
-          differentiationPoints: ["管理者教育", "3週間目の利用定着", "社内承認フロー"],
-          recommendations: ["競合との差別化として運用担当と定着確認の失敗例を入れる"],
+          differentiationPoints: ["管理者教育", "3週目の利用定着", "社内承認フロー"],
+          recommendations: ["競合との差別化として、運用担当と定着確認の失敗例を入れる"],
         },
       ],
     },
@@ -169,7 +169,8 @@ function buildLiveForm(sample: LiveGenerationSample): ArticleFormPayload {
     competitorFiles: [],
     theme: sample.theme,
     primaryInfo: sample.primaryInfo,
-    closingText: "詳しい運用設計や記事制作フローの見直しは、問い合わせフォームからご相談ください。",
+    closingText:
+      "詳しい運用設計や記事制作フローの見直しは、問い合わせフォームからご相談ください。",
     author: {
       name: "Live Sandbox Editor",
       title: "AIO Content Reviewer",
@@ -180,7 +181,7 @@ function buildLiveForm(sample: LiveGenerationSample): ArticleFormPayload {
       preset: "シンプルなBtoBホワイトペーパー風",
     },
     imageCount: 0,
-    wordCount: 1000,
+    wordCount: 2000,
   };
 }
 
