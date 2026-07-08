@@ -111,6 +111,9 @@ describe("quality regeneration action coverage", () => {
     expect(action).toContain("delve into");
     expect(action).toContain("navigate the complexities");
     expect(action).toContain("unlock the potential");
+    expect(action).toContain("in conclusion");
+    expect(action).toContain("it is worth noting that");
+    expect(action).toContain("at the end of the day");
     expect(action).toContain("参照元の事実");
     expect(action).toContain("一次情報");
     expect(action).toContain("判断基準");

@@ -81,6 +81,9 @@ const genericPhrases = [
   "game-changer",
   "unlock the potential",
   "empower businesses",
+  "in conclusion",
+  "it is worth noting that",
+  "at the end of the day",
 ];
 
 const genericOpeningPatterns = [
@@ -111,6 +114,9 @@ const genericOpeningPatterns = [
 ];
 
 const genericEndingPatterns = [
+  { label: "in conclusion", pattern: /\bin conclusion\b/i },
+  { label: "it is worth noting that", pattern: /\bit is worth noting that\b/i },
+  { label: "at the end of the day", pattern: /\bat the end of the day\b/i },
   { label: "いかがでしたでしょうか", pattern: /いかがでしたでしょうか/ },
   { label: "ぜひ参考にしてください", pattern: /ぜひ参考にしてください/ },
   { label: "最後までお読みいただき", pattern: /最後までお読みいただき/ },

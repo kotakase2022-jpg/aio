@@ -107,6 +107,9 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("navigate the complexities");
     expect(call?.instructions).toContain("unlock the potential");
     expect(call?.instructions).toContain("empower businesses");
+    expect(call?.instructions).toContain("in conclusion");
+    expect(call?.instructions).toContain("it is worth noting that");
+    expect(call?.instructions).toContain("at the end of the day");
     expect(call?.instructions).toContain("run one silent editorial self-review");
     expect(call?.instructions).toContain("selected_title, body_html, headings, faq_items");
     expect(call?.instructions).toContain("lacks first-party/source evidence");
