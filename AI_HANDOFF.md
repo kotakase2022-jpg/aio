@@ -25,12 +25,12 @@ Current objective:
 - Branch: `codex/persistent-quality-gate-operations`
 - Latest implementation commit: `4b58edc Tighten numeric and body length quality checks`
 - Latest checked local quality state: `4b58edc`, verified by `npm.cmd run quality`.
-- Latest pushed PR head checked before this pass: `2bd2b69 Record hosted PR checks in handoff`
-- Hosted state checked before this pass:
-  - CodeRabbit: success at `2bd2b69`
-  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success at `2bd2b69`
+- Latest pushed code-bearing / handoff head checked before this final status-only update: `34be79d Refresh handoff after clean live article checks`
+- Hosted state checked for `34be79d`:
+  - CodeRabbit: success
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m34s
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: needs re-check after the current local commits are pushed.
+- CodeRabbit OSS review status: passed for `34be79d`. Re-check this status-only handoff update if pushed.
 
 ## 3. What Was Done
 
@@ -50,6 +50,9 @@ Completed in this Codex pass:
 - Re-ran live OpenAI generation. The latest three artifacts all passed the live threshold and had no failed deterministic article-body checks.
 - Re-ran the full local `npm.cmd run quality` gate successfully.
 - Updated `docs/quality-audit.md` with the latest live OpenAI evidence and remaining proof gaps.
+- Pushed `4b58edc` + `34be79d` and confirmed hosted PR checks:
+  - CodeRabbit: pass.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m34s.
 
 ## 4. Files Changed
 
@@ -98,7 +101,7 @@ Known issues:
 
 CodeRabbit OSS review status:
 
-- Review status: success at previous checked pushed head `2bd2b69`; current local commits need re-check after push.
+- Review status: success at checked pushed head `34be79d`; re-check this status-only handoff update if pushed.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
 - Deferred findings: none known.
@@ -124,6 +127,8 @@ npm.cmd run typecheck
 AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1 AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai npm.cmd run test:live:openai
 npm.cmd run quality
 git commit -m "Tighten numeric and body length quality checks"
+git push
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 ```
 
 Results:
@@ -144,6 +149,15 @@ Results:
 - Pre-commit hook for `4b58edc`: passed.
   - lint passed
   - test integrity passed, 48 files
+- Pre-push hook for `34be79d`: passed.
+  - lint passed
+  - typecheck passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 346 tests
+  - contract tests passed, 3 files / 13 tests
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed for `34be79d`.
+  - CodeRabbit passed.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m34s.
 
 Not run in this pass:
 
@@ -156,9 +170,8 @@ Not run in this pass:
 Next Claude Code should:
 
 1. Review implementation commit `4b58edc`, especially whether previous-sentence numeric support is narrow enough and whether the main-body-length prompt is not overconstraining.
-2. After Codex pushes this handoff state, re-check PR #1 CodeRabbit and GitHub Actions on the latest pushed head.
-3. Human-read the latest ignored OpenAI live HTML artifacts for editorial naturalness, because the deterministic checks are now clean but the model still self-scores 88-91.
-4. Prepare a disposable WordPress sandbox and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
+2. Human-read the latest ignored OpenAI live HTML artifacts for editorial naturalness, because the deterministic checks are now clean but the model still self-scores 88-91.
+3. Prepare a disposable WordPress sandbox and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 
 ## 11. Suggested Review Scope for Claude Code
 
