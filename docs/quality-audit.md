@@ -32,6 +32,27 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex pass on 2026-07-08 14:20 +09:00:
+
+- Hardened `tests/live/wordpress.live.test.ts` cleanup so the disposable WordPress post deletion
+  and featured-media deletion are both attempted even when one cleanup step fails or throws.
+- Cleanup failures are collected and reported together with resource type, id, HTTP status or thrown
+  error, and bounded response details. This reduces the chance that one cleanup failure leaves the
+  second disposable resource unattempted.
+- `npm.cmd run typecheck` passed.
+- `npm.cmd run lint` passed.
+- `npm.cmd run test:live:readiness:wordpress` failed closed before any live calls because local
+  sandbox WordPress credentials and allow flags are not configured.
+- `npm.cmd run quality` passed:
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 341 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.39%, branches 76.39%, functions 92.35%, lines 88.83%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
+
 Latest Codex pass on 2026-07-08 14:09 +09:00:
 
 - Added an explicit WordPress live delete permission flag:
@@ -443,8 +464,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  are green through handoff/docs head `c2e66ab`; re-check any later status-only handoff commits on
-  the current PR head.
+  were green at pre-pass head `3333353`; re-check the current head after this cleanup-safety pass
+  and handoff update are pushed.
 
 ## Current Self Score
 
@@ -459,8 +480,8 @@ for real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit if a new status-only handoff commit is pushed after
-   `c2e66ab`.
+1. Re-check hosted Actions and CodeRabbit after the WordPress cleanup-safety pass and handoff update
+   are pushed.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Re-run `npm run test:live:openai` with `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` after provider quota

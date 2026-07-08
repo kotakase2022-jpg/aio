@@ -5,44 +5,39 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase and hardened WordPress live-test safety before sandbox credentials are available.
-- Phase: WordPress Live Safety / Handoff
-- Last updated: 2026-07-08 14:09 +09:00
+- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase and hardened WordPress live-test cleanup before sandbox credentials are available.
+- Phase: WordPress Live Cleanup Safety / Handoff
+- Last updated: 2026-07-08 14:20 +09:00
 
 ## 1. Current Goal
 
 Current objective:
 
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
-- This pass reduced risk around WordPress live verification by requiring explicit delete permission for cleanup-capable sandbox tests.
+- This pass reduced risk around WordPress live verification by ensuring cleanup attempts both disposable WordPress resources even if one cleanup step fails.
 - Overall goal is still not complete. Do not call the goal complete until representative article quality artifacts are generated/reviewed, WordPress live/sandbox posting is proven, and remaining high-risk flows are verified.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `dd53a90 Require explicit WordPress live delete permission`
-- Latest implementation commit before this pass: `7ca6e71 Guard OpenAI live artifact paths`
-- Last known good local quality commit: `dd53a90`
+- Latest implementation commit: `2fae1eb Ensure WordPress live cleanup attempts all resources`
+- Latest implementation commit before this pass: `dd53a90 Require explicit WordPress live delete permission`
+- Last known good local quality commit: `2fae1eb`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed on PR #1 before this pass at head `bdef769`; needs re-check after this pass is pushed.
-- GitHub Actions status: Passed on PR #1 before this pass at head `bdef769`; needs re-check after this pass is pushed.
+- CodeRabbit OSS review status: Passed on PR #1 before this pass at head `3333353`; needs re-check after this pass is pushed.
+- GitHub Actions status: Passed on PR #1 before this pass at head `3333353`; needs re-check after this pass is pushed.
 
 ## 3. What Was Done
 
 Completed in this Codex pass:
 
 - Re-read current handoff, quality audit, package scripts, branch status, and PR check status.
-- Confirmed PR #1 was green before this pass at head `bdef769`.
-- Added explicit WordPress live delete permission:
-  - `AIO_LIVE_WORDPRESS_ALLOW_DELETE=1`
-- Updated `scripts/check-live-readiness.mjs` so WordPress live readiness requires post, media, delete, and non-production confirmation flags.
-- Updated `tests/live/wordpress.live.test.ts` so the live WordPress spec checks the delete allow flag before creating disposable resources.
-- Updated `.env.live.example`, `docs/testing.md`, and `docs/quality-audit.md`.
-- Added readiness unit coverage proving:
-  - WordPress live checks fail closed when the delete flag is missing.
-  - WordPress live checks become ready only when post/media/delete/sandbox flags and sandbox credentials are all set.
+- Confirmed PR #1 was green before this pass at head `3333353`.
+- Hardened `tests/live/wordpress.live.test.ts` cleanup so disposable post cleanup and media cleanup are both attempted even when one of them fails or throws.
+- Added bounded cleanup failure messages that include the resource type, resource id, HTTP status or thrown error, and a truncated detail string.
 - Ran `npm.cmd run test:live:readiness:wordpress`; it failed closed because local sandbox WordPress settings are not configured. No WordPress live call was made.
 - Ran full local quality successfully.
+- Committed the implementation as `2fae1eb Ensure WordPress live cleanup attempts all resources`.
 
 Relevant prior completed work that still matters:
 
@@ -57,18 +52,15 @@ Relevant prior completed work that still matters:
 
 Main files changed in this pass:
 
-- `.env.live.example`
-- `docs/testing.md`
 - `docs/quality-audit.md`
-- `scripts/check-live-readiness.mjs`
 - `tests/live/wordpress.live.test.ts`
-- `tests/unit/live-readiness-script.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
 - Local quality gate is green for this implementation.
-- WordPress live readiness now fails closed unless post/media/delete permissions are all explicit.
+- WordPress live readiness still fails closed unless post/media/delete permissions are all explicit.
+- WordPress live cleanup now attempts both disposable resource deletions before asserting cleanup success.
 - WordPress live readiness is not configured locally and fails closed before live calls.
 - OpenAI artifact-producing live generation is still blocked by provider quota/rate limiting from the prior pass unless the external state has recovered.
 - PR #1 needs CodeRabbit/GitHub Actions re-check after the new implementation and handoff commits are pushed.
@@ -89,7 +81,7 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed before this pass at PR head `bdef769`.
+- Review status: Passed before this pass at PR head `3333353`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
 - Deferred findings: current head needs CodeRabbit review after push.
@@ -110,20 +102,20 @@ Commands run during this pass:
 
 ```bash
 gh pr checks 1 --repo kotakase2022-jpg/aio
-npx.cmd vitest run tests/unit/live-readiness-script.test.ts
 npm.cmd run typecheck
+npm.cmd run lint
 npm.cmd run test:live:readiness:wordpress
 npm.cmd run quality
-git commit -m "Require explicit WordPress live delete permission"
+git commit -m "Ensure WordPress live cleanup attempts all resources"
 ```
 
 Results:
 
-- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at pre-pass PR head `bdef769`.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at pre-pass PR head `3333353`.
   - CodeRabbit passed.
   - GitHub Actions `Typecheck, lint, tests, E2E, build` passed.
-- Focused Vitest: passed, 1 file / 10 tests.
 - `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed.
 - `npm.cmd run test:live:readiness:wordpress`: failed closed before live calls.
   - Missing `WORDPRESS_SANDBOX_SITE_URL`.
   - Missing `WORDPRESS_SANDBOX_USERNAME`.
@@ -141,7 +133,7 @@ Results:
   - coverage passed: statements 88.39%, branches 76.39%, functions 92.35%, lines 88.83%
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
-- Pre-commit hook for `dd53a90`: passed.
+- Pre-commit hook for `2fae1eb`: passed.
   - lint passed
   - test integrity passed
 
@@ -155,7 +147,7 @@ Not run in this pass:
 
 Next Claude Code should:
 
-1. Review the new `AIO_LIVE_WORDPRESS_ALLOW_DELETE` readiness gate and live test assertion.
+1. Review the WordPress live cleanup hardening in `tests/live/wordpress.live.test.ts`, especially that post and media cleanup are both attempted before the test reports cleanup failures.
 2. Re-check PR #1 CodeRabbit and GitHub Actions after this handoff is pushed.
 3. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 4. After OpenAI quota/rate limiting recovers, run:
@@ -171,9 +163,8 @@ npm.cmd run test:live:openai
 ## 11. Suggested Review Scope for Claude Code
 
 - `scripts/check-live-readiness.mjs`: confirm WordPress live tests require all explicit mutation permissions.
-- `tests/live/wordpress.live.test.ts`: confirm the delete flag is checked before any live mutation.
-- `tests/unit/live-readiness-script.test.ts`: confirm the safety regression covers missing and present delete flags.
-- `docs/testing.md` and `docs/quality-audit.md`: confirm the new WordPress delete flag and remaining proof gaps are clear.
+- `tests/live/wordpress.live.test.ts`: confirm cleanup attempts both post and media deletion and reports bounded failure details.
+- `docs/quality-audit.md`: confirm the new cleanup-safety evidence and remaining proof gaps are clear.
 
 ## 12. Risk Notes
 
