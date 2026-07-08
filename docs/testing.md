@@ -120,6 +120,8 @@ OPENAI_API_KEY=
 OPENAI_TEXT_MODEL=
 OPENAI_LIVE_TEXT_MODEL=
 AIO_LIVE_GENERATION_MIN_SCORE=75
+AIO_LIVE_OPENAI_WRITE_ARTIFACTS=0
+AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai
 ```
 
 `test:live:openai` verifies a real Responses API structured-output call and then runs three
@@ -128,6 +130,10 @@ the same article quality checker used in the product, including theme, primary i
 reference information, and competitor-signal reflection.
 Set `OPENAI_LIVE_TEXT_MODEL` when the live sandbox should use a different model from the app's
 normal `OPENAI_TEXT_MODEL` setting.
+Set `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` when a demo or release needs human-readable review evidence
+for generated article quality. The live test then writes ignored JSON and HTML artifacts under
+`AIO_LIVE_OPENAI_ARTIFACT_DIR` (default `test-results/live-openai`) without including provider
+secrets or environment values.
 
 Supabase live checks should normally use a non-production project:
 

@@ -1,11 +1,12 @@
 import { describe, expect, test, vi } from "vitest";
-import type { ArticleFormPayload, CompetitorResearchResult } from "@/types/aio";
+import type { ArticleFormPayload, CompetitorResearchResult, FetchResult } from "@/types/aio";
 import {
   cleanEnvValue,
   expectLiveContractEnabled,
   expectRequiredEnv,
   loadLiveEnv,
 } from "./live-test-helpers";
+import { writeOpenAILiveArtifact } from "./openai-live-artifacts";
 
 describe("OpenAI live sandbox contract", () => {
   test(
@@ -44,28 +45,31 @@ describe("OpenAI live sandbox contract", () => {
       const minScore = Number(cleanEnvValue(process.env.AIO_LIVE_GENERATION_MIN_SCORE) || 75);
 
       for (const sample of liveGenerationSamples) {
+        const form = buildLiveForm(sample);
+        const fetchedReferences: FetchResult[] = [
+          {
+            url: sample.referenceUrl,
+            title: sample.referenceTitle,
+            text: sample.referenceText,
+            ok: true,
+            sourceType: "manual",
+          },
+        ];
+        const fetchedCompetitors: FetchResult[] = sample.competitorText
+          ? [
+              {
+                url: "https://sandbox.example.com/competitor",
+                title: "Sandbox competitor note",
+                text: sample.competitorText,
+                ok: true,
+                sourceType: "manual",
+              },
+            ]
+          : [];
         const result = await generateAioArticle({
-          form: buildLiveForm(sample),
-          fetchedReferences: [
-            {
-              url: sample.referenceUrl,
-              title: sample.referenceTitle,
-              text: sample.referenceText,
-              ok: true,
-              sourceType: "manual",
-            },
-          ],
-          fetchedCompetitors: sample.competitorText
-            ? [
-                {
-                  url: "https://sandbox.example.com/competitor",
-                  title: "Sandbox competitor note",
-                  text: sample.competitorText,
-                  ok: true,
-                  sourceType: "manual",
-                },
-              ]
-            : [],
+          form,
+          fetchedReferences,
+          fetchedCompetitors,
           competitorResearch: sample.competitorResearch ?? null,
         });
 
@@ -81,6 +85,20 @@ describe("OpenAI live sandbox contract", () => {
         expect(improvements, sample.name).not.toContain("テーマ・キーワードの固有語彙");
         expect(improvements, sample.name).not.toContain("一次情報の固有語彙");
         expect(improvements, sample.name).not.toContain("参照情報の固有語彙");
+
+        const artifact = await writeOpenAILiveArtifact({
+          sampleName: sample.name,
+          textModel: getTextModel(),
+          minScore,
+          form,
+          fetchedReferences,
+          fetchedCompetitors,
+          competitorResearch: sample.competitorResearch ?? null,
+          result,
+        });
+        if (artifact) {
+          console.log(`OpenAI live artifact written: ${artifact.htmlPath}`);
+        }
       }
     },
     480_000,

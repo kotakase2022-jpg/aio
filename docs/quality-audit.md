@@ -32,6 +32,30 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex pass on 2026-07-08 13:34 +09:00:
+
+- Added optional OpenAI live artifact capture for representative generated article review:
+  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
+  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
+- When enabled, `npm run test:live:openai` writes ignored JSON and HTML outputs for each live
+  generation sample, so a human reviewer can inspect the actual generated article body, score,
+  input theme, primary information, and improvement notes without exposing provider secrets.
+- Added unit coverage for the artifact helper.
+- `npm.cmd run quality` passed:
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 338 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.39%, branches 76.39%, functions 92.35%, lines 88.83%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
+- `npm.cmd run test:live:readiness:openai` passed.
+- `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1 npm.cmd run test:live:openai` was attempted, but failed at
+  the initial Responses API health call with the app's Japanese OpenAI quota/rate-limit error.
+  No artifact files were produced. This is an external provider-state blocker, not a code-path proof
+  of generated article quality.
+
 The latest local full gate passed on 2026-07-08 09:37 +09:00 after strengthening English conclusion
 boilerplate detection and regeneration guidance. The quality checklist now flags obvious
 AI-written English endings such as `in conclusion`, `it is worth noting that`, and
@@ -348,15 +372,18 @@ Additional manual PC browser smoke on 2026-07-06:
 
 These gaps prevent a true 100/100 completion claim:
 
-- Live OpenAI generation quality has not been verified against disposable sandbox credentials in
-  this loop.
-- Live Supabase persistence and WordPress posting are guarded by sandbox live tests, but the required
-  non-production environment variables are not currently proven.
+- Live OpenAI generation quality has passed in a prior run, but the latest artifact-producing live
+  run on 2026-07-08 failed at the initial API health call due to provider quota/rate limiting. Human
+  review artifacts still need to be generated after the provider limit recovers.
+- Supabase production write/delete verification has passed with explicit user approval and a
+  production-specific confirmation flag. A long-term staging-only procedure is still preferable for
+  routine release checks.
+- WordPress posting remains guarded by a sandbox live test, but sandbox WordPress credentials are
+  not currently proven.
 - `npm run test:live:readiness` was run on 2026-07-06 and failed closed before any live provider
   calls. Missing sandbox flags/credentials included `AIO_LIVE_CONTRACT_TESTS`, Supabase write
-  confirmation variables, and WordPress sandbox credentials. The configured Supabase host did not
-  look like a sandbox/staging host, so non-production confirmation is still required before any live
-  write test.
+  confirmation variables, and WordPress sandbox credentials. Supabase later passed through the
+  explicitly approved production write/delete path; WordPress sandbox readiness remains unresolved.
 - Manual PC browser review has partially confirmed visual polish and readability for login, the
   initial form, sticky CTA, generation logs, primary-information input, left-card anchor movement,
   generated draft preview/editing, fullscreen preview, copy recovery, HTML export messaging, and
@@ -373,8 +400,8 @@ These gaps prevent a true 100/100 completion claim:
 - Daily-use article tool UX: 99 / 100.
 - Non-commodity generated article quality: 99 / 100.
 
-The scores remain below 100 because live sandbox checks, live WordPress recovery verification, and
-human review of real generated-output quality are not yet complete.
+The scores remain below 100 because live WordPress recovery verification and human review artifacts
+for real generated-output quality are not yet complete.
 
 ## Next Improvement Targets
 
@@ -384,6 +411,8 @@ Highest-value next actions:
    `c2e66ab`.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
-4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
-5. Run sandbox live checks only after readiness passes and every target is confirmed non-production.
+4. Re-run `npm run test:live:openai` with `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` after provider quota
+   or rate limiting recovers, then review the generated JSON/HTML artifacts.
+5. Prepare disposable WordPress sandbox settings in `.env.live.local`, then rerun
+   `npm run test:live:readiness:wordpress`.
 6. Complete the remaining sandbox browser pass focused on real WordPress posting recovery.
