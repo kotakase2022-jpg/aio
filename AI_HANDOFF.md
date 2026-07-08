@@ -7,7 +7,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase and hardened the live OpenAI review-artifact path safety.
 - Phase: Live OpenAI Review Artifact Safety / Handoff
-- Last updated: 2026-07-08 13:50 +09:00
+- Last updated: 2026-07-08 13:56 +09:00
 
 ## 1. Current Goal
 
@@ -24,8 +24,8 @@ Current objective:
 - Latest implementation commit before this pass: `a113787 Add OpenAI live review artifacts`
 - Last known good local quality commit: `7ca6e71`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed on PR #1 before this pass at head `6bc2b8f`; needs re-check after this pass is pushed.
-- GitHub Actions status: Passed on PR #1 before this pass at head `6bc2b8f`; needs re-check after this pass is pushed.
+- CodeRabbit OSS review status: Passed on PR #1 after this pass was pushed.
+- GitHub Actions status: `Typecheck, lint, tests, E2E, build` passed on PR #1 after this pass was pushed in 3m50s.
 
 ## 3. What Was Done
 
@@ -70,7 +70,7 @@ Main files changed in this pass:
 - Unsafe OpenAI artifact directories now fail before provider calls.
 - OpenAI artifact-producing live generation is still blocked by provider quota/rate limiting from the prior pass unless the external state has recovered.
 - WordPress live readiness is not configured locally and fails closed before live calls.
-- PR #1 needs CodeRabbit/GitHub Actions re-check after the new implementation and handoff commits are pushed.
+- PR #1 is green after this pass was pushed.
 
 ## 6. Known Issues
 
@@ -88,10 +88,10 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed before this pass at PR head `6bc2b8f`.
+- Review status: Passed on PR #1 after this pass was pushed.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
-- Deferred findings: current head needs CodeRabbit review after push.
+- Deferred findings: none for this pass.
 - False positives / not applicable: none.
 
 ## 8. Optional Bugbot Findings
@@ -115,6 +115,8 @@ npm.cmd run typecheck
 $env:AIO_LIVE_OPENAI_WRITE_ARTIFACTS='1'; $env:AIO_LIVE_OPENAI_ARTIFACT_DIR='docs/live-openai'; npx.cmd vitest run --config vitest.live.config.ts tests/live/openai.live.test.ts
 npm.cmd run quality
 git commit -m "Guard OpenAI live artifact paths"
+git push
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 ```
 
 Results:
@@ -144,6 +146,15 @@ Results:
 - Pre-commit hook for `7ca6e71`: passed.
   - lint passed
   - test integrity passed
+- Pre-push hook after the implementation and handoff commits: passed.
+  - lint passed
+  - typecheck passed
+  - test integrity passed
+  - unit/integration tests passed, 44 files / 339 tests
+  - contract tests passed, 3 files / 13 tests
+- PR #1 checks after push: passed.
+  - CodeRabbit passed.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m50s.
 
 Not run in this pass:
 
@@ -156,8 +167,7 @@ Not run in this pass:
 Next Claude Code should:
 
 1. Review the OpenAI artifact path guard for Windows path behavior and secret hygiene.
-2. Re-check PR #1 CodeRabbit and GitHub Actions after this handoff is pushed.
-3. After OpenAI quota/rate limiting recovers, run:
+2. After OpenAI quota/rate limiting recovers, run:
 
 ```bash
 $env:AIO_LIVE_OPENAI_WRITE_ARTIFACTS='1'
@@ -165,8 +175,8 @@ $env:AIO_LIVE_OPENAI_ARTIFACT_DIR='test-results/live-openai'
 npm.cmd run test:live:openai
 ```
 
-4. Inspect the generated JSON/HTML artifacts for human editorial quality, not just machine score.
-5. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
+3. Inspect the generated JSON/HTML artifacts for human editorial quality, not just machine score.
+4. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 
 ## 11. Suggested Review Scope for Claude Code
 
