@@ -52,6 +52,51 @@ describe("OpenAI API contract", () => {
     }
   });
 
+  test("Responses API rate limit errors are returned with Japanese recovery guidance", async () => {
+    const server = await createMockHttpServer((_request, response) => {
+      sendJson(
+        response,
+        {
+          error: {
+            message: "quota exceeded",
+            code: "rate_limit_exceeded",
+          },
+        },
+        429,
+      );
+    });
+
+    try {
+      process.env.OPENAI_BASE_URL = server.origin;
+      vi.resetModules();
+      const { createStructuredResponse } = await import("@/lib/server/openai");
+
+      await expect(
+        createStructuredResponse({
+          instructions: "Return JSON only.",
+          input: "AIO article contract check",
+          schemaName: "contract_schema",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              title: { type: "string" },
+            },
+            required: ["title"],
+          },
+        }),
+      ).rejects.toMatchObject({
+        status: 429,
+        message:
+          "OpenAIのレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+        detail: "rate_limit_exceeded / quota exceeded",
+      });
+      expect(server.requests).toHaveLength(1);
+    } finally {
+      await server.close();
+    }
+  });
+
   test("Image API requests use the configured image model and returns base64 data", async () => {
     const expectedImage = Buffer.from("contract-image").toString("base64");
     const server = await createMockHttpServer((request, response) => {

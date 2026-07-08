@@ -52,5 +52,27 @@ npm run quality
 
 See [docs/testing.md](docs/testing.md) for the strict local quality gate, Playwright E2E workflow,
 fixtures, CI artifact handling, and the rule that tests must not be removed, skipped, or weakened to
-hide implementation bugs. Configure GitHub branch protection so `quality-gate` is required before
-merging to the protected main branch.
+hide implementation bugs. Configure GitHub branch protection so the workflow job
+`Typecheck, lint, tests, E2E, build` from `quality-gate` is required before merging to the
+protected main branch.
+See [docs/quality-audit.md](docs/quality-audit.md) for the current feature inventory, verification
+evidence, open proof gaps, and active 100/100 scoring.
+
+## PR Review Automation
+
+CodeRabbit OSS is the standard automated PR reviewer for this public repository. Its repository
+configuration is tracked in [.coderabbit.yaml](.coderabbit.yaml). Cursor Bugbot is optional backup
+only, used when CodeRabbit is unavailable, a second opinion is needed, or the user explicitly asks
+for it. See [docs/review-automation.md](docs/review-automation.md) for the migration and operating
+rules.
+
+## Development Workflow
+
+Future changes should be made through pull requests, not direct pushes to `main`. Every Codex,
+Claude Code, Cursor, or human-authored change must keep `npm run quality` and the GitHub Actions
+job `Typecheck, lint, tests, E2E, build` green before it is considered complete.
+
+Production Vercel deployments are assumed to come from `main` only, after the PR has passed
+the required workflow job and branch protection requirements. See [docs/testing.md](docs/testing.md)
+for the required branch protection settings and testing rules for new screens, forms, APIs, uploads,
+Supabase changes, and bug fixes.

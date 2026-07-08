@@ -65,6 +65,12 @@ jobs:
       - name: Production build
         run: npm run build
 
+      - name: Ensure Playwright trace artifact directory exists
+        if: always()
+        run: |
+          mkdir -p test-results
+          printf "Playwright traces and screenshots are stored here when a test fails or captures them.\n" > test-results/ARTIFACT_NOTE.txt
+
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4

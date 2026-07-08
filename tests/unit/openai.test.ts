@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   createStructuredResponse,
   generateImageBase64,
@@ -11,6 +11,13 @@ describe("OpenAI server wrapper", () => {
     process.env.OPENAI_API_KEY = "test-key";
     process.env.OPENAI_TEXT_MODEL = " gpt-5.5 ";
     process.env.OPENAI_IMAGE_MODEL = "gpt-image-2";
+    process.env.OPENAI_RETRY_BASE_DELAY_MS = "0";
+    process.env.OPENAI_MAX_RETRIES = "2";
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   test("normalizes configured model names", () => {
@@ -19,6 +26,18 @@ describe("OpenAI server wrapper", () => {
 
     process.env.OPENAI_IMAGE_MODEL = "not-an-image-model";
     expect(getImageModel()).toBe("gpt-image-2");
+  });
+
+  test("fails with Japanese setup guidance when OPENAI_API_KEY is missing", async () => {
+    delete process.env.OPENAI_API_KEY;
+    vi.stubGlobal("fetch", vi.fn());
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 500,
+      message: "OpenAI APIキーがサーバー側に設定されていません。",
+      detail: "OPENAI_API_KEYを.env.localまたはVercel Environment Variablesに設定してください。",
+    });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   test("parses structured response output_text", async () => {
@@ -51,7 +70,12 @@ describe("OpenAI server wrapper", () => {
         schemaName: "test_schema",
         schema: { type: "object" },
       }),
-    ).rejects.toMatchObject({ status: 502 });
+    ).rejects.toMatchObject({
+      status: 502,
+      message:
+        "OpenAIの応答JSONを解析できませんでした。入力量を減らして再実行してください。",
+      detail: "not-json",
+    });
 
     vi.stubGlobal(
       "fetch",
@@ -62,7 +86,249 @@ describe("OpenAI server wrapper", () => {
 
     await expect(generateImageBase64("prompt")).rejects.toMatchObject({
       status: 429,
-      detail: "rate_limit",
+      message:
+        "OpenAIのレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+      detail: "rate_limit / quota exceeded",
+    });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("maps missing structured output to Japanese recovery guidance", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ output: [] })));
+
+    await expect(
+      createStructuredResponse({
+        instructions: "Return JSON.",
+        input: "{}",
+        schemaName: "test_schema",
+        schema: { type: "object" },
+      }),
+    ).rejects.toMatchObject({
+      status: 502,
+      message:
+        "OpenAIの応答に構造化された出力が含まれていません。入力量を減らして再実行してください。",
+    });
+  });
+
+  test("retries transient OpenAI rate limits before returning a structured response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json(
+            { error: { message: "try again shortly", code: "rate_limit" } },
+            { status: 429 },
+          ),
+        )
+        .mockResolvedValueOnce(
+          Response.json(
+            { error: { message: "temporary overload", code: "server_error" } },
+            { status: 500 },
+          ),
+        )
+        .mockResolvedValueOnce(
+          Response.json({ output_text: JSON.stringify({ value: "recovered" }) }),
+        ),
+    );
+
+    await expect(
+      createStructuredResponse<{ value: string }>({
+        instructions: "Return JSON.",
+        input: "{}",
+        schemaName: "retry_schema",
+        schema: { type: "object" },
+      }),
+    ).resolves.toEqual({ value: "recovered" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("uses configured backoff when retryable OpenAI errors omit Retry-After", async () => {
+    process.env.OPENAI_RETRY_BASE_DELAY_MS = "25";
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json(
+            { error: { message: "try again shortly", code: "rate_limit" } },
+            { status: 429 },
+          ),
+        )
+        .mockResolvedValueOnce(
+          Response.json({ output_text: JSON.stringify({ value: "recovered" }) }),
+        ),
+    );
+
+    const result = createStructuredResponse<{ value: string }>({
+      instructions: "Return JSON.",
+      input: "{}",
+      schemaName: "retry_schema",
+      schema: { type: "object" },
+    });
+
+    await vi.advanceTimersByTimeAsync(24);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toEqual({ value: "recovered" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("retries transient OpenAI network failures before returning a structured response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockRejectedValueOnce(new Error("fetch failed"))
+        .mockRejectedValueOnce(new DOMException("The operation was aborted.", "AbortError"))
+        .mockResolvedValueOnce(
+          Response.json({ output_text: JSON.stringify({ value: "recovered" }) }),
+        ),
+    );
+
+    await expect(
+      createStructuredResponse<{ value: string }>({
+        instructions: "Return JSON.",
+        input: "{}",
+        schemaName: "network_retry_schema",
+        schema: { type: "object" },
+      }),
+    ).resolves.toEqual({ value: "recovered" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("maps exhausted OpenAI network failures to Japanese recovery guidance", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("socket hang up");
+    }));
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 502,
+      message:
+        "OpenAI APIへの接続に失敗しました。ネットワーク状態を確認し、時間をおいて再実行してください。",
+      detail: "socket hang up",
+    });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test("maps exhausted OpenAI timeouts to Japanese recovery guidance", async () => {
+    process.env.OPENAI_MAX_RETRIES = "1";
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }));
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 504,
+      message:
+        "OpenAI APIの応答がタイムアウトしました。入力量を減らすか、時間をおいて再実行してください。",
+      detail: "The operation was aborted.",
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not retry OpenAI insufficient quota errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error: {
+              message: "You exceeded your current quota.",
+              code: "insufficient_quota",
+            },
+          },
+          { status: 429 },
+        ),
+      ),
+    );
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 429,
+      message:
+        "OpenAIの請求枠または利用上限に達しています。OpenAI PlatformのBilling/Usageと、このアプリで使っているAPIキーのプロジェクトを確認してください。",
+      detail: "insufficient_quota / You exceeded your current quota.",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("maps OpenAI billing hard-limit errors to project billing guidance", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error: {
+              message: "Billing hard limit has been reached.",
+              code: "billing_hard_limit_reached",
+            },
+          },
+          { status: 429 },
+        ),
+      ),
+    );
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 429,
+      message:
+        "OpenAIの請求枠または利用上限に達しています。OpenAI PlatformのBilling/Usageと、このアプリで使っているAPIキーのプロジェクトを確認してください。",
+      detail: "billing_hard_limit_reached / Billing hard limit has been reached.",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    [
+      401,
+      "invalid_api_key",
+      "Incorrect API key provided",
+      "OpenAI APIキーが無効、または未承認です。",
+    ],
+    [
+      400,
+      "invalid_request_error",
+      "Input is too long",
+      "OpenAIへのリクエスト内容が不正です。",
+    ],
+    [
+      500,
+      "server_error",
+      "Temporary upstream failure",
+      "OpenAI側で一時的なエラーが発生しました。",
+    ],
+  ])(
+    "maps OpenAI HTTP %i errors to Japanese recovery messages",
+    async (status, code, message, expectedMessage) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json({ error: { message, code } }, { status }),
+        ),
+      );
+
+      await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+        status,
+        message: expect.stringContaining(expectedMessage),
+        detail: `${code} / ${message}`,
+      });
+    },
+  );
+
+  test("maps uncommon OpenAI HTTP errors to Japanese fallback guidance", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { error: { message: "unexpected upstream response", code: "teapot" } },
+          { status: 418 },
+        ),
+      ),
+    );
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 418,
+      message: "OpenAI APIへのリクエストに失敗しました。時間をおいて再実行してください。",
+      detail: "teapot / unexpected upstream response",
     });
   });
 
@@ -73,5 +339,20 @@ describe("OpenAI server wrapper", () => {
     );
 
     await expect(generateImageBase64("prompt")).resolves.toBe("aW1hZ2U=");
+  });
+
+  test("maps image responses without base64 data to Japanese recovery guidance", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ data: [{ url: "https://example.test/image.png" }] }),
+      ),
+    );
+
+    await expect(generateImageBase64("prompt")).rejects.toMatchObject({
+      status: 502,
+      message:
+        "OpenAI画像生成の応答に画像データが含まれていません。画像枚数や指示を減らして再実行してください。",
+    });
   });
 });

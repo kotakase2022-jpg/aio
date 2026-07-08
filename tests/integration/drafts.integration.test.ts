@@ -3,8 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createCompletedGenerationJob, createSampleDraft } from "../fixtures/article";
+import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 
 let tempDir = "";
+const processEnvSnapshot = snapshotProcessEnv();
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "aio-tests-"));
@@ -18,7 +20,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true });
-  delete process.env.AIO_LOCAL_DATA_DIR;
+  restoreProcessEnv(processEnvSnapshot);
 });
 
 describe("draft persistence route handlers", () => {
@@ -69,6 +71,45 @@ describe("draft persistence route handlers", () => {
     expect(response.status).toBe(200);
     expect(stored?.status).toBe("approved");
     expect(stored?.updatedAt).not.toBe(draft.updatedAt);
+  });
+
+  test("approve-draft rejects invalid payloads as user-correctable input errors", async () => {
+    const { POST: approvePost } = await import("@/app/api/approve-draft/route");
+
+    const response = await approvePost(
+      new Request("http://localhost/api/approve-draft", {
+        method: "POST",
+        body: JSON.stringify({ draftId: "" }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json).toMatchObject({
+      ok: false,
+      error: "入力内容が不正です。",
+    });
+    expect(json.detail).toContain("承認する下書き情報が見つかりません。");
+  });
+
+  test("approve-draft returns 404 for missing persisted drafts", async () => {
+    const { POST: approvePost } = await import("@/app/api/approve-draft/route");
+
+    const response = await approvePost(
+      new Request("http://localhost/api/approve-draft", {
+        method: "POST",
+        body: JSON.stringify({ draftId: "missing-draft" }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(json).toMatchObject({
+      ok: false,
+      error: "下書きが見つかりません。",
+      detail:
+        "生成ログから下書きを開き直すか、編集内容を保存してからもう一度承認してください。",
+    });
   });
 
   test("generation logs summarize persisted jobs without Supabase", async () => {

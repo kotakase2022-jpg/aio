@@ -22,6 +22,7 @@ describe("fetchUrlContent", () => {
 
   test("rejects invalid URL protocols before fetch", async () => {
     await expect(fetchUrlContent("ftp://example.com/file")).rejects.toMatchObject({
+      message: "httpまたはhttpsのURLを入力してください。",
       status: 400,
     });
   });
@@ -34,7 +35,7 @@ describe("fetchUrlContent", () => {
 
     await expect(fetchUrlContent("https://example.com/missing")).resolves.toMatchObject({
       ok: false,
-      reason: "HTTP 404 Not Found",
+      reason: "URL取得に失敗しました（HTTP 404 Not Found）。",
     });
 
     vi.stubGlobal(
@@ -46,7 +47,38 @@ describe("fetchUrlContent", () => {
 
     await expect(fetchUrlContent("https://example.com/json")).resolves.toMatchObject({
       ok: false,
-      reason: "Unsupported content type: application/json",
+      reason: "HTMLページではないため取得できませんでした（content-type: application/json）。",
+    });
+  });
+
+  test("returns Japanese extraction notes for limited or insufficient page text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          "<html><head><title>短いページ</title><meta name=\"description\" content=\"サービス概要、料金、導入条件を説明するページです。\" /></head><body><h1>概要</h1><p>本文は短いですが、見出しと説明文を使えば補足できます。</p></body></html>",
+          { headers: { "content-type": "text/html; charset=utf-8" } },
+        ),
+      ),
+    );
+
+    await expect(fetchUrlContent("https://example.com/limited")).resolves.toMatchObject({
+      ok: true,
+      reason: "本文量が少ないため、メタ情報・見出しを利用しました。",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response("<html><head><title>x</title></head><body></body></html>", {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      ),
+    );
+
+    await expect(fetchUrlContent("https://example.com/empty")).resolves.toMatchObject({
+      ok: false,
+      reason: "十分な本文を抽出できませんでした。",
     });
   });
 
@@ -60,7 +92,7 @@ describe("fetchUrlContent", () => {
 
     await expect(fetchUrlContent("https://example.com/error")).resolves.toMatchObject({
       ok: false,
-      reason: "network down",
+      reason: "URL取得に失敗しました。network down",
     });
   });
 });

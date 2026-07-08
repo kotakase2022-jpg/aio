@@ -14,14 +14,13 @@ export async function POST(request: Request) {
     const file = formData.get("file");
 
     if (!(file instanceof File)) {
-      throw new ApiError("File is required.", 400, "添付ファイルを選択してください。");
+      throw new ApiError("添付ファイルを選択してください。", 400);
     }
 
     if (file.size > MAX_ATTACHMENT_BYTES) {
       throw new ApiError(
-        "File is too large.",
-        400,
         "添付ファイルは1件12MB以内にしてください。",
+        400,
       );
     }
 

@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/server/http";
 import { generateAioArticle } from "@/lib/server/article-generation";
-import { createArticleImagesForDraft } from "@/lib/server/article-images";
+import {
+  createArticleImagesForDraft,
+  type ArticleImageFailure,
+} from "@/lib/server/article-images";
 import { fetchUrlContent } from "@/lib/server/content";
 import { saveDraft } from "@/lib/server/drafts";
 import {
@@ -94,8 +97,18 @@ export async function runArticleGenerationJob(jobId: string) {
 
     await assertGenerationJobActive(jobId);
     await updateGenerationStep(jobId, "images", "running");
-    const images = await createArticleImagesForDraft(article, freshJob.inputPayload);
-    await updateGenerationStep(jobId, "images", "done", `${images.length}枚を反映`);
+    const imageFailures: ArticleImageFailure[] = [];
+    const images = await createArticleImagesForDraft(article, freshJob.inputPayload, {
+      onImageFailure: (failure) => {
+        imageFailures.push(failure);
+      },
+    });
+    await updateGenerationStep(
+      jobId,
+      "images",
+      "done",
+      summarizeImageGeneration(images, imageFailures),
+    );
 
     await assertGenerationJobActive(jobId);
     await updateGenerationStep(jobId, "save", "running");
@@ -152,7 +165,11 @@ export async function runArticleGenerationJob(jobId: string) {
 async function requireJob(jobId: string) {
   const job = await getGenerationJob(jobId);
   if (!job) {
-    throw new ApiError("Generation job not found.", 404);
+    throw new ApiError(
+      "生成ジョブが見つかりません。",
+      404,
+      "古い生成状態をクリアし、もう一度「AIによる記事作成」を実行してください。",
+    );
   }
 
   return job;
@@ -260,4 +277,24 @@ function escapeHtml(value: string) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "画像生成に失敗しました。";
+}
+
+function summarizeImageGeneration(images: ArticleImage[], failures: ArticleImageFailure[]) {
+  if (failures.length === 0) {
+    return `${images.length}枚を反映`;
+  }
+
+  const failureSummary = failures
+    .map((failure) => `${failure.slot}: ${errorMessage(failure.error)}`)
+    .join(" / ");
+
+  if (images.length === 0) {
+    return `画像生成は全て失敗しました（${failureSummary}）。画像プロンプトは保存済みのため、ドラフトの「画像のみ再作成」から再試行できます。`;
+  }
+
+  return `${images.length}枚を反映・${failures.length}枚失敗（${failureSummary}）。失敗分は「画像のみ再作成」から再試行できます。`;
 }

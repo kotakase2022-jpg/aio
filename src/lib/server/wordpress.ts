@@ -9,6 +9,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ArticleDraft, WordpressConnection } from "@/types/aio";
+import { buildDraftArticleHtml } from "@/lib/draft-html";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { ApiError } from "@/lib/server/http";
 import { saveDraft } from "@/lib/server/drafts";
@@ -53,7 +54,7 @@ export async function saveWordpressConnection(input: {
       updated_at: connection.updatedAt,
     });
     if (error) {
-      throw new ApiError("Failed to save WordPress connection.", 500, error.message);
+      throw new ApiError("WordPress接続情報の保存に失敗しました。", 500, error.message);
     }
   } else if (isSupabaseGatewayConfigured()) {
     await callSupabaseGateway("insert_wordpress_connection", {
@@ -89,14 +90,22 @@ export async function publishDraftToWordpress({
   origin: string;
 }) {
   if (draft.status !== "approved") {
-    throw new ApiError("Only approved drafts can be posted to WordPress.", 409);
+    throw new ApiError(
+      "承認済みドラフトのみWordPress投稿できます。",
+      409,
+      "先に「承認済みに変更」を押してから投稿してください。",
+    );
   }
 
   const connection =
     (await loadStoredConnection(connectionId)) ||
     connectionFromToken(fallbackConnection);
   if (!connection) {
-    throw new ApiError("WordPress connection not found.", 404);
+    throw new ApiError(
+      "WordPress接続情報が見つかりません。",
+      404,
+      "WordPress接続情報を保存し直してから、もう一度投稿してください。",
+    );
   }
 
   const password = decryptSecret(connection.encryptedApplicationPassword);
@@ -108,9 +117,17 @@ export async function publishDraftToWordpress({
   ]);
 
   let featuredMedia: number | undefined;
-  const featured = draft.images.find((image) => image.slot === "featured");
+  const featured = draft.images.find(
+    (image) => image.slot === "featured" && image.url.trim(),
+  );
   if (featured) {
-    featuredMedia = await uploadMedia(connection.siteUrl, authHeader, featured.url, origin);
+    featuredMedia = await uploadMedia(
+      connection.siteUrl,
+      authHeader,
+      featured.url,
+      origin,
+      featured.altText,
+    );
   }
 
   const response = await fetch(`${connection.siteUrl}/wp-json/wp/v2/posts`, {
@@ -123,7 +140,9 @@ export async function publishDraftToWordpress({
       title: draft.editedTitle,
       slug: draft.editedSlug,
       excerpt: draft.editedMetaDescription,
-      content: draft.editedBodyHtml,
+      content: buildDraftArticleHtml(draft, {
+        imageUrlResolver: (url) => resolveAssetUrl(url, origin),
+      }),
       status,
       categories: categoryIds,
       tags: tagIds,
@@ -139,7 +158,7 @@ export async function publishDraftToWordpress({
 
   if (!response.ok) {
     throw new ApiError(
-      "WordPress post failed.",
+      "WordPress投稿に失敗しました。",
       response.status,
       json.message ?? json.code ?? response.statusText,
     );
@@ -171,9 +190,9 @@ function getEncryptionKey() {
   const raw = process.env.WORDPRESS_ENCRYPTION_KEY;
   if (!raw && process.env.NODE_ENV === "production") {
     throw new ApiError(
-      "WORDPRESS_ENCRYPTION_KEY is required in production.",
+      "本番環境ではWordPress認証情報の暗号化キーが必要です。",
       500,
-      "Set a random 32+ character value in Vercel Environment Variables.",
+      "Vercel Environment VariablesにWORDPRESS_ENCRYPTION_KEYを32文字以上のランダム文字列で設定してください。",
     );
   }
 
@@ -207,7 +226,7 @@ async function loadStoredConnection(id: string): Promise<StoredConnection | null
       .maybeSingle();
 
     if (error) {
-      throw new ApiError("Failed to load WordPress connection.", 500, error.message);
+      throw new ApiError("WordPress接続情報の読み込みに失敗しました。", 500, error.message);
     }
 
     if (!data) {
@@ -302,13 +321,26 @@ async function ensureTerms(
       `${siteUrl}/wp-json/wp/v2/${type}?search=${encodeURIComponent(name)}&per_page=20`,
       { headers: { Authorization: authHeader } },
     );
-    const existing = (await searchResponse.json().catch(() => [])) as Array<{
-      id: number;
-      name: string;
-    }>;
-    const match = existing.find((item) => item.name.toLowerCase() === name.toLowerCase());
+    const searchJson = (await searchResponse.json().catch(() => null)) as unknown;
+    if (!searchResponse.ok) {
+      throw new ApiError(
+        `WordPress${termLabel(type)}の検索に失敗しました。`,
+        searchResponse.status,
+        readWordpressError(searchJson) ?? searchResponse.statusText,
+      );
+    }
+    if (!Array.isArray(searchJson)) {
+      throw new ApiError(
+        `WordPress${termLabel(type)}検索の応答形式が不正です。`,
+        502,
+        "WordPress REST APIが一覧形式ではないターム検索結果を返しました。",
+      );
+    }
+
+    const existing = searchJson as Array<Record<string, unknown>>;
+    const match = existing.find((item) => readTermName(item).toLowerCase() === name.toLowerCase());
     if (match) {
-      ids.push(match.id);
+      ids.push(readWordpressTermId(match, type, "search"));
       continue;
     }
 
@@ -317,21 +349,59 @@ async function ensureTerms(
       headers: { Authorization: authHeader, "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     });
-    const created = (await createResponse.json().catch(() => ({}))) as {
-      id?: number;
-      message?: string;
-    };
-    if (!createResponse.ok || !created.id) {
+    const created = (await createResponse.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!createResponse.ok) {
       throw new ApiError(
-        `Failed to create WordPress ${type.slice(0, -1)}.`,
+        `WordPress${termLabel(type)}の作成に失敗しました。`,
         createResponse.status,
-        created.message,
+        readWordpressError(created),
       );
     }
-    ids.push(created.id);
+    ids.push(readWordpressTermId(created, type, "create"));
   }
 
   return ids;
+}
+
+function readWordpressTermId(
+  value: Record<string, unknown>,
+  type: "categories" | "tags",
+  operation: "search" | "create",
+) {
+  if (Number.isInteger(value.id) && Number(value.id) > 0) {
+    return Number(value.id);
+  }
+
+  throw new ApiError(
+    `WordPress${termLabel(type)}${termOperationLabel(operation)}の応答形式が不正です。`,
+    502,
+    "WordPress REST APIが数値IDを持たないタームを返しました。",
+  );
+}
+
+function readTermName(value: Record<string, unknown>) {
+  return typeof value.name === "string" ? value.name : "";
+}
+
+function termLabel(type: "categories" | "tags") {
+  return type === "categories" ? "カテゴリー" : "タグ";
+}
+
+function termOperationLabel(operation: "search" | "create") {
+  return operation === "search" ? "検索" : "作成";
+}
+
+function readWordpressError(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  return typeof record.message === "string"
+    ? record.message
+    : typeof record.code === "string"
+      ? record.code
+      : undefined;
 }
 
 async function uploadMedia(
@@ -339,6 +409,7 @@ async function uploadMedia(
   authHeader: string,
   imageUrl: string,
   origin: string,
+  altText: string,
 ) {
   const resolvedUrl = imageUrl.startsWith("/")
     ? `${origin.replace(/\/$/, "")}${imageUrl}`
@@ -350,14 +421,18 @@ async function uploadMedia(
   if (resolvedUrl.startsWith("data:")) {
     const match = /^data:(.+);base64,(.+)$/.exec(resolvedUrl);
     if (!match) {
-      throw new ApiError("Featured image data URL is invalid.", 400);
+      throw new ApiError("アイキャッチ画像のデータURLが不正です。", 400);
     }
     contentType = match[1];
     buffer = Buffer.from(match[2], "base64");
   } else {
     const imageResponse = await fetch(resolvedUrl);
     if (!imageResponse.ok) {
-      throw new ApiError("Failed to fetch featured image for WordPress upload.", 502);
+      throw new ApiError(
+        "WordPress投稿用のアイキャッチ画像を取得できませんでした。",
+        502,
+        `画像URLの取得に失敗しました（HTTP ${imageResponse.status}）。画像を再生成するか、画像なしで投稿してください。`,
+      );
     }
     contentType = imageResponse.headers.get("content-type") ?? contentType;
     buffer = Buffer.from(await imageResponse.arrayBuffer());
@@ -380,10 +455,52 @@ async function uploadMedia(
   };
 
   if (!response.ok || !json.id) {
-    throw new ApiError("WordPress media upload failed.", response.status, json.message);
+    throw new ApiError("WordPressのメディアアップロードに失敗しました。", response.status, json.message);
   }
 
-  return json.id;
+  const mediaId = json.id;
+  const normalizedAltText = altText.trim();
+  if (normalizedAltText) {
+    await updateMediaAltText(siteUrl, authHeader, mediaId, normalizedAltText);
+  }
+
+  return mediaId;
+}
+
+async function updateMediaAltText(
+  siteUrl: string,
+  authHeader: string,
+  mediaId: number,
+  altText: string,
+) {
+  const response = await fetch(`${siteUrl}/wp-json/wp/v2/media/${mediaId}`, {
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ alt_text: altText }),
+  });
+  const json = (await response.json().catch(() => ({}))) as {
+    id?: number;
+    message?: string;
+  };
+
+  if (!response.ok || json.id !== mediaId) {
+    throw new ApiError(
+      "WordPressメディアの代替テキスト更新に失敗しました。",
+      response.status,
+      json.message,
+    );
+  }
+}
+
+function resolveAssetUrl(url: string, origin: string) {
+  if (url.startsWith("/")) {
+    return `${origin.replace(/\/$/, "")}${url}`;
+  }
+
+  return url;
 }
 
 async function saveWordpressPostRecord(

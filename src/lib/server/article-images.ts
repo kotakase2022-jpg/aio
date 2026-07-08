@@ -1,7 +1,20 @@
 import { randomUUID } from "node:crypto";
+import { truncatePromptLine } from "@/lib/prompt-text";
 import { generateImageBase64 } from "@/lib/server/openai";
 import { storeAsset } from "@/lib/server/storage";
-import type { ArticleFormPayload, ArticleGenerationResult, ArticleImage } from "@/types/aio";
+import type {
+  ArticleFormPayload,
+  ArticleGenerationResult,
+  ArticleImage,
+  ImagePrompt,
+} from "@/types/aio";
+
+export type ArticleImageFailure = {
+  slot: "featured" | "inline-1" | "inline-2";
+  prompt: string;
+  altText: string;
+  error: unknown;
+};
 
 export async function createGeneratedArticleImage({
   prompt,
@@ -35,6 +48,9 @@ export async function createGeneratedArticleImage({
 export async function createArticleImagesForDraft(
   article: ArticleGenerationResult,
   form: ArticleFormPayload,
+  options: {
+    onImageFailure?: (failure: ArticleImageFailure) => void;
+  } = {},
 ) {
   const imageCount = normalizeImageCount(form.imageCount);
   if (imageCount === 0) {
@@ -57,12 +73,12 @@ export async function createArticleImagesForDraft(
 
   const toneText =
     form.visualTone.mode === "custom" ? form.visualTone.custom : form.visualTone.preset;
-  const prompts = article.image_prompts.slice(0, imageCount).map((prompt) => ({
+  const prompts = normalizePromptsForImageCreation(article, imageCount).map((prompt) => ({
     ...prompt,
-    prompt: buildArticleImagePrompt(prompt.prompt, toneText),
+    prompt: buildArticleImagePrompt(prompt.prompt, toneText, article),
   }));
 
-  return Promise.all(
+  const results = await Promise.allSettled(
     prompts.map((prompt) =>
       createGeneratedArticleImage({
         prompt: prompt.prompt,
@@ -71,6 +87,64 @@ export async function createArticleImagesForDraft(
       }),
     ),
   );
+
+  return results.flatMap((result, index) => {
+    if (result.status === "fulfilled") {
+      return [result.value];
+    }
+
+    options.onImageFailure?.({
+      slot: prompts[index].slot,
+      prompt: prompts[index].prompt,
+      altText: prompts[index].alt_text,
+      error: result.reason,
+    });
+    return [];
+  });
+}
+
+function normalizePromptsForImageCreation(
+  article: ArticleGenerationResult,
+  imageCount: number,
+): ImagePrompt[] {
+  const slots = ["featured", "inline-1", "inline-2"] as const;
+  const requestedSlots = slots.slice(0, imageCount);
+
+  return requestedSlots.map((slot, index) => {
+    const existing = article.image_prompts.find((prompt) => prompt.slot === slot);
+    if (existing) {
+      return existing;
+    }
+
+    return {
+      slot,
+      purpose:
+        slot === "featured" ? "Article featured image" : "Article body explanatory image",
+      prompt: fallbackImagePrompt(article, slot, index),
+      alt_text: `${article.selected_title} - ${
+        slot === "featured" ? "featured image" : "explanatory image"
+      }`,
+    };
+  });
+}
+
+function fallbackImagePrompt(
+  article: Pick<ArticleGenerationResult, "selected_title" | "headings" | "key_takeaways">,
+  slot: "featured" | "inline-1" | "inline-2",
+  index: number,
+) {
+  const heading =
+    article.headings[index]?.text ?? article.headings[0]?.text ?? article.selected_title;
+  const takeaway = article.key_takeaways[index] ?? article.key_takeaways[0] ?? "";
+  const role = slot === "featured" ? "hero editorial visual" : "inline explanatory visual";
+
+  return [
+    `${role} for ${article.selected_title}`,
+    `Focus topic: ${heading}`,
+    takeaway ? `Concrete takeaway: ${takeaway}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function buildProductionImagePrompt(
@@ -95,13 +169,21 @@ export function buildProductionImagePrompt(
   ].join("\n");
 }
 
-function buildArticleImagePrompt(basePrompt: string, toneText?: string) {
+function buildArticleImagePrompt(
+  basePrompt: string,
+  toneText: string | undefined,
+  article: Pick<ArticleGenerationResult, "article_summary" | "headings" | "key_takeaways">,
+) {
   return [
     basePrompt,
     "",
     `Visual tone from user: ${toneText || "clean Japanese B2B whitepaper editorial style"}`,
+    `Article summary anchor: ${truncatePromptLine(article.article_summary, 220)}`,
+    `Key takeaways to visualize: ${article.key_takeaways.slice(0, 3).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
+    `Relevant headings: ${article.headings.slice(0, 4).map((heading) => truncatePromptLine(heading.text, 80)).join(" / ")}`,
     "Create a premium 3:2 landscape editorial visual for a Japanese B2B article.",
     "Use a refined whitepaper/SaaS/consulting composition with clean geometry, subtle depth, balanced margins, and a clear focal concept.",
+    "Make the visual article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
     "Avoid text-heavy layouts, readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, unnecessary people, and cheap stock-photo aesthetics.",
   ].join("\n");
 }

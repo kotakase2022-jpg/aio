@@ -1,6 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
-import { joinCsv, parseCsvObjects, parseCsvRows, splitCsv, truncateText } from "@/lib/utils";
+import {
+  compactOptionalText,
+  joinCsv,
+  parseCsvObjects,
+  parseCsvRows,
+  splitCsv,
+  truncateText,
+} from "@/lib/utils";
 
 describe("utils CSV and text helpers", () => {
   test("splitCsv trims empty items and joinCsv preserves order", () => {
@@ -12,6 +19,13 @@ describe("utils CSV and text helpers", () => {
   test("truncateText keeps short text and marks boundary overflow", () => {
     expect(truncateText("short", 10)).toBe("short");
     expect(truncateText("12345678901", 10)).toBe("1234567890\n\n[truncated]");
+  });
+
+  test("compactOptionalText trims optional text and treats blank values as missing", () => {
+    expect(compactOptionalText(undefined, 10)).toBe("");
+    expect(compactOptionalText(" \n\t ", 10)).toBe("");
+    expect(compactOptionalText("  abc  ", 10)).toBe("abc");
+    expect(compactOptionalText("  12345678901  ", 10)).toBe("1234567890\n\n[truncated]");
   });
 
   test("parseCsvRows handles quoted commas and multiline values", async () => {

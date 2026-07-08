@@ -17,6 +17,8 @@ type OpenAIImageResponse = {
 
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 const DEFAULT_OPENAI_TIMEOUT_MS = 105_000;
+const DEFAULT_OPENAI_MAX_RETRIES = 2;
+const DEFAULT_OPENAI_RETRY_BASE_DELAY_MS = 750;
 
 export function getTextModel() {
   return cleanEnvValue(process.env.OPENAI_TEXT_MODEL) || "gpt-5.5";
@@ -35,9 +37,9 @@ function getOpenAIKey() {
   const apiKey = cleanEnvValue(process.env.OPENAI_API_KEY);
   if (!apiKey) {
     throw new ApiError(
-      "OPENAI_API_KEY is not configured on the server.",
+      "OpenAI APIキーがサーバー側に設定されていません。",
       500,
-      "Set OPENAI_API_KEY in .env.local or Vercel Environment Variables.",
+      "OPENAI_API_KEYを.env.localまたはVercel Environment Variablesに設定してください。",
     );
   }
   return apiKey;
@@ -62,46 +64,57 @@ async function callOpenAIJson<T extends { error?: { message?: string; code?: str
   body: Record<string, unknown>,
   options: { timeoutMs?: number } = {},
 ) {
-  const controller = new AbortController();
   const timeoutMs = options.timeoutMs ?? DEFAULT_OPENAI_TIMEOUT_MS;
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const maxRetries = getRetryCount();
+  const apiKey = getOpenAIKey();
 
-  let response: Response;
-  try {
-    response = await fetch(`${OPENAI_BASE_URL}${path}`, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${getOpenAIKey()}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetch(`${OPENAI_BASE_URL}${path}`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      if (attempt < maxRetries) {
+        await wait(getRetryDelayMs(attempt));
+        continue;
+      }
+
+      const openAIError = formatOpenAITransportError(error);
+      throw new ApiError(openAIError.message, openAIError.status, openAIError.detail);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const json = (await response.json().catch(() => ({}))) as T;
+
+    if (!response.ok) {
+      if (isRetryableOpenAIStatus(response.status, json.error) && attempt < maxRetries) {
+        await wait(getRetryDelayMs(attempt, response.headers.get("retry-after")));
+        continue;
+      }
+
+      const openAIError = formatOpenAIError(response.status, json.error);
       throw new ApiError(
-        "OpenAI API request timed out.",
-        504,
-        "入力量を減らすか、時間をおいて再実行してください。",
+        openAIError.message,
+        response.status,
+        openAIError.detail,
       );
     }
 
-    throw error;
-  } finally {
-    clearTimeout(timer);
+    return json;
   }
 
-  const json = (await response.json().catch(() => ({}))) as T;
-
-  if (!response.ok) {
-    throw new ApiError(
-      json.error?.message ?? "OpenAI API request failed.",
-      response.status,
-      json.error?.code,
-    );
-  }
-
-  return json;
+  throw new ApiError("OpenAI APIへのリクエストに失敗しました。時間をおいて再実行してください。", 502);
 }
 
 export async function createStructuredResponse<T>({
@@ -142,13 +155,20 @@ export async function createStructuredResponse<T>({
 
   const text = extractOutputText(json);
   if (!text) {
-    throw new ApiError("OpenAI response did not include structured output.", 502);
+    throw new ApiError(
+      "OpenAIの応答に構造化された出力が含まれていません。入力量を減らして再実行してください。",
+      502,
+    );
   }
 
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new ApiError("OpenAI returned invalid JSON.", 502, text.slice(0, 500));
+    throw new ApiError(
+      "OpenAIの応答JSONを解析できませんでした。入力量を減らして再実行してください。",
+      502,
+      text.slice(0, 500),
+    );
   }
 }
 
@@ -165,10 +185,139 @@ export async function generateImageBase64(prompt: string) {
 
   const image = json.data?.find((item) => item.b64_json);
   if (!image?.b64_json) {
-    throw new ApiError("OpenAI image generation did not return image data.", 502);
+    throw new ApiError(
+      "OpenAI画像生成の応答に画像データが含まれていません。画像枚数や指示を減らして再実行してください。",
+      502,
+    );
   }
 
   return image.b64_json;
+}
+
+function formatOpenAIError(
+  status: number,
+  error: { message?: string; code?: string } | undefined,
+) {
+  const code = cleanEnvValue(error?.code);
+  const rawMessage = cleanEnvValue(error?.message);
+  const combined = `${code} ${rawMessage}`;
+  const detail = [code, rawMessage].filter(Boolean).join(" / ") || undefined;
+
+  if (status === 401 || /invalid.*key|incorrect.*api.*key|unauthorized/i.test(combined)) {
+    return {
+      message:
+        "OpenAI APIキーが無効、または未承認です。Vercel Environment Variablesまたは.env.localのOPENAI_API_KEYを確認してください。",
+      detail,
+    };
+  }
+
+  if (
+    code === "insufficient_quota" ||
+    code === "billing_hard_limit_reached" ||
+    /insufficient[_\s-]*quota|billing[_\s-]*hard[_\s-]*limit|current quota|billing/i.test(combined)
+  ) {
+    return {
+      message:
+        "OpenAIの請求枠または利用上限に達しています。OpenAI PlatformのBilling/Usageと、このアプリで使っているAPIキーのプロジェクトを確認してください。",
+      detail,
+    };
+  }
+
+  if (status === 429 || /rate|quota|limit/i.test(combined)) {
+    return {
+      message:
+        "OpenAIのレート制限に達しました。少し時間をおくか、画像枚数・入力量を減らして再実行してください。",
+      detail,
+    };
+  }
+
+  if (status >= 500) {
+    return {
+      message:
+        "OpenAI側で一時的なエラーが発生しました。数分後に再実行してください。繰り返す場合は入力量を減らしてください。",
+      detail,
+    };
+  }
+
+  if (status === 400) {
+    return {
+      message:
+        "OpenAIへのリクエスト内容が不正です。入力テキスト、添付ファイル、画像生成指示を短くして再実行してください。",
+      detail,
+    };
+  }
+
+  return {
+    message: "OpenAI APIへのリクエストに失敗しました。時間をおいて再実行してください。",
+    detail,
+  };
+}
+
+function formatOpenAITransportError(error: unknown) {
+  const rawMessage =
+    error instanceof Error ? cleanEnvValue(error.message) : cleanEnvValue(String(error));
+  const detail = rawMessage || undefined;
+
+  if (error instanceof Error && error.name === "AbortError") {
+    return {
+      status: 504,
+      message:
+        "OpenAI APIの応答がタイムアウトしました。入力量を減らすか、時間をおいて再実行してください。",
+      detail,
+    };
+  }
+
+  return {
+    status: 502,
+    message:
+      "OpenAI APIへの接続に失敗しました。ネットワーク状態を確認し、時間をおいて再実行してください。",
+    detail,
+  };
+}
+
+function isRetryableOpenAIStatus(
+  status: number,
+  error: { message?: string; code?: string } | undefined,
+) {
+  const code = cleanEnvValue(error?.code);
+  if (code === "insufficient_quota" || code === "billing_hard_limit_reached") {
+    return false;
+  }
+
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function getRetryCount() {
+  const configured = Number(cleanEnvValue(process.env.OPENAI_MAX_RETRIES));
+  if (Number.isFinite(configured) && configured >= 0) {
+    return Math.min(Math.floor(configured), 4);
+  }
+
+  return DEFAULT_OPENAI_MAX_RETRIES;
+}
+
+function getRetryDelayMs(attempt: number, retryAfterHeader?: string | null) {
+  const retryAfterValue = cleanEnvValue(retryAfterHeader ?? undefined);
+  const retryAfter = retryAfterValue ? Number(retryAfterValue) : Number.NaN;
+  if (Number.isFinite(retryAfter) && retryAfter >= 0) {
+    return Math.min(retryAfter * 1000, 10_000);
+  }
+
+  const configured = Number(cleanEnvValue(process.env.OPENAI_RETRY_BASE_DELAY_MS));
+  const baseDelay =
+    Number.isFinite(configured) && configured >= 0
+      ? configured
+      : DEFAULT_OPENAI_RETRY_BASE_DELAY_MS;
+
+  return Math.min(baseDelay * (attempt + 1), 10_000);
+}
+
+function wait(ms: number) {
+  if (ms <= 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function extractOutputText(json: OpenAIResponse) {

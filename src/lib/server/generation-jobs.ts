@@ -80,7 +80,7 @@ export async function getGenerationJob(id: string) {
       .maybeSingle();
 
     if (error) {
-      throw new ApiError("Failed to load generation job.", 500, error.message);
+      throw new ApiError("生成ジョブの読み込みに失敗しました。", 500, error.message);
     }
 
     return data ? rowToJob(data as Record<string, unknown>) : null;
@@ -113,7 +113,7 @@ export async function saveGenerationJob(job: GenerationJob) {
     );
 
     if (error) {
-      throw new ApiError("Failed to save generation job.", 500, error.message);
+      throw new ApiError("生成ジョブの保存に失敗しました。", 500, error.message);
     }
 
     return job;
@@ -136,7 +136,11 @@ export async function updateGenerationJob(
 ) {
   const current = await getGenerationJob(id);
   if (!current) {
-    throw new ApiError("Generation job not found.", 404);
+    throw new ApiError(
+      "生成ジョブが見つかりません。",
+      404,
+      "古い生成状態をクリアし、もう一度「AIによる記事作成」を実行してください。",
+    );
   }
 
   const next = updater(current);
@@ -174,11 +178,15 @@ export async function cancelGenerationJob(id: string) {
 export async function assertGenerationJobActive(id: string) {
   const job = await getGenerationJob(id);
   if (!job) {
-    throw new ApiError("Generation job not found.", 404);
+    throw new ApiError(
+      "生成ジョブが見つかりません。",
+      404,
+      "古い生成状態をクリアし、もう一度「AIによる記事作成」を実行してください。",
+    );
   }
 
   if (job.status === "canceled") {
-    throw new ApiError("Generation job was canceled.", 409);
+    throw new ApiError("記事作成は停止済みです。", 409);
   }
 
   return job;
@@ -196,7 +204,7 @@ export async function listGenerationJobs(limit = 30) {
       .limit(Math.max(limit * 4, 40));
 
     if (error) {
-      throw new ApiError("Failed to load generation logs.", 500, error.message);
+      throw new ApiError("生成ログの読み込みに失敗しました。", 500, error.message);
     }
 
     return (data ?? [])

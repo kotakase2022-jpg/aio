@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "ja-JP"
+tone_instructions: "レビューは簡潔で実務的にしてください。重大度、再現条件、修正方針を明確にし、不要な雑談や詩的表現は避けてください。"
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  review_details: false
+  commit_status: true
+  fail_commit_status: false
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+    ignore_title_keywords:
+      - "WIP"
+      - "[WIP]"
+      - "Draft:"
+  path_instructions:
+    - path: "src/**/*.{ts,tsx}"
+      instructions: "Next.js App Router / React / TypeScript code. Prioritize runtime correctness, data integrity, server-only secret handling, accessibility for PC browser workflows, and regressions in the AIO article generation flow."
+    - path: "src/lib/server/**/*"
+      instructions: "Server code must not expose OpenAI, Supabase, WordPress, or encryption secrets to the client. Review external API failures, timeouts, retries, validation, persistence, and safe fallback behavior carefully."
+    - path: "tests/**/*"
+      instructions: "Tests must not be deleted, skipped, weakened, or converted to superficial smoke tests. Ensure important user flows and error paths remain mechanically verified."
+    - path: "supabase/**/*"
+      instructions: "Review schema, RLS, migrations, and persistence changes for non-production safety, data consistency, and least-privilege behavior."
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false

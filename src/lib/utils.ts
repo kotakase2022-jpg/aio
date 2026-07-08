@@ -24,6 +24,12 @@ export function truncateText(value: string, maxLength = 20000): string {
   return `${value.slice(0, maxLength)}\n\n[truncated]`;
 }
 
+export function compactOptionalText(value: string | undefined, maxLength = 20000): string {
+  const trimmed = value?.trim();
+
+  return trimmed ? truncateText(trimmed, maxLength) : "";
+}
+
 export function parseCsvRows(value: string): string[][] {
   if (!value.trim()) {
     return [];

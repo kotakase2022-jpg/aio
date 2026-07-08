@@ -13,15 +13,15 @@ export async function POST(request: Request) {
     const folder = String(formData.get("folder") || "uploads");
 
     if (!(file instanceof File)) {
-      throw new ApiError("Image file is required.", 400);
+      throw new ApiError("画像ファイルを選択してください。", 400);
     }
 
     if (!file.type.startsWith("image/")) {
-      throw new ApiError("Only image uploads are supported.", 400);
+      throw new ApiError("画像ファイルのみアップロードできます。", 400);
     }
 
     if (file.size > MAX_UPLOAD_BYTES) {
-      throw new ApiError("Image must be 8MB or smaller.", 400);
+      throw new ApiError("画像は8MB以下にしてください。", 400);
     }
 
     const stored = await storeAsset({

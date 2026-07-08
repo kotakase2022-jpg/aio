@@ -32,14 +32,14 @@ export async function extractAttachmentText({
 
   if (!(SUPPORTED_ATTACHMENT_EXTENSIONS as readonly string[]).includes(extension)) {
     throw new ApiError(
-      "Unsupported file type.",
+      "対応していないファイル形式です。",
       400,
       "PDF/TXT/PPTX/XLSX/DOCX/HTMLのみ添付できます。",
     );
   }
 
   if (buffer.length === 0) {
-    throw new ApiError("Uploaded file is empty.", 400, "空のファイルです。");
+    throw new ApiError("空のファイルです。", 400);
   }
 
   let text = "";
@@ -60,7 +60,7 @@ export async function extractAttachmentText({
   const cleaned = cleanText(text);
   if (cleaned.length < MIN_USEFUL_TEXT_CHARS) {
     throw new ApiError(
-      "Could not extract enough file text.",
+      "十分な本文を抽出できませんでした。",
       422,
       `${contentType || extension}から十分な本文を抽出できませんでした。`,
     );
@@ -229,12 +229,35 @@ function ensurePdfJsDomMatrix() {
 }
 
 function decodeText(buffer: Buffer) {
-  return buffer.toString("utf8").replace(/^\uFEFF/, "");
+  const utf8Text = stripUtf8Bom(buffer.toString("utf8"));
+
+  if (!shouldTryShiftJisFallback(utf8Text)) {
+    return utf8Text;
+  }
+
+  const shiftJisText = decodeShiftJis(buffer);
+
+  if (!shiftJisText) {
+    return utf8Text;
+  }
+
+  return textDecodeScore(shiftJisText) > textDecodeScore(utf8Text) ? shiftJisText : utf8Text;
 }
 
 function extractHtmlText(html: string) {
   const $ = cheerio.load(html);
   $("script, style, noscript, svg, nav, footer, header, form, aside").remove();
+  $("[hidden], [aria-hidden='true']").remove();
+  $("[class], [id], [role]").each((_, element) => {
+    const marker = [$(element).attr("id"), $(element).attr("class"), $(element).attr("role")]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    if (isHtmlNoiseMarker(marker)) {
+      $(element).remove();
+    }
+  });
   const title = cleanText($("title").first().text());
   const description = cleanText(
     $("meta[name='description']").attr("content") ??
@@ -243,6 +266,130 @@ function extractHtmlText(html: string) {
   );
   const body = cleanText($("article").text() || $("main").text() || $("body").text());
   return [title, description, body].filter(Boolean).join("\n\n");
+}
+
+function stripUtf8Bom(value: string) {
+  return value.replace(/^\uFEFF/, "");
+}
+
+function shouldTryShiftJisFallback(value: string) {
+  return replacementCharacterCount(value) >= 2;
+}
+
+function replacementCharacterCount(value: string) {
+  return (value.match(/\uFFFD/g) ?? []).length;
+}
+
+function decodeShiftJis(buffer: Buffer) {
+  try {
+    return new TextDecoder("shift_jis").decode(buffer);
+  } catch {
+    return "";
+  }
+}
+
+function textDecodeScore(value: string) {
+  const sample = value.slice(0, 4000);
+  const replacementPenalty = (sample.match(/\uFFFD/g) ?? []).length * 8;
+  const readableCount = Array.from(sample).filter((char) =>
+    /[\p{L}\p{N}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\s.,;:!?()[\]{}'"。「」、・ー\-]/u.test(
+      char,
+    ),
+  ).length;
+
+  return readableCount - replacementPenalty;
+}
+
+function isHtmlNoiseMarker(marker: string) {
+  const tokens = marker.split(/[^a-z0-9]+/).filter(Boolean);
+  const tokenSet = new Set(tokens);
+  const exactNoiseTokens = new Set([
+    "cookie",
+    "consent",
+    "breadcrumb",
+    "breadcrumbs",
+    "pagination",
+    "popup",
+    "modal",
+    "advert",
+    "advertisement",
+    "ads",
+  ]);
+
+  if (tokens.some((token) => exactNoiseTokens.has(token))) {
+    return true;
+  }
+
+  const hasShareToken = tokens.some((token) => ["share", "shares", "sharing"].includes(token));
+  const hasShareWidget =
+    hasShareToken &&
+    tokens.some((token) =>
+      [
+        "button",
+        "buttons",
+        "link",
+        "links",
+        "social",
+        "widget",
+        "widgets",
+      ].includes(token),
+    );
+  const hasSocialWidget =
+    tokenSet.has("social") &&
+    tokens.some((token) =>
+      ["button", "buttons", "link", "links", "widget", "widgets", "share", "sharing"].includes(
+        token,
+      ),
+    );
+  const hasAdBanner =
+    (tokenSet.has("ad") || tokenSet.has("ads")) &&
+    (tokenSet.has("banner") || tokenSet.has("banners"));
+  const hasSubscribeWidget =
+    (tokenSet.has("subscribe") || tokenSet.has("subscription")) &&
+    tokens.some((token) =>
+      [
+        "banner",
+        "banners",
+        "box",
+        "boxes",
+        "button",
+        "buttons",
+        "cta",
+        "email",
+        "form",
+        "forms",
+        "mail",
+        "modal",
+        "popup",
+        "widget",
+        "widgets",
+      ].includes(token),
+    );
+  const hasNewsletterWidget =
+    tokenSet.has("newsletter") &&
+    tokens.some((token) =>
+      [
+        "banner",
+        "banners",
+        "box",
+        "boxes",
+        "button",
+        "buttons",
+        "cta",
+        "email",
+        "form",
+        "forms",
+        "mail",
+        "modal",
+        "popup",
+        "signup",
+        "subscribe",
+        "widget",
+        "widgets",
+      ].includes(token),
+    );
+
+  return hasShareWidget || hasSocialWidget || hasAdBanner || hasSubscribeWidget || hasNewsletterWidget;
 }
 
 function extractPdfTextFallback(buffer: Buffer) {
@@ -356,7 +503,7 @@ async function extractDocxText(buffer: Buffer) {
     .filter((file) => /^word\/(document|header\d*|footer\d*)\.xml$/i.test(file.name))
     .sort((a, b) => a.name.localeCompare(b.name));
   const texts = await Promise.all(files.map((file) => file.async("text")));
-  return texts.map((xml) => extractXmlTextNodes(xml, ["w:t"])).join("\n\n");
+  return texts.map((xml) => extractXmlParagraphText(xml, ["w:p"], ["w:t"])).join("\n\n");
 }
 
 async function extractPptxText(buffer: Buffer) {
@@ -365,13 +512,13 @@ async function extractPptxText(buffer: Buffer) {
     .filter((file) => /^ppt\/slides\/slide\d+\.xml$/i.test(file.name))
     .sort((a, b) => naturalCompare(a.name, b.name));
   const texts = await Promise.all(files.map((file) => file.async("text")));
-  return texts.map((xml) => extractXmlTextNodes(xml, ["a:t"])).join("\n\n");
+  return texts.map((xml) => extractXmlParagraphText(xml, ["a:p"], ["a:t"])).join("\n\n");
 }
 
 async function extractXlsxText(buffer: Buffer) {
   const zip = await JSZip.loadAsync(buffer);
   const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("text");
-  const sharedStrings = sharedXml ? extractXmlTextNodes(sharedXml, ["t"]).split("\n") : [];
+  const sharedStrings = sharedXml ? extractSharedStrings(sharedXml) : [];
   const sheetFiles = Object.values(zip.files)
     .filter((file) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(file.name))
     .sort((a, b) => naturalCompare(a.name, b.name));
@@ -383,6 +530,21 @@ async function extractXlsxText(buffer: Buffer) {
     .join("\n\n");
 }
 
+function extractSharedStrings(xml: string) {
+  const entries: string[] = [];
+  const sharedStringRegex = /<si\b[^>]*>([\s\S]*?)<\/si>/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = sharedStringRegex.exec(xml))) {
+    const body = match[1] ?? "";
+    const textRuns = extractXmlTextNodeValues(body, ["t"], { trim: false });
+    const value = textRuns.length > 0 ? textRuns.join("") : decodeXmlEntities(stripXmlTags(body));
+    entries.push(value.trim());
+  }
+
+  return entries;
+}
+
 function extractWorksheetText(xml: string, sharedStrings: string[]) {
   const cellValues: string[] = [];
   const cellRegex = /<c\b([^>]*)>([\s\S]*?)<\/c>/g;
@@ -392,7 +554,7 @@ function extractWorksheetText(xml: string, sharedStrings: string[]) {
     const attrs = match[1] ?? "";
     const body = match[2] ?? "";
     const rawValue = firstMatch(body, /<v[^>]*>([\s\S]*?)<\/v>/) ?? "";
-    const inlineValue = extractXmlTextNodes(body, ["t"]);
+    const inlineValue = extractInlineXmlText(body, ["t"]);
     const value =
       attrs.includes('t="s"') && rawValue
         ? sharedStrings[Number(rawValue)] ?? rawValue
@@ -407,24 +569,63 @@ function extractWorksheetText(xml: string, sharedStrings: string[]) {
 }
 
 function extractXmlTextNodes(xml: string, tags: string[]) {
-  const values: string[] = [];
-  for (const tag of tags) {
-    const escaped = tag.replace(":", "\\:");
-    const regex = new RegExp(`<${escaped}[^>]*>([\\s\\S]*?)<\\/${escaped}>`, "g");
+  const values = extractXmlTextNodeValues(xml, tags);
+  if (values.length > 0) {
+    return values.join("\n");
+  }
+
+  return decodeXmlEntities(stripXmlTags(xml));
+}
+
+function extractXmlParagraphText(xml: string, paragraphTags: string[], textTags: string[]) {
+  const paragraphs: string[] = [];
+  for (const tag of paragraphTags) {
+    const regex = new RegExp(
+      `<${escapeXmlTagForRegex(tag)}\\b[^>]*>([\\s\\S]*?)<\\/${escapeXmlTagForRegex(tag)}>`,
+      "g",
+    );
     let match: RegExpExecArray | null;
     while ((match = regex.exec(xml))) {
-      const value = decodeXmlEntities(stripXmlTags(match[1] ?? "").trim());
+      const text = extractInlineXmlText(match[1] ?? "", textTags);
+      if (text.trim()) {
+        paragraphs.push(text.trim());
+      }
+    }
+  }
+
+  return paragraphs.length > 0 ? paragraphs.join("\n") : extractXmlTextNodes(xml, textTags);
+}
+
+function extractInlineXmlText(xml: string, tags: string[]) {
+  const values = extractXmlTextNodeValues(xml, tags, { trim: false });
+  if (values.length > 0) {
+    return values.join("");
+  }
+
+  return decodeXmlEntities(stripXmlTags(xml));
+}
+
+function extractXmlTextNodeValues(xml: string, tags: string[], options: { trim?: boolean } = {}) {
+  const values: string[] = [];
+  const shouldTrim = options.trim ?? true;
+  for (const tag of tags) {
+    const escaped = escapeXmlTagForRegex(tag);
+    const regex = new RegExp(`<${escaped}\\b[^>]*>([\\s\\S]*?)<\\/${escaped}>`, "g");
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(xml))) {
+      const stripped = stripXmlTags(match[1] ?? "");
+      const value = decodeXmlEntities(shouldTrim ? stripped.trim() : stripped);
       if (value) {
         values.push(value);
       }
     }
   }
 
-  if (values.length > 0) {
-    return values.join("\n");
-  }
+  return values;
+}
 
-  return decodeXmlEntities(stripXmlTags(xml));
+function escapeXmlTagForRegex(tag: string) {
+  return tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(":", "\\:");
 }
 
 function stripXmlTags(value: string) {
@@ -433,11 +634,16 @@ function stripXmlTags(value: string) {
 
 function decodeXmlEntities(value: string) {
   return value
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&");
+    .replace(/&(?:lt|#0*60|#x0*3c);/gi, "<")
+    .replace(/&(?:gt|#0*62|#x0*3e);/gi, ">")
+    .replace(/&(?:quot|#0*34|#x0*22);/gi, '"')
+    .replace(/&(?:apos|#0*39|#x0*27);/gi, "'")
+    .replace(/&(?:nbsp|#0*160|#x0*a0);/gi, " ")
+    .replace(/&(?:ldquo|rdquo|#0*8220|#0*8221|#x0*201c|#x0*201d);/gi, '"')
+    .replace(/&(?:lsquo|rsquo|#0*8216|#0*8217|#x0*2018|#x0*2019);/gi, "'")
+    .replace(/&(?:ndash|#0*8211|#x0*2013);/gi, "-")
+    .replace(/&(?:mdash|#0*8212|#x0*2014);/gi, "-")
+    .replace(/&(?:amp|#0*38|#x0*26);/gi, "&");
 }
 
 function cleanText(value: string) {
@@ -475,7 +681,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
       promise,
       new Promise<T>((_, reject) => {
         timer = setTimeout(() => {
-          reject(new ApiError("File parsing timed out.", 504, "解析に時間がかかりすぎました。"));
+          reject(new ApiError("ファイル解析がタイムアウトしました。", 504));
         }, timeoutMs);
       }),
     ]);

@@ -4,9 +4,12 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  Check,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
+  ClipboardCopy,
+  Download,
   FileText,
   Loader2,
   Maximize2,
@@ -31,7 +34,23 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  evaluateArticleQuality,
+  type ArticleQualityEvaluation,
+} from "@/lib/article-quality";
 import { formatJaDateTime } from "@/lib/date";
+import { buildDraftArticleHtml } from "@/lib/draft-html";
+import { evaluateFaqQuality } from "@/lib/faq-quality";
+import {
+  formatGenerationRequirementMessage,
+  getMissingGenerationRequirements,
+} from "@/lib/generation-requirements";
+import { evaluateImageAltQuality } from "@/lib/image-alt-quality";
+import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
+import { truncatePromptLine } from "@/lib/prompt-text";
+import { qualityCheckEditGuidance } from "@/lib/quality-edit-guidance";
+import { qualityRegenerationAction } from "@/lib/quality-regeneration-action";
+import { evaluateTitleQuality } from "@/lib/title-quality";
 import { cn, joinCsv, splitCsv } from "@/lib/utils";
 import type {
   AttachedFileInput,
@@ -58,6 +77,30 @@ import type {
 const activeGenerationJobStorageKey = "aio-active-generation-job-id";
 const lastClosingTextStorageKey = "aio-last-closing-text";
 const lastAuthorStorageKey = "aio-last-author";
+const generatedImageSlotOrder = ["featured", "inline-1", "inline-2"] as const;
+
+function getGeneratedImageSlots(images: ArticleImage[]) {
+  return new Set(
+    images
+      .filter((image) => image.source === "generated")
+      .map((image) => image.slot),
+  );
+}
+
+function getMissingGeneratedImagePrompts(
+  imagePrompts: ArticleGenerationResult["image_prompts"],
+  images: ArticleImage[],
+  requestedImageCount?: ImageCount,
+) {
+  const expectedPrompts =
+    typeof requestedImageCount === "number"
+      ? imagePrompts.filter((prompt) =>
+          generatedImageSlotOrder.slice(0, requestedImageCount).includes(prompt.slot),
+        )
+      : imagePrompts;
+  const generatedImageSlots = getGeneratedImageSlots(images);
+  return expectedPrompts.filter((prompt) => !generatedImageSlots.has(prompt.slot));
+}
 
 const tonePresets = [
   "シンプルなBtoBホワイトペーパー風",
@@ -110,13 +153,14 @@ export function ArticleGeneratorApp() {
   const [competitorResearch, setCompetitorResearch] =
     useState<CompetitorResearchResult | null>(null);
   const [competitorJson, setCompetitorJson] = useState("");
+  const [competitorJsonError, setCompetitorJsonError] = useState("");
   const [researchLoading, setResearchLoading] = useState(false);
   const [researchProgress, setResearchProgress] = useState(0);
   const [themeCandidateLoading, setThemeCandidateLoading] = useState(false);
   const [themeCandidates, setThemeCandidates] = useState<ThemeCandidateResult | null>(null);
   const [themeCandidateError, setThemeCandidateError] = useState("");
   const [themeCandidateApplyMessage, setThemeCandidateApplyMessage] = useState("");
-  const [themeCandidateAppliedTitle, setThemeCandidateAppliedTitle] = useState("");
+  const [themeCandidateAppliedIndex, setThemeCandidateAppliedIndex] = useState<number | null>(null);
   const [referenceFileUploading, setReferenceFileUploading] = useState(false);
   const [competitorFileUploading, setCompetitorFileUploading] = useState(false);
   const [steps, setSteps] = useState<GenerationStep[]>(generationSteps);
@@ -125,15 +169,15 @@ export function ArticleGeneratorApp() {
   const [fetchedCompetitors, setFetchedCompetitors] = useState<FetchResult[]>([]);
   const [draft, setDraft] = useState<ArticleDraft | null>(null);
   const [tab, setTab] = useState<"preview" | "edit">("preview");
-  const [activeGenerationJobId, setActiveGenerationJobId] = useState<string | null>(() =>
-    typeof window === "undefined"
-      ? null
-      : window.localStorage.getItem(activeGenerationJobStorageKey),
-  );
+  const [activeGenerationJobId, setActiveGenerationJobId] = useState<string | null>(null);
+  const [generationResumeChecked, setGenerationResumeChecked] = useState(false);
   const [generationLogs, setGenerationLogs] = useState<GenerationLogSummary[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsExpanded, setLogsExpanded] = useState(false);
+  const [logsError, setLogsError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [draftActionMessage, setDraftActionMessage] = useState("");
+  const [draftActionError, setDraftActionError] = useState("");
   const [posting, setPosting] = useState(false);
   const [imageRegenerating, setImageRegenerating] = useState(false);
   const [imageRegenerationDialogOpen, setImageRegenerationDialogOpen] = useState(false);
@@ -149,13 +193,14 @@ export function ArticleGeneratorApp() {
   const [connection, setConnection] = useState<WordpressConnection | null>(null);
   const [isFullscreenPreviewOpen, setFullscreenPreviewOpen] = useState(false);
   const [wpConnectionError, setWpConnectionError] = useState("");
+  const [wpConnectionMessage, setWpConnectionMessage] = useState("");
+  const [wpPostMessage, setWpPostMessage] = useState("");
   const [wpForm, setWpForm] = useState({
     siteUrl: "",
     username: "",
     applicationPassword: "",
     status: "draft" as "draft" | "publish",
   });
-  const generationAbortRef = useRef<AbortController | null>(null);
   const generationPollingRef = useRef<string | null>(null);
   const themeCandidateApplyTimerRef = useRef<number | null>(null);
 
@@ -188,16 +233,15 @@ export function ArticleGeneratorApp() {
     ],
   );
 
-  const canGenerate = useMemo(() => {
-    const hasReference =
-      references.some((item) => item.url?.trim() || item.text?.trim()) ||
-      referenceFiles.some((file) => file.ok && file.text?.trim());
-    const hasTone =
-      (visualTone.mode === "preset" && visualTone.preset) ||
-      (visualTone.mode === "custom" && visualTone.custom?.trim()) ||
-      (visualTone.mode === "upload" && visualTone.uploadedImageUrl);
-    return Boolean(hasReference && hasTone);
-  }, [referenceFiles, references, visualTone]);
+  const missingGenerationRequirements = useMemo(
+    () => getMissingGenerationRequirements({ references, referenceFiles, visualTone }),
+    [referenceFiles, references, visualTone],
+  );
+  const canGenerate = missingGenerationRequirements.length === 0;
+  const generateRequirementMessage = useMemo(
+    () => formatGenerationRequirementMessage(missingGenerationRequirements),
+    [missingGenerationRequirements],
+  );
 
   const isGenerating = Boolean(activeGenerationJobId);
 
@@ -206,11 +250,19 @@ export function ArticleGeneratorApp() {
 
     const storedJobId = window.localStorage.getItem(activeGenerationJobStorageKey);
     if (storedJobId) {
-      generationPollingRef.current = storedJobId;
-      window.setTimeout(() => {
-        void pollGenerationJob(storedJobId);
-      }, 0);
+      void pollGenerationJob(storedJobId);
     }
+
+    let canceled = false;
+    window.queueMicrotask(() => {
+      if (!canceled) {
+        setGenerationResumeChecked(true);
+      }
+    });
+
+    return () => {
+      canceled = true;
+    };
     // Run once on mount to resume a server-side job that may outlive the tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -301,6 +353,7 @@ export function ArticleGeneratorApp() {
       );
       setCompetitorResearch(result.result);
       setCompetitorJson(JSON.stringify(result.result, null, 2));
+      setCompetitorJsonError("");
       setResearchProgress(100);
     } catch (error) {
       setResearchProgress(0);
@@ -314,7 +367,7 @@ export function ArticleGeneratorApp() {
     setThemeCandidateLoading(true);
     setThemeCandidateError("");
     setThemeCandidateApplyMessage("");
-    setThemeCandidateAppliedTitle("");
+    setThemeCandidateAppliedIndex(null);
     setActiveError("");
     try {
       const editableResearch = parseCompetitorResearch();
@@ -325,6 +378,7 @@ export function ArticleGeneratorApp() {
         competitorFiles,
         competitorResearch: editableResearch,
         currentTheme: theme,
+        primaryInfo,
       });
       setThemeCandidates(result.result);
     } catch (error) {
@@ -340,158 +394,62 @@ export function ArticleGeneratorApp() {
       return;
     }
 
-    const effectiveFormPayload = regenerationInstruction.trim()
+    const trimmedRegenerationInstruction = regenerationInstruction.trim();
+    const previousDraft = draft;
+    const isRegeneration = Boolean(trimmedRegenerationInstruction && previousDraft);
+    const effectiveFormPayload = trimmedRegenerationInstruction
       ? {
           ...formPayload,
-          regenerationInstruction: regenerationInstruction.trim(),
+          regenerationInstruction: trimmedRegenerationInstruction,
         }
       : formPayload;
-
-    if (typeof window !== "undefined") {
-      setActiveError("");
-      setDraft(null);
-      setTab("preview");
-      setSteps(generationSteps);
-      setFetchedReferences([]);
-      setFetchedCompetitors([]);
-      persistReusableInputs(effectiveFormPayload);
-
-      try {
-        const editableResearch = parseCompetitorResearch();
-        updateStep("fetch_refs", "running", "サーバー側ジョブを開始しています");
-        const started = await apiPost<{ job: GenerationJob }>("/api/generation-jobs", {
-          form: effectiveFormPayload,
-          competitorResearch: editableResearch,
-        });
-
-        setActiveGenerationJobId(started.job.id);
-        generationPollingRef.current = started.job.id;
-        window.localStorage.setItem(activeGenerationJobStorageKey, started.job.id);
-        applyGenerationJob(started.job);
-        await pollGenerationJob(started.job.id);
-      } catch (error) {
-        setActiveError(readError(error));
-        markRunningAsError(readError(error));
-      }
+    let editableResearch: CompetitorResearchResult | null;
+    try {
+      editableResearch = parseCompetitorResearch();
+    } catch (error) {
+      setActiveError(readError(error));
       return;
     }
 
-    const controller = new AbortController();
-    generationAbortRef.current = controller;
-    const { signal } = controller;
-
     setActiveError("");
-    setDraft(null);
+    setDraft(isRegeneration ? previousDraft : null);
     setTab("preview");
     setSteps(generationSteps);
+    setFetchedReferences([]);
+    setFetchedCompetitors([]);
+    persistReusableInputs(effectiveFormPayload);
 
     try {
-      updateStep("fetch_refs", "running");
-      const referenceResults = await fetchInputs(references, referenceFiles, signal);
-      throwIfAborted(signal);
-      setFetchedReferences(referenceResults);
-      updateStep(
-        "fetch_refs",
-        "done",
-        summarizeFetch(referenceResults, "参照URL"),
-      );
+      updateStep("fetch_refs", "running", "サーバー側ジョブを開始しています");
+      const started = await apiPost<{ job: GenerationJob }>("/api/generation-jobs", {
+        form: effectiveFormPayload,
+        competitorResearch: editableResearch,
+      });
 
-      updateStep("fetch_competitors", "running");
-      const competitorResults = await fetchInputs(competitors, competitorFiles, signal);
-      throwIfAborted(signal);
-      setFetchedCompetitors(competitorResults);
-      updateStep(
-        "fetch_competitors",
-        "done",
-        summarizeFetch(competitorResults, "競合URL"),
-      );
-
-      updateStep("merge_research", "running");
-      const editableResearch = parseCompetitorResearch();
-      updateStep(
-        "merge_research",
-        "done",
-        editableResearch ? "AI競合調査結果を統合" : "競合調査なしで続行",
-      );
-
-      updateStep("generate_outline", "running");
-      updateStep("generate_body", "running");
-      updateStep("generate_meta", "running");
-      updateStep("image_prompts", "running");
-      const article = await apiPost<{ result: ArticleGenerationResult }>(
-        "/api/generate-article",
-        {
-          form: effectiveFormPayload,
-          fetchedReferences: referenceResults,
-          fetchedCompetitors: competitorResults,
-          competitorResearch: editableResearch,
-        },
-        { signal },
-      );
-      throwIfAborted(signal);
-      updateStep("generate_outline", "done");
-      updateStep("generate_body", "done");
-      updateStep("generate_meta", "done");
-      updateStep("image_prompts", "done");
-
-      updateStep("images", "running");
-      const images = await createArticleImages(article.result, signal);
-      throwIfAborted(signal);
-      updateStep("images", "done", `${images.length}枚を反映`);
-
-      updateStep("save", "running");
-      const now = new Date().toISOString();
-      const bodyWithImages = injectImages(article.result.body_html, images);
-      const nextDraft: ArticleDraft = {
-        id: crypto.randomUUID(),
-        inputPayload: formPayload,
-        fetchedReferences: referenceResults,
-        fetchedCompetitors: competitorResults,
-        competitorResearch: editableResearch ?? undefined,
-        aiResult: article.result,
-        editedTitle: article.result.selected_title,
-        editedSlug: article.result.suggested_slug,
-        editedMetaDescription: article.result.meta_description,
-        editedBodyHtml: bodyWithImages,
-        faqItems: article.result.faq_items,
-        tags: article.result.tags,
-        categories: article.result.categories,
-        images,
-        author,
-        status: "draft",
-        createdAt: now,
-        updatedAt: now,
-      };
-      const saved = await apiPost<{ draft: ArticleDraft; storageMode: string }>(
-        "/api/save-draft",
-        { draft: prepareDraftForSave(nextDraft) },
-        { signal },
-      );
-      throwIfAborted(signal);
-      setDraft({ ...nextDraft, updatedAt: saved.draft.updatedAt });
-      updateStep("save", "done", `保存先: ${saved.storageMode}`);
+      setActiveGenerationJobId(started.job.id);
+      generationPollingRef.current = started.job.id;
+      window.localStorage.setItem(activeGenerationJobStorageKey, started.job.id);
+      applyGenerationJob(started.job);
+      await pollGenerationJob(started.job.id);
     } catch (error) {
-      if (isAbortError(error)) {
-        setActiveError("記事作成を停止しました。");
-        markRunningAsError("ユーザー操作により停止しました。");
-        return;
+      if (isRegeneration && previousDraft) {
+        setDraft(previousDraft);
       }
-
       setActiveError(readError(error));
       markRunningAsError(readError(error));
-    } finally {
-      if (generationAbortRef.current === controller) {
-        generationAbortRef.current = null;
-      }
     }
   }
 
   async function stopGeneration() {
     const jobId = activeGenerationJobId;
     if (jobId) {
-      await apiPost<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}/cancel`, {}).catch(
-        () => undefined,
-      );
+      try {
+        await apiPost<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}/cancel`, {});
+      } catch (error) {
+        setActiveError(`記事作成の停止に失敗しました。${readError(error)}`);
+        void loadGenerationLogs();
+        return;
+      }
       generationPollingRef.current = null;
       setActiveGenerationJobId(null);
       window.localStorage.removeItem(activeGenerationJobStorageKey);
@@ -501,8 +459,6 @@ export function ArticleGeneratorApp() {
       return;
     }
 
-    generationAbortRef.current?.abort();
-    generationAbortRef.current = null;
     setActiveError("記事作成を停止しました。");
     markRunningAsError("ユーザー操作により停止しました。");
   }
@@ -580,8 +536,9 @@ export function ArticleGeneratorApp() {
     setFetchedReferences(job.fetchedReferences ?? []);
     setFetchedCompetitors(job.fetchedCompetitors ?? []);
 
-    if (job.draft) {
-      setDraft(job.draft);
+    const hydratedDraft = hydrateDraftFromGenerationJob(job);
+    if (hydratedDraft) {
+      setDraft(hydratedDraft);
     }
   }
 
@@ -594,11 +551,12 @@ export function ArticleGeneratorApp() {
 
   async function loadGenerationLogs() {
     setLogsLoading(true);
+    setLogsError("");
     try {
       const result = await apiGet<{ logs: GenerationLogSummary[] }>("/api/generation-logs");
       setGenerationLogs(result.logs);
     } catch (error) {
-      setActiveError(readError(error));
+      setLogsError(readError(error));
     } finally {
       setLogsLoading(false);
     }
@@ -609,8 +567,7 @@ export function ArticleGeneratorApp() {
     try {
       const result = await apiGet<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}`);
       applyGenerationJob(result.job);
-      if (result.job.draft) {
-        setDraft(result.job.draft);
+      if (hydrateDraftFromGenerationJob(result.job)) {
         setTab("preview");
       }
     } catch (error) {
@@ -620,13 +577,24 @@ export function ArticleGeneratorApp() {
 
   async function saveCurrentDraft() {
     if (!draft) return;
+    const validationMessage = validateDraftForSubmission(draft);
+    if (validationMessage) {
+      setActiveError("");
+      setDraftActionMessage("");
+      setDraftActionError(validationMessage);
+      setTab("edit");
+      return;
+    }
     setSaving(true);
     setActiveError("");
+    setDraftActionMessage("");
+    setDraftActionError("");
     try {
       const saved = await apiPost<{ draft: ArticleDraft }>("/api/save-draft", {
         draft: prepareDraftForSave(draft),
       });
       setDraft({ ...draft, updatedAt: saved.draft.updatedAt });
+      setDraftActionMessage("編集内容を保存しました。");
     } catch (error) {
       setActiveError(readError(error));
     } finally {
@@ -636,8 +604,18 @@ export function ArticleGeneratorApp() {
 
   async function approveCurrentDraft() {
     if (!draft) return;
+    const validationMessage = validateDraftForSubmission(draft);
+    if (validationMessage) {
+      setActiveError("");
+      setDraftActionMessage("");
+      setDraftActionError(validationMessage);
+      setTab("edit");
+      return;
+    }
     setSaving(true);
     setActiveError("");
+    setDraftActionMessage("");
+    setDraftActionError("");
     try {
       const approved = await apiPost<{ draft: ArticleDraft }>("/api/approve-draft", {
         draftId: draft.id,
@@ -648,6 +626,7 @@ export function ArticleGeneratorApp() {
         status: "approved",
         updatedAt: approved.draft.updatedAt,
       });
+      setDraftActionMessage("承認済みに変更しました。WordPress投稿が可能です。");
     } catch (error) {
       setActiveError(readError(error));
     } finally {
@@ -657,6 +636,8 @@ export function ArticleGeneratorApp() {
 
   function updateWordpressForm(patch: Partial<typeof wpForm>) {
     setWpConnectionError("");
+    setWpConnectionMessage("");
+    setWpPostMessage("");
     setWpForm((current) => ({
       ...current,
       ...patch,
@@ -666,6 +647,8 @@ export function ArticleGeneratorApp() {
   async function connectWordpress() {
     setActiveError("");
     setWpConnectionError("");
+    setWpConnectionMessage("");
+    setWpPostMessage("");
     const validationMessage = validateWordpressForm(wpForm);
     if (validationMessage) {
       setWpConnectionError(validationMessage);
@@ -679,6 +662,7 @@ export function ArticleGeneratorApp() {
       );
       setConnection(result.connection);
       setWpForm((current) => ({ ...current, applicationPassword: "" }));
+      setWpConnectionMessage("WordPress接続情報を保存しました。");
     } catch (error) {
       setWpConnectionError(normalizeWordpressConnectionError(readError(error)));
     }
@@ -686,8 +670,19 @@ export function ArticleGeneratorApp() {
 
   async function postToWordpress() {
     if (!draft || !connection) return;
+    const validationMessage = validateDraftForSubmission(draft);
+    if (validationMessage) {
+      setActiveError("");
+      setWpPostMessage("");
+      setDraftActionMessage("");
+      setDraftActionError(validationMessage);
+      setTab("edit");
+      return;
+    }
     setPosting(true);
     setActiveError("");
+    setWpPostMessage("");
+    setDraftActionError("");
     try {
       const result = await apiPost<{ postUrl: string; draft: ArticleDraft }>(
         "/api/wordpress/post",
@@ -705,6 +700,11 @@ export function ArticleGeneratorApp() {
         updatedAt: result.draft.updatedAt,
       });
       void loadGenerationLogs();
+      setWpPostMessage(
+        wpForm.status === "publish"
+          ? "WordPressへ公開投稿しました。"
+          : "WordPressへ下書き投稿しました。",
+      );
     } catch (error) {
       setActiveError(readError(error));
     } finally {
@@ -714,6 +714,7 @@ export function ArticleGeneratorApp() {
 
   async function uploadAuthorImage(file: File | null) {
     if (!file) return;
+    setActiveError("");
     try {
       const uploaded = await uploadImage(file, "authors");
       setAuthor((current) => ({
@@ -728,6 +729,7 @@ export function ArticleGeneratorApp() {
 
   async function uploadToneImage(file: File | null) {
     if (!file) return;
+    setActiveError("");
     try {
       const uploaded = await uploadImage(file, "article-inserts");
       setVisualTone({
@@ -772,7 +774,7 @@ export function ArticleGeneratorApp() {
         }),
       );
 
-      setFileState((current) => [...current, ...extractedFiles]);
+      setFileState((current) => mergeAttachmentRetries(current, extractedFiles));
     } finally {
       setUploading(false);
     }
@@ -783,7 +785,7 @@ export function ArticleGeneratorApp() {
     setFileState((current) => current.filter((file) => file.id !== id));
   }
 
-  function applyThemeCandidate(candidate: ThemeCandidate) {
+  function applyThemeCandidate(candidate: ThemeCandidate, index: number) {
     setTheme(
       [
         `テーマ: ${candidate.title}`,
@@ -794,13 +796,13 @@ export function ArticleGeneratorApp() {
       ].join("\n"),
     );
     setThemeCandidateApplyMessage("反映しました。");
-    setThemeCandidateAppliedTitle(candidate.title);
+    setThemeCandidateAppliedIndex(index);
     if (themeCandidateApplyTimerRef.current) {
       window.clearTimeout(themeCandidateApplyTimerRef.current);
     }
     themeCandidateApplyTimerRef.current = window.setTimeout(() => {
       setThemeCandidateApplyMessage("");
-      setThemeCandidateAppliedTitle("");
+      setThemeCandidateAppliedIndex(null);
       themeCandidateApplyTimerRef.current = null;
     }, 2200);
   }
@@ -859,7 +861,7 @@ export function ArticleGeneratorApp() {
     if (!draft) return;
 
     const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-      prompt: buildImageRegenerationPrompt(image.prompt, instruction.trim()),
+      prompt: buildImageRegenerationPrompt(image.prompt, instruction.trim(), draft.aiResult),
       slot: image.slot,
       altText: image.altText,
     });
@@ -896,6 +898,7 @@ export function ArticleGeneratorApp() {
       setSingleImageProgress(100);
     } catch (error) {
       setActiveError(readError(error));
+      setSingleImageProgress(0);
     } finally {
       setSingleImageRegenerating(false);
     }
@@ -905,8 +908,13 @@ export function ArticleGeneratorApp() {
     if (!draft) return;
 
     const generatedImages = draft.images.filter((image) => image.source === "generated");
-    if (generatedImages.length === 0) {
-      setActiveError("再作成できる生成画像がありません。");
+    const missingImagePrompts = getMissingGeneratedImagePrompts(
+      draft.aiResult.image_prompts,
+      draft.images,
+      draft.inputPayload.imageCount,
+    );
+    if (generatedImages.length === 0 && missingImagePrompts.length === 0) {
+      setActiveError("再作成できる生成画像または画像プロンプトがありません。");
       return;
     }
 
@@ -917,18 +925,83 @@ export function ArticleGeneratorApp() {
       let nextImages = draft.images;
       let nextBodyHtml = draft.editedBodyHtml;
       const rewriteInstruction = instruction.trim();
-
-      for (const image of generatedImages) {
-        const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-          prompt: buildImageRegenerationPrompt(image.prompt, rewriteInstruction),
+      const regenerationFailures: string[] = [];
+      const regenerationTasks = [
+        ...generatedImages.map((image) => ({
           slot: image.slot,
-          altText: image.altText,
-        });
+          run: async () => ({
+            type: "replace" as const,
+            image,
+            nextImage: (
+              await apiPost<{ image: ArticleImage }>("/api/generate-image", {
+                prompt: buildImageRegenerationPrompt(
+                  image.prompt,
+                  rewriteInstruction,
+                  draft.aiResult,
+                ),
+                slot: image.slot,
+                altText: image.altText,
+              })
+            ).image,
+          }),
+        })),
+        ...missingImagePrompts.map((prompt) => ({
+          slot: prompt.slot,
+          run: async () => ({
+            type: "recover" as const,
+            nextImage: (
+              await apiPost<{ image: ArticleImage }>("/api/generate-image", {
+                prompt: buildImageRegenerationPrompt(
+                  prompt.prompt,
+                  rewriteInstruction,
+                  draft.aiResult,
+                ),
+                slot: prompt.slot,
+                altText: prompt.alt_text,
+              })
+            ).image,
+          }),
+        })),
+      ];
 
-        nextImages = nextImages.map((item) =>
-          item.id === image.id ? result.image : item,
-        );
-        nextBodyHtml = replaceImageReferences(nextBodyHtml, image, result.image);
+      const recoveredImages: ArticleImage[] = [];
+      const regenerationResults = await Promise.allSettled(
+        regenerationTasks.map((task) => task.run()),
+      );
+
+      regenerationResults.forEach((outcome, index) => {
+        const task = regenerationTasks[index];
+        if (outcome.status === "rejected") {
+          regenerationFailures.push(`${task.slot}: ${readError(outcome.reason)}`);
+          return;
+        }
+
+        const value = outcome.value;
+        if (value.type === "replace") {
+          nextImages = nextImages.map((item) =>
+            item.id === value.image.id ? value.nextImage : item,
+          );
+          nextBodyHtml = replaceImageReferences(
+            nextBodyHtml,
+            value.image,
+            value.nextImage,
+          );
+          return;
+        }
+
+        recoveredImages.push(value.nextImage);
+        nextImages = [...nextImages, value.nextImage];
+      });
+
+      if (recoveredImages.length) {
+        nextBodyHtml = injectImages(nextBodyHtml, recoveredImages);
+        nextImages = sortArticleImages(nextImages);
+      }
+
+      const hadSuccessfulRegeneration =
+        nextImages !== draft.images || nextBodyHtml !== draft.editedBodyHtml;
+      if (!hadSuccessfulRegeneration && regenerationFailures.length > 0) {
+        throw new Error(regenerationFailures.join(" / "));
       }
 
       setDraft({
@@ -937,9 +1010,17 @@ export function ArticleGeneratorApp() {
         editedBodyHtml: nextBodyHtml,
         updatedAt: new Date().toISOString(),
       });
+      if (regenerationFailures.length > 0) {
+        setActiveError(
+          `一部の画像再作成に失敗しました。成功した画像は反映済みです。${regenerationFailures.join(
+            " / ",
+          )}`,
+        );
+      }
       setImageRegenerationProgress(100);
     } catch (error) {
       setActiveError(readError(error));
+      setImageRegenerationProgress(0);
     } finally {
       setImageRegenerating(false);
     }
@@ -951,7 +1032,15 @@ export function ArticleGeneratorApp() {
 
   function updateDraft<K extends keyof ArticleDraft>(key: K, value: ArticleDraft[K]) {
     if (!draft) return;
-    setDraft({ ...draft, [key]: value, updatedAt: new Date().toISOString() });
+    setDraftActionError("");
+    setDraftActionMessage("");
+    setWpPostMessage("");
+    setDraft({
+      ...draft,
+      [key]: value,
+      status: draft.status === "approved" ? "draft" : draft.status,
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   function updateFaq(index: number, key: keyof FaqItem, value: string) {
@@ -962,16 +1051,71 @@ export function ArticleGeneratorApp() {
     updateDraft("faqItems", next);
   }
 
+  function addFaq() {
+    if (!draft) return;
+    updateDraft("faqItems", [...draft.faqItems, { question: "", answer: "" }]);
+  }
+
+  function removeFaq(index: number) {
+    if (!draft) return;
+    const next = draft.faqItems.filter((_, itemIndex) => itemIndex !== index);
+    updateDraft("faqItems", next);
+  }
+
   function parseCompetitorResearch() {
     if (!competitorJson.trim()) {
+      setCompetitorJsonError("");
       return competitorResearch;
     }
 
+    let parsed: unknown;
     try {
-      return JSON.parse(competitorJson) as CompetitorResearchResult;
+      parsed = JSON.parse(competitorJson);
     } catch {
-      throw new Error("競合調査JSONの形式を確認してください。");
+      const message =
+        "競合調査JSONの形式を確認してください。括弧・カンマ・引用符が崩れていないか確認してください。";
+      setCompetitorJsonError(message);
+      throw new Error(message);
     }
+
+    if (!isEditableCompetitorResearch(parsed)) {
+      const message =
+        "競合調査JSONの項目を確認してください。summary、queries、insightsと、各insightのurl・title・majorPoints・differentiationPoints・recommendationsが必要です。";
+      setCompetitorJsonError(message);
+      throw new Error(message);
+    }
+
+    setCompetitorJsonError("");
+    return parsed;
+  }
+
+  function isEditableCompetitorResearch(value: unknown): value is CompetitorResearchResult {
+    if (!isPlainRecord(value)) {
+      return false;
+    }
+
+    return (
+      typeof value.summary === "string" &&
+      isStringArray(value.queries) &&
+      Array.isArray(value.insights) &&
+      value.insights.every(
+        (insight) =>
+          isPlainRecord(insight) &&
+          typeof insight.url === "string" &&
+          typeof insight.title === "string" &&
+          isStringArray(insight.majorPoints) &&
+          isStringArray(insight.differentiationPoints) &&
+          isStringArray(insight.recommendations),
+      )
+    );
+  }
+
+  function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function isStringArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every((item) => typeof item === "string");
   }
 
   function updateStep(id: string, status: GenerationStep["status"], detail?: string) {
@@ -988,108 +1132,15 @@ export function ArticleGeneratorApp() {
     );
   }
 
-  async function fetchInputs(
-    inputs: KeyValueInput[],
-    files: AttachedFileInput[] = [],
-    signal?: AbortSignal,
-  ) {
-    const urls = inputs.map((item) => item.url?.trim()).filter(Boolean) as string[];
-    const results = await Promise.all(
-      urls.map(async (url) => {
-        try {
-          const response = await apiPost<{ result: FetchResult }>(
-            "/api/fetch-url-content",
-            { url },
-            { signal },
-          );
-          return response.result;
-        } catch (error) {
-          if (isAbortError(error)) {
-            throw error;
-          }
-
-          return { url, ok: false, reason: readError(error) };
-        }
-      }),
-    );
-
-    for (const item of inputs) {
-      if (item.text?.trim()) {
-        results.push({
-          url: "manual-text",
-          title: "手動入力テキスト",
-          text: item.text.trim(),
-          ok: true,
-          sourceType: "manual",
-        });
-      }
-    }
-
-    for (const file of files) {
-      if (file.ok && file.text?.trim()) {
-        results.push({
-          url: `file:${file.name}`,
-          title: file.name,
-          text: file.text.trim(),
-          ok: true,
-          sourceType: "file",
-          fileName: file.name,
-          fileType: file.type,
-        });
-        continue;
-      }
-
-      if (!file.ok) {
-        results.push({
-          url: `file:${file.name}`,
-          title: file.name,
-          ok: false,
-          reason: file.error || "添付ファイルを解析できませんでした。",
-          sourceType: "file",
-          fileName: file.name,
-          fileType: file.type,
-        });
-      }
-    }
-
-    return results;
-  }
-
-  async function createArticleImages(article: ArticleGenerationResult, signal?: AbortSignal) {
-    if (imageCount === 0) {
-      return [];
-    }
-
-    if (visualTone.mode === "upload" && visualTone.uploadedImageUrl) {
-      return [
-        {
-          id: crypto.randomUUID(),
-          slot: "featured" as const,
-          url: visualTone.uploadedImageUrl,
-          path: visualTone.uploadedImagePath,
-          prompt: visualTone.uploadedImageName || "Uploaded article image",
-          altText: article.selected_title,
-          source: "uploaded" as const,
-        },
-      ];
-    }
-
-    const toneText = visualTone.mode === "custom" ? visualTone.custom : visualTone.preset;
-    const prompts = article.image_prompts.slice(0, imageCount).map((prompt) => ({
-      ...prompt,
-      prompt: buildArticleImagePrompt(prompt.prompt, toneText),
-    }));
-
-    return Promise.all(
-      prompts.map(async (prompt) => {
-        const response = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-          prompt: prompt.prompt,
-          slot: prompt.slot,
-          altText: prompt.alt_text,
-        }, { signal });
-        return response.image;
-      }),
-    );
+  function focusDraftEditorForQualityCheck(checkId: string) {
+    setTab("edit");
+    window.setTimeout(() => {
+      const target = document.querySelector<HTMLElement>(
+        `[data-testid="${draftEditorTargetTestId(checkId)}"]`,
+      );
+      target?.focus();
+      target?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 0);
   }
 
   return (
@@ -1104,14 +1155,15 @@ export function ArticleGeneratorApp() {
               AIO記事 半自動生成ツール
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
             <Badge variant={draft?.status === "approved" ? "success" : "default"}>
               {draft ? statusLabel(draft.status) : "未生成"}
             </Badge>
             <Button
               data-testid="article-primary-button"
               onClick={handlePrimaryArticleButton}
-              disabled={!isGenerating && !canGenerate}
+              disabled={!generationResumeChecked || (!isGenerating && !canGenerate)}
               variant={isGenerating ? "secondary" : "default"}
             >
               {isGenerating ? <StopCircle /> : <Sparkles />}
@@ -1121,6 +1173,15 @@ export function ArticleGeneratorApp() {
                   ? "記事の再作成"
                   : "AIによる記事作成"}
             </Button>
+            </div>
+            {generateRequirementMessage ? (
+              <div
+                data-testid="generate-requirement-message"
+                className="max-w-[360px] text-right text-xs text-slate-500"
+              >
+                {generateRequirementMessage}
+              </div>
+            ) : null}
           </div>
         </div>
       </header>
@@ -1131,26 +1192,40 @@ export function ArticleGeneratorApp() {
             <CardContent className="p-4">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 {[
-                  ["参照", "#references"],
-                  ["競合", "#competitors"],
-                  ["テーマ", "#theme"],
-                  ["画像", "#visual-tone"],
-                  ["承認", "#approval"],
-                  ["WordPress", "#wordpress"],
-                ].map(([label, href]) => (
-                  <a
-                    key={href}
-                    href={href}
-                    className="rounded-md border border-slate-200 px-3 py-2 text-center text-slate-700 transition hover:border-sky-200 hover:bg-sky-50"
-                  >
-                    {label}
-                  </a>
-                ))}
+                  { label: "参照", href: "#references" },
+                  { label: "競合", href: "#competitors" },
+                  { label: "テーマ", href: "#theme" },
+                  { label: "一次情報", href: "#primary-info" },
+                  { label: "画像", href: "#visual-tone" },
+                  { label: "文字数", href: "#word-count" },
+                  { label: "承認", href: "#approval", requiresDraft: true },
+                  { label: "WordPress", href: "#wordpress", requiresDraft: true },
+                ].map(({ label, href, requiresDraft }) =>
+                  requiresDraft && !draft ? (
+                    <span
+                      key={href}
+                      aria-disabled="true"
+                      data-testid={`step-nav-disabled-${href.slice(1)}`}
+                      title="記事生成後に利用できます。"
+                      className="cursor-not-allowed rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-center text-slate-400"
+                    >
+                      {label}
+                    </span>
+                  ) : (
+                    <a
+                      key={href}
+                      href={href}
+                      className="rounded-md border border-slate-200 px-3 py-2 text-center text-slate-700 transition hover:border-sky-200 hover:bg-sky-50"
+                    >
+                      {label}
+                    </a>
+                  ),
+                )}
               </div>
             </CardContent>
           </Card>
 
-          <Card id="references" className="scroll-mt-[280px]">
+          <Card id="references" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1180,7 +1255,7 @@ export function ArticleGeneratorApp() {
             </CardContent>
           </Card>
 
-          <Card id="competitors" className="scroll-mt-[280px]">
+          <Card id="competitors" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1218,6 +1293,7 @@ export function ArticleGeneratorApp() {
               </Button>
               {researchLoading || researchProgress === 100 ? (
                 <div
+                  data-testid="competitor-research-progress"
                   className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2"
                   role="progressbar"
                   aria-valuemin={0}
@@ -1242,16 +1318,30 @@ export function ArticleGeneratorApp() {
               ) : null}
               {competitorJson ? (
                 <Textarea
+                  data-testid="competitor-research-json"
                   value={competitorJson}
-                  onChange={(event) => setCompetitorJson(event.target.value)}
+                  onChange={(event) => {
+                    setCompetitorJson(event.target.value);
+                    if (competitorJsonError) {
+                      setCompetitorJsonError("");
+                    }
+                  }}
                   className="min-h-64 font-mono text-xs"
                 />
+              ) : null}
+              {competitorJsonError ? (
+                <p
+                  data-testid="competitor-research-json-error"
+                  className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700"
+                >
+                  {competitorJsonError}
+                </p>
               ) : null}
               <FetchFailures results={fetchedCompetitors} />
             </CardContent>
           </Card>
 
-          <Card id="theme" className="scroll-mt-[280px]">
+          <Card id="theme" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1302,7 +1392,7 @@ export function ArticleGeneratorApp() {
                   <ThemeCandidateList
                     result={themeCandidates}
                     onApply={applyThemeCandidate}
-                    appliedTitle={themeCandidateAppliedTitle}
+                    appliedIndex={themeCandidateAppliedIndex}
                     applyMessage={themeCandidateApplyMessage}
                   />
                 ) : null}
@@ -1314,6 +1404,7 @@ export function ArticleGeneratorApp() {
                   </span>
                   <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
                     <input
+                      data-testid="closing-reuse-checkbox"
                       type="checkbox"
                       checked={closingReuseChecked}
                       onChange={(event) => togglePreviousClosing(event.target.checked)}
@@ -1323,6 +1414,7 @@ export function ArticleGeneratorApp() {
                   </label>
                 </div>
                 <Textarea
+                  data-testid="closing-textarea"
                   value={closingText}
                   onChange={(event) => setClosingText(event.target.value)}
                   placeholder="自社LPへの誘導文、問い合わせ導線、CTA"
@@ -1337,6 +1429,7 @@ export function ArticleGeneratorApp() {
                     <span className="text-sm font-medium text-slate-700">執筆者名</span>
                     <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
                       <input
+                        data-testid="author-reuse-checkbox"
                         type="checkbox"
                         checked={authorReuseChecked}
                         onChange={(event) => togglePreviousAuthor(event.target.checked)}
@@ -1346,6 +1439,7 @@ export function ArticleGeneratorApp() {
                     </label>
                   </div>
                   <Input
+                    data-testid="author-name-input"
                     value={author.name ?? ""}
                     onChange={(event) =>
                       setAuthor((current) => ({ ...current, name: event.target.value }))
@@ -1357,6 +1451,7 @@ export function ArticleGeneratorApp() {
                 </div>
                 <Field label="肩書き">
                   <Input
+                    data-testid="author-title-input"
                     value={author.title ?? ""}
                     onChange={(event) =>
                       setAuthor((current) => ({ ...current, title: event.target.value }))
@@ -1366,6 +1461,7 @@ export function ArticleGeneratorApp() {
               </div>
               <Field label="紹介文">
                 <Textarea
+                  data-testid="author-bio-textarea"
                   value={author.bio ?? ""}
                   onChange={(event) =>
                     setAuthor((current) => ({ ...current, bio: event.target.value }))
@@ -1376,11 +1472,12 @@ export function ArticleGeneratorApp() {
                 label="執筆者画像"
                 onFile={uploadAuthorImage}
                 previewUrl={author.imageUrl}
+                testId="author-image-upload-input"
               />
             </CardContent>
           </Card>
 
-          <Card id="primary-info" className="scroll-mt-[280px]">
+          <Card id="primary-info" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1403,7 +1500,7 @@ export function ArticleGeneratorApp() {
             </CardContent>
           </Card>
 
-          <Card id="visual-tone" className="scroll-mt-[280px]">
+          <Card id="visual-tone" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1454,6 +1551,7 @@ export function ArticleGeneratorApp() {
                 ].map(([mode, label]) => (
                   <Button
                     key={mode}
+                    data-testid={`visual-tone-mode-${mode}`}
                     type="button"
                     variant={visualTone.mode === mode ? "default" : "secondary"}
                     onClick={() =>
@@ -1504,12 +1602,13 @@ export function ArticleGeneratorApp() {
                   label="挿入画像"
                   onFile={uploadToneImage}
                   previewUrl={visualTone.uploadedImageUrl}
+                  testId="visual-tone-upload-input"
                 />
               ) : null}
             </CardContent>
           </Card>
 
-          <Card id="word-count" className="scroll-mt-[280px]">
+          <Card id="word-count" className="scroll-mt-[360px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1540,7 +1639,10 @@ export function ArticleGeneratorApp() {
 
         <section className="space-y-4">
           {activeError ? (
-            <div className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <div
+              data-testid="active-error"
+              className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"
+            >
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
               <div>{activeError}</div>
             </div>
@@ -1549,6 +1651,7 @@ export function ArticleGeneratorApp() {
           <GenerationLogsPanel
             logs={generationLogs}
             loading={logsLoading}
+            error={logsError}
             expanded={logsExpanded}
             onToggle={() => setLogsExpanded((current) => !current)}
             onRefresh={loadGenerationLogs}
@@ -1622,6 +1725,11 @@ export function ArticleGeneratorApp() {
                     <ArticlePreview
                       draft={draft}
                       imageRegenerating={imageRegenerating}
+                      onEditDraft={(checkId) => focusDraftEditorForQualityCheck(checkId)}
+                      onImproveQuality={(instruction) => {
+                        setArticleRegenerationInstruction(instruction);
+                        setArticleRegenerationDialogOpen(true);
+                      }}
                       onRegenerateImages={() => {
                         setImageRegenerationProgress(0);
                         setImageRegenerationDialogOpen(true);
@@ -1632,41 +1740,66 @@ export function ArticleGeneratorApp() {
                       draft={draft}
                       updateDraft={updateDraft}
                       updateFaq={updateFaq}
+                      addFaq={addFaq}
+                      removeFaq={removeFaq}
                       regenerateImage={openSingleImageRegeneration}
                     />
                   )}
                 </CardContent>
               </Card>
 
-              <Card id="approval" className="scroll-mt-[280px]">
+              <Card id="approval" className="scroll-mt-[360px]">
                 <CardHeader>
                   <CardTitle>保存・承認</CardTitle>
                 </CardHeader>
-                <CardContent className="flex flex-wrap items-center gap-3">
-                  <Button
-                    data-testid="save-draft-button"
-                    variant="secondary"
-                    onClick={saveCurrentDraft}
-                    disabled={saving}
-                  >
-                    {saving ? <Loader2 className="animate-spin" /> : <Save />}
-                    編集内容を保存
-                  </Button>
-                  <Button
-                    data-testid="approve-draft-button"
-                    onClick={approveCurrentDraft}
-                    disabled={saving}
-                  >
-                    <CheckCircle2 />
-                    承認済みに変更
-                  </Button>
-                  <Badge variant={draft.status === "approved" ? "success" : "default"}>
-                    {statusLabel(draft.status)}
-                  </Badge>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      data-testid="save-draft-button"
+                      variant="secondary"
+                      onClick={saveCurrentDraft}
+                      disabled={saving}
+                    >
+                      {saving ? <Loader2 className="animate-spin" /> : <Save />}
+                      編集内容を保存
+                    </Button>
+                    <Button
+                      data-testid="approve-draft-button"
+                      onClick={approveCurrentDraft}
+                      disabled={saving}
+                    >
+                      <CheckCircle2 />
+                      承認済みに変更
+                    </Button>
+                    <Badge
+                      data-testid="draft-status-badge"
+                      variant={draft.status === "approved" ? "success" : "default"}
+                    >
+                      {statusLabel(draft.status)}
+                    </Badge>
+                  </div>
+                  {draftActionMessage ? (
+                    <div
+                      data-testid="draft-action-message"
+                      className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+                      aria-live="polite"
+                    >
+                      {draftActionMessage}
+                    </div>
+                  ) : null}
+                  {draftActionError ? (
+                    <div
+                      data-testid="draft-action-error"
+                      className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-800"
+                      aria-live="polite"
+                    >
+                      {draftActionError}
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
 
-              <Card id="wordpress" className="scroll-mt-[280px]">
+              <Card id="wordpress" className="scroll-mt-[360px]">
                 <CardHeader>
                   <CardTitle>WordPress投稿</CardTitle>
                   <CardDescription>
@@ -1719,8 +1852,18 @@ export function ArticleGeneratorApp() {
                       {wpConnectionError}
                     </div>
                   ) : null}
+                  {wpConnectionMessage ? (
+                    <div
+                      data-testid="wordpress-connection-message"
+                      className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+                      aria-live="polite"
+                    >
+                      {wpConnectionMessage}
+                    </div>
+                  ) : null}
                   <div className="flex items-center gap-3">
                     <select
+                      data-testid="wordpress-status-select"
                       value={wpForm.status}
                       onChange={(event) =>
                         updateWordpressForm({
@@ -1733,6 +1876,7 @@ export function ArticleGeneratorApp() {
                       <option value="publish">公開</option>
                     </select>
                     <Button
+                      data-testid="wordpress-post-button"
                       onClick={postToWordpress}
                       disabled={!connection || draft.status !== "approved" || posting}
                     >
@@ -1753,6 +1897,15 @@ export function ArticleGeneratorApp() {
                       </a>
                     ) : null}
                   </div>
+                  {wpPostMessage ? (
+                    <div
+                      data-testid="wordpress-post-message"
+                      className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+                      aria-live="polite"
+                    >
+                      {wpPostMessage}
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
             </>
@@ -1969,12 +2122,12 @@ function AttachmentUploadPanel({
 function ThemeCandidateList({
   result,
   onApply,
-  appliedTitle,
+  appliedIndex,
   applyMessage,
 }: {
   result: ThemeCandidateResult;
-  onApply: (candidate: ThemeCandidate) => void;
-  appliedTitle: string;
+  onApply: (candidate: ThemeCandidate, index: number) => void;
+  appliedIndex: number | null;
   applyMessage: string;
 }) {
   return (
@@ -1982,7 +2135,11 @@ function ThemeCandidateList({
       <p className="text-xs leading-5 text-sky-900">{result.summary}</p>
       <div className="space-y-2">
         {result.candidates.map((candidate, index) => (
-          <div key={candidate.title} className="rounded-md border border-sky-100 bg-white p-3">
+          <div
+            key={`${candidate.title}-${index}`}
+            data-testid={`theme-candidate-card-${index}`}
+            className="rounded-md border border-sky-100 bg-white p-3"
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-medium text-slate-900">{candidate.title}</div>
@@ -2002,11 +2159,11 @@ function ThemeCandidateList({
                   data-testid={`theme-candidate-apply-${index}`}
                   type="button"
                   size="sm"
-                  onClick={() => onApply(candidate)}
+                  onClick={() => onApply(candidate, index)}
                 >
                 反映
                 </Button>
-                {appliedTitle === candidate.title && applyMessage ? (
+                {appliedIndex === index && applyMessage ? (
                   <div
                     className="absolute right-0 top-full z-20 mt-2 whitespace-nowrap rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 shadow-lg"
                     aria-live="polite"
@@ -2036,10 +2193,12 @@ function UploadRow({
   label,
   onFile,
   previewUrl,
+  testId,
 }: {
   label: string;
   onFile: (file: File | null) => void;
   previewUrl?: string;
+  testId?: string;
 }) {
   return (
     <div className="rounded-md border border-dashed border-slate-300 p-3">
@@ -2050,10 +2209,14 @@ function UploadRow({
             <Upload className="size-4" />
             アップロード
             <input
+              data-testid={testId}
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(event) => onFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => {
+                onFile(event.target.files?.[0] ?? null);
+                event.currentTarget.value = "";
+              }}
             />
           </label>
         </div>
@@ -2099,6 +2262,7 @@ function FetchFailures({ results }: { results: FetchResult[] }) {
 function GenerationLogsPanel({
   logs,
   loading,
+  error,
   expanded,
   onToggle,
   onRefresh,
@@ -2106,13 +2270,14 @@ function GenerationLogsPanel({
 }: {
   logs: GenerationLogSummary[];
   loading: boolean;
+  error: string;
   expanded: boolean;
   onToggle: () => void;
   onRefresh: () => void;
   onOpen: (jobId: string) => void;
 }) {
   return (
-    <Card>
+    <Card data-testid="generation-logs-panel">
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -2125,7 +2290,13 @@ function GenerationLogsPanel({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Badge variant="default">{logs.length}件</Badge>
-            <Button type="button" variant="secondary" size="sm" onClick={onToggle}>
+            <Button
+              data-testid="generation-logs-toggle"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onToggle}
+            >
               {expanded ? <ChevronUp /> : <ChevronDown />}
               {expanded ? "閉じる" : "開く"}
             </Button>
@@ -2137,8 +2308,15 @@ function GenerationLogsPanel({
         </div>
       </CardHeader>
       {expanded ? (
-        <CardContent>
-        {logs.length === 0 ? (
+        <CardContent data-testid="generation-logs-content">
+        {error ? (
+          <div
+            data-testid="generation-logs-error"
+            className="rounded-md border border-rose-200 bg-rose-50 p-4 text-sm leading-6 text-rose-800"
+          >
+            {error}
+          </div>
+        ) : logs.length === 0 ? (
           <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
             まだ生成ログはありません。
           </div>
@@ -2183,7 +2361,13 @@ function GenerationLogsPanel({
                       </Badge>
                     </td>
                     <td className="px-3 py-3">
-                      <Button type="button" variant="secondary" size="sm" onClick={() => onOpen(log.id)}>
+                      <Button
+                        data-testid={`generation-log-open-${log.id}`}
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onOpen(log.id)}
+                      >
                         開く
                       </Button>
                     </td>
@@ -2202,13 +2386,159 @@ function GenerationLogsPanel({
 function ArticlePreview({
   draft,
   imageRegenerating,
+  onEditDraft,
+  onImproveQuality,
   onRegenerateImages,
 }: {
   draft: ArticleDraft;
   imageRegenerating: boolean;
+  onEditDraft: (checkId: string) => void;
+  onImproveQuality: (instruction: string) => void;
   onRegenerateImages: () => void;
 }) {
-  const canRegenerateImages = draft.images.some((image) => image.source === "generated");
+  const generatedImageSlots = useMemo(() => getGeneratedImageSlots(draft.images), [
+    draft.images,
+  ]);
+  const missingGeneratedImagePrompts = useMemo(
+    () =>
+      getMissingGeneratedImagePrompts(
+        draft.aiResult.image_prompts,
+        draft.images,
+        draft.inputPayload.imageCount,
+      ),
+    [draft.aiResult.image_prompts, draft.images, draft.inputPayload.imageCount],
+  );
+  const canRegenerateImages =
+    generatedImageSlots.size > 0 || missingGeneratedImagePrompts.length > 0;
+  const bodyQualityEvaluation = useMemo(
+    () =>
+      evaluateArticleQuality(renderArticleHtml(draft), {
+        themeText: draft.inputPayload.theme,
+        targetReaderText: draft.aiResult.target_reader,
+        searchIntentText: draft.aiResult.search_intent,
+        primaryInfo: draft.inputPayload.primaryInfo,
+        closingText: draft.inputPayload.closingText,
+        referenceTexts: collectDraftReferenceTexts(draft),
+        sourceUrls: collectDraftSourceUrls(draft),
+        competitorTexts: collectDraftCompetitorTexts(draft),
+        targetWordCount: draft.inputPayload.wordCount,
+      }),
+    [draft],
+  );
+  const titleQualityEvaluation = useMemo(
+    () =>
+      evaluateTitleQuality({
+        selectedTitle: draft.editedTitle,
+        titleCandidates: draft.aiResult.title_candidates,
+        themeText: draft.inputPayload.theme,
+        primaryInfo: draft.inputPayload.primaryInfo,
+      }),
+    [draft],
+  );
+  const faqQualityEvaluation = useMemo(
+    () =>
+      evaluateFaqQuality({
+        faqItems: draft.faqItems,
+        themeText: draft.inputPayload.theme,
+        primaryInfo: draft.inputPayload.primaryInfo,
+        referenceTexts: collectDraftReferenceTexts(draft),
+        competitorTexts: collectDraftCompetitorTexts(draft),
+      }),
+    [draft],
+  );
+  const metaDescriptionQualityEvaluation = useMemo(
+    () =>
+      evaluateMetaDescriptionQuality({
+        metaDescription: draft.editedMetaDescription,
+        themeText: draft.inputPayload.theme,
+        primaryInfo: draft.inputPayload.primaryInfo,
+      }),
+    [draft],
+  );
+  const imageAltQualityEvaluation = useMemo(
+    () =>
+      evaluateImageAltQuality({
+        images: draft.images,
+        imagePrompts: draft.aiResult.image_prompts,
+        imageCount: draft.inputPayload.imageCount,
+        themeText: draft.inputPayload.theme,
+        primaryInfo: draft.inputPayload.primaryInfo,
+      }),
+    [draft],
+  );
+  const qualityEvaluation = useMemo(
+    () =>
+      combineQualityEvaluations(
+        titleQualityEvaluation,
+        bodyQualityEvaluation,
+        faqQualityEvaluation,
+        metaDescriptionQualityEvaluation,
+        imageAltQualityEvaluation,
+      ),
+    [
+      bodyQualityEvaluation,
+      faqQualityEvaluation,
+      imageAltQualityEvaluation,
+      metaDescriptionQualityEvaluation,
+      titleQualityEvaluation,
+    ],
+  );
+  const failedQualityChecks = useMemo(
+    () => qualityEvaluation.checks.filter((check) => !check.passed),
+    [qualityEvaluation],
+  );
+  const passedQualityChecks = useMemo(
+    () => qualityEvaluation.checks.filter((check) => check.passed),
+    [qualityEvaluation],
+  );
+  const orderedQualityChecks = useMemo(
+    () => [...failedQualityChecks, ...passedQualityChecks],
+    [failedQualityChecks, passedQualityChecks],
+  );
+  const [copyStatus, setCopyStatus] = useState<{
+    message: string;
+    tone: "success" | "error";
+  } | null>(null);
+  const copyStatusTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyStatusTimerRef.current) {
+        window.clearTimeout(copyStatusTimerRef.current);
+      }
+    };
+  }, []);
+
+  function showCopyStatus(message: string, tone: "success" | "error" = "success") {
+    setCopyStatus({ message, tone });
+    if (copyStatusTimerRef.current) {
+      window.clearTimeout(copyStatusTimerRef.current);
+    }
+    copyStatusTimerRef.current = window.setTimeout(() => {
+      setCopyStatus(null);
+    }, 2600);
+  }
+
+  async function handleCopy(label: string, value: string) {
+    try {
+      await copyTextToClipboard(value);
+      showCopyStatus(`${label}をコピーしました。`);
+    } catch {
+      showCopyStatus(`${label}をコピーできませんでした。${copyManualRecoveryText(label)}`, "error");
+    }
+  }
+
+  function handleDownload() {
+    try {
+      downloadArticleHtml(draft);
+      showCopyStatus("HTMLファイルを書き出しました。");
+    } catch {
+      showCopyStatus(
+        "HTML出力に失敗しました。本文HTMLをコピーして手動で保存してください。",
+        "error",
+      );
+    }
+  }
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-6">
@@ -2217,6 +2547,82 @@ function ArticlePreview({
         <div dangerouslySetInnerHTML={{ __html: renderArticleHtml(draft) }} />
       </article>
       <aside className="space-y-4">
+        <InfoPanel title="コピー/出力">
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              data-testid="copy-title-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => handleCopy("タイトル", draft.editedTitle)}
+            >
+              <ClipboardCopy />
+              タイトル
+            </Button>
+            <Button
+              data-testid="copy-meta-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => handleCopy("メタ", draft.editedMetaDescription)}
+            >
+              <ClipboardCopy />
+              メタ
+            </Button>
+            <Button
+              data-testid="copy-body-html-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => handleCopy("本文HTML", renderArticleHtml(draft))}
+            >
+              <ClipboardCopy />
+              本文HTML
+            </Button>
+            <Button
+              data-testid="copy-handoff-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="col-span-2"
+              onClick={() => handleCopy("入稿セット", buildEditorialHandoffText(draft))}
+            >
+              <ClipboardCopy />
+              入稿セット
+            </Button>
+            <Button
+              data-testid="download-html-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="col-span-2"
+              onClick={handleDownload}
+            >
+              <Download />
+              HTML出力
+            </Button>
+          </div>
+          {copyStatus ? (
+            <div
+              data-testid="copy-export-status"
+              data-status={copyStatus.tone}
+              className={cn(
+                "mt-3 flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium",
+                copyStatus.tone === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-rose-200 bg-rose-50 text-rose-700",
+              )}
+              aria-live="polite"
+            >
+              {copyStatus.tone === "success" ? (
+                <Check className="size-4" />
+              ) : (
+                <AlertCircle className="size-4" />
+              )}
+              {copyStatus.message}
+            </div>
+          ) : null}
+        </InfoPanel>
         <InfoPanel title="AIO自己評価">
           <div className="text-3xl font-semibold">
             {draft.aiResult.aio_score_self_evaluation.score}
@@ -2227,6 +2633,76 @@ function ArticlePreview({
               <li key={item}>{item}</li>
             ))}
           </ul>
+        </InfoPanel>
+        <InfoPanel
+          title="編集品質チェック"
+          action={
+            <Button
+              data-testid="quality-improve-regenerate-button"
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => onImproveQuality(buildQualityRegenerationInstruction(qualityEvaluation))}
+            >
+              <RefreshCcw />
+              品質改善して再作成
+            </Button>
+          }
+        >
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-semibold">{qualityEvaluation.score}</span>
+            <span className="text-sm text-slate-500">/ 100</span>
+          </div>
+          <div
+            data-testid="quality-priority-summary"
+            className={cn(
+              "mt-3 rounded-md border px-3 py-2 text-xs font-medium",
+              failedQualityChecks.length
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800",
+            )}
+          >
+            {failedQualityChecks.length
+              ? `改善優先: ${failedQualityChecks.length}件。未達項目を先に表示しています。`
+              : "全チェックを満たしています。公開前の最終確認に進めます。"}
+          </div>
+          <div className="mt-3 space-y-2 text-xs leading-5">
+            {orderedQualityChecks.map((check) => (
+              <div
+                key={check.id}
+                data-testid={check.passed ? "quality-check-passed" : "quality-check-failed"}
+                className={cn(
+                  "rounded-md border px-3 py-2",
+                  check.passed
+                    ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                    : "border-amber-200 bg-amber-50 text-amber-900",
+                )}
+              >
+                <div className="font-semibold">{check.label}</div>
+                <div className="mt-0.5">{check.detail}</div>
+                {!check.passed ? (
+                  <>
+                    <div
+                      data-testid="quality-edit-guidance"
+                      className="mt-2 rounded border border-amber-200 bg-white/70 px-2 py-1 text-[11px] font-medium text-amber-950"
+                    >
+                      {qualityCheckEditGuidance(check.id)}
+                    </div>
+                    <Button
+                      data-testid="quality-edit-draft-button"
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => onEditDraft(check.id)}
+                    >
+                      編集タブへ
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            ))}
+          </div>
         </InfoPanel>
         <InfoPanel title="出典URL">
           <div className="space-y-2 text-sm">
@@ -2264,6 +2740,22 @@ function ArticlePreview({
           }
         >
           <div className="space-y-3">
+            {missingGeneratedImagePrompts.length > 0 ? (
+              <div
+                data-testid="missing-generated-images-recovery"
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
+              >
+                初回画像生成に失敗した可能性があります。画像プロンプトは残っているため、
+                「画像のみ再作成」から再試行できます。
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {missingGeneratedImagePrompts.map((prompt) => (
+                    <Badge key={prompt.slot} variant="default">
+                      {prompt.slot}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {draft.images.map((image) => (
               <div key={image.id}>
                 <PreviewImage
@@ -2350,6 +2842,7 @@ function ArticleRegenerationDialog({
         <div className="space-y-4 px-6 py-5">
           <Field label="再作成方針">
             <Textarea
+              data-testid="article-regeneration-instruction"
               value={instruction}
               onChange={(event) => onInstructionChange(event.target.value)}
               placeholder="例：より初心者向けに、比較表を厚くし、導入メリットと注意点を強調してください。CTAは自然に残してください。"
@@ -2357,10 +2850,15 @@ function ArticleRegenerationDialog({
             />
           </Field>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={onClose}>
+            <Button
+              data-testid="article-regeneration-cancel"
+              type="button"
+              variant="secondary"
+              onClick={onClose}
+            >
               キャンセル
             </Button>
-            <Button type="button" onClick={onStart}>
+            <Button data-testid="article-regeneration-start" type="button" onClick={onStart}>
               <RefreshCcw />
               再作成を開始
             </Button>
@@ -2484,11 +2982,15 @@ function ArticleEditor({
   draft,
   updateDraft,
   updateFaq,
+  addFaq,
+  removeFaq,
   regenerateImage,
 }: {
   draft: ArticleDraft;
   updateDraft: <K extends keyof ArticleDraft>(key: K, value: ArticleDraft[K]) => void;
   updateFaq: (index: number, key: keyof FaqItem, value: string) => void;
+  addFaq: () => void;
+  removeFaq: (index: number) => void;
   regenerateImage: (image: ArticleImage) => void;
 }) {
   return (
@@ -2496,12 +2998,14 @@ function ArticleEditor({
       <div className="grid grid-cols-2 gap-4">
         <Field label="タイトル">
           <Input
+            data-testid="draft-title-input"
             value={draft.editedTitle}
             onChange={(event) => updateDraft("editedTitle", event.target.value)}
           />
         </Field>
         <Field label="スラッグ">
           <Input
+            data-testid="draft-slug-input"
             value={draft.editedSlug}
             onChange={(event) => updateDraft("editedSlug", event.target.value)}
           />
@@ -2523,12 +3027,14 @@ function ArticleEditor({
       </Field>
       <Field label="メタディスクリプション">
         <Textarea
+          data-testid="draft-meta-textarea"
           value={draft.editedMetaDescription}
           onChange={(event) => updateDraft("editedMetaDescription", event.target.value)}
         />
       </Field>
       <Field label="本文HTML">
         <Textarea
+          data-testid="draft-body-html-textarea"
           value={draft.editedBodyHtml}
           onChange={(event) => updateDraft("editedBodyHtml", event.target.value)}
           className="min-h-[520px] font-mono text-xs"
@@ -2537,33 +3043,61 @@ function ArticleEditor({
       <div className="grid grid-cols-2 gap-4">
         <Field label="タグ">
           <Input
+            data-testid="draft-tags-input"
             value={joinCsv(draft.tags)}
             onChange={(event) => updateDraft("tags", splitCsv(event.target.value))}
           />
         </Field>
         <Field label="カテゴリ">
           <Input
+            data-testid="draft-categories-input"
             value={joinCsv(draft.categories)}
             onChange={(event) => updateDraft("categories", splitCsv(event.target.value))}
           />
         </Field>
       </div>
       <div className="space-y-3">
-        <div className="text-sm font-medium text-slate-700">FAQ</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-medium text-slate-700">FAQ</div>
+          <Button
+            data-testid="draft-faq-add-button"
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={addFaq}
+          >
+            <Plus />
+            FAQを追加
+          </Button>
+        </div>
         {draft.faqItems.map((faq, index) => (
-          <div key={`${faq.question}-${index}`} className="grid grid-cols-2 gap-3">
+          <div key={`${faq.question}-${index}`} className="grid grid-cols-[1fr_1fr_auto] gap-3">
             <Input
+              data-testid={`draft-faq-question-${index}`}
+              aria-label={`FAQ ${index + 1} question`}
               value={faq.question}
               onChange={(event) => updateFaq(index, "question", event.target.value)}
             />
             <Input
+              data-testid={`draft-faq-answer-${index}`}
+              aria-label={`FAQ ${index + 1} answer`}
               value={faq.answer}
               onChange={(event) => updateFaq(index, "answer", event.target.value)}
             />
+            <Button
+              data-testid={`draft-faq-remove-${index}`}
+              type="button"
+              variant="secondary"
+              size="icon"
+              onClick={() => removeFaq(index)}
+              aria-label={`FAQ ${index + 1}を削除`}
+            >
+              <Trash2 />
+            </Button>
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div data-testid="draft-images-section" tabIndex={-1} className="grid grid-cols-3 gap-4">
         {draft.images.map((image) => (
           <div key={image.id} className="rounded-md border border-slate-200 p-3">
             <PreviewImage src={image.url} alt={image.altText} className="h-36 w-full" />
@@ -2670,14 +3204,6 @@ function formatDateTime(value: string) {
   return formatJaDateTime(value);
 }
 
-function summarizeFetch(results: FetchResult[], label: string) {
-  const urlResults = results.filter((result) => result.url !== "manual-text");
-  const failed = urlResults.filter((result) => !result.ok);
-  if (urlResults.length === 0) return `${label}なし`;
-  if (failed.length === 0) return `${urlResults.length}件取得`;
-  return `${urlResults.length - failed.length}件取得、${failed.length}件失敗`;
-}
-
 function injectImages(html: string, images: ArticleImage[]) {
   let output = html;
   const featured = images.find((image) => image.slot === "featured");
@@ -2694,6 +3220,16 @@ function injectImages(html: string, images: ArticleImage[]) {
   return output;
 }
 
+function sortArticleImages(images: ArticleImage[]) {
+  const slotOrder: Record<ArticleImage["slot"], number> = {
+    featured: 0,
+    "inline-1": 1,
+    "inline-2": 2,
+  };
+
+  return [...images].sort((first, second) => slotOrder[first.slot] - slotOrder[second.slot]);
+}
+
 function imageFigure(image: ArticleImage) {
   return `<figure data-image-slot="${image.slot}" data-image-id="${image.id}"><img src="${imageSrcForHtml(
     image,
@@ -2702,26 +3238,24 @@ function imageFigure(image: ArticleImage) {
   )}" /><figcaption>${escapeHtml(image.altText)}</figcaption></figure>`;
 }
 
-function buildImageRegenerationPrompt(basePrompt: string, instruction: string) {
+function buildImageRegenerationPrompt(
+  basePrompt: string,
+  instruction: string,
+  article: Pick<ArticleGenerationResult, "article_summary" | "headings" | "key_takeaways">,
+) {
   return [
     basePrompt,
+    "",
+    `Article summary anchor: ${truncatePromptLine(article.article_summary, 220)}`,
+    `Key takeaways to preserve: ${article.key_takeaways.slice(0, 3).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
+    `Relevant headings: ${article.headings.slice(0, 4).map((heading) => truncatePromptLine(heading.text, 80)).join(" / ")}`,
     "",
     instruction ? "Regeneration direction from the user:" : "Regeneration direction from the user: improve the image quality while preserving the article intent.",
     instruction || "Make it more polished, premium, coherent, and suitable for a Japanese B2B article.",
     "",
     "Quality bar: premium Japanese B2B SaaS / consulting / financial whitepaper visual, crisp layout, coherent perspective, refined lighting, generous whitespace, high-end corporate polish.",
+    "Keep the regenerated image article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
     "Avoid readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, distorted hands, unnecessary people, clip-art, cheap stock-photo look, and dark blurry AI-art backgrounds.",
-  ].join("\n");
-}
-
-function buildArticleImagePrompt(basePrompt: string, toneText?: string) {
-  return [
-    basePrompt,
-    "",
-    `Visual tone from user: ${toneText || "clean Japanese B2B whitepaper editorial style"}`,
-    "Create a premium 3:2 landscape editorial visual for a Japanese B2B article.",
-    "Use a refined whitepaper/SaaS/consulting composition with clean geometry, subtle depth, balanced margins, and a clear focal concept.",
-    "Avoid text-heavy layouts, readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, unnecessary people, and cheap stock-photo aesthetics.",
   ].join("\n");
 }
 
@@ -2734,13 +3268,298 @@ function imageSrcForHtml(image: ArticleImage) {
 }
 
 function renderArticleHtml(draft: ArticleDraft) {
-  return draft.images.reduce((html, image) => {
-    if (!image.url) {
-      return html;
-    }
+  return buildDraftArticleHtml(draft);
+}
 
-    return html.replaceAll(`src="aio-image:${image.id}"`, `src="${escapeHtml(image.url)}"`);
-  }, draft.editedBodyHtml);
+function hydrateDraftFromGenerationJob(job: GenerationJob) {
+  if (!job.draft) {
+    return null;
+  }
+
+  if (!job.wordpressPostUrl && !job.wordpressPostStatus) {
+    return job.draft;
+  }
+
+  return {
+    ...job.draft,
+    status: "posted" as const,
+    wordpressPostUrl: job.wordpressPostUrl || job.draft.wordpressPostUrl,
+  };
+}
+
+function collectDraftReferenceTexts(draft: ArticleDraft) {
+  return Array.from(
+    new Set([
+      ...draft.fetchedReferences.map((item) => item.text ?? ""),
+      ...draft.inputPayload.references.map((item) => item.text ?? ""),
+      ...(draft.inputPayload.referenceFiles ?? []).map((item) => item.text ?? ""),
+    ]),
+  ).filter((text) => text.trim());
+}
+
+function collectDraftSourceUrls(draft: ArticleDraft) {
+  return Array.from(
+    new Set([
+      ...draft.fetchedReferences.map((item) => item.url),
+      ...draft.inputPayload.references.map((item) => item.url ?? ""),
+      ...draft.fetchedCompetitors.map((item) => item.url),
+      ...draft.inputPayload.competitors.map((item) => item.url ?? ""),
+      ...(draft.competitorResearch?.insights ?? []).map((item) => item.url),
+      ...draft.aiResult.sources.map((item) => item.url),
+    ]),
+  ).filter((url) => url.trim());
+}
+
+function collectDraftCompetitorTexts(draft: ArticleDraft) {
+  return Array.from(
+    new Set([
+      ...draft.fetchedCompetitors.map((item) => item.text ?? ""),
+      ...draft.inputPayload.competitors.map((item) => item.text ?? ""),
+      ...(draft.inputPayload.competitorFiles ?? []).map((item) => item.text ?? ""),
+      ...(draft.competitorResearch ? collectCompetitorResearchTexts(draft.competitorResearch) : []),
+    ]),
+  ).filter((text) => text.trim());
+}
+
+function collectCompetitorResearchTexts(research: NonNullable<ArticleDraft["competitorResearch"]>) {
+  return [
+    research.summary,
+    ...research.insights.flatMap((insight) => [
+      insight.title,
+      ...insight.majorPoints,
+      ...insight.differentiationPoints,
+      ...insight.recommendations,
+    ]),
+  ];
+}
+
+function buildQualityRegenerationInstruction(evaluation: ArticleQualityEvaluation) {
+  const improvements = evaluation.checks
+    .filter((check) => !check.passed)
+    .map((check) => {
+      const action = qualityRegenerationAction(check.id);
+      return `- ${check.label}: ${check.detail}${
+        action ? `\n  修正方針: ${action}` : ""
+      }`;
+    });
+
+  return [
+    "編集品質チェックの結果を踏まえて、記事全体を再作成してください。",
+    "一般論やAIっぽい定型表現を減らし、一次情報・参照情報・競合情報にもとづく具体例、判断基準、注意点、失敗パターン、差別化ポイントを増やしてください。",
+    "見出しは機械的なキーワード列ではなく、人間の編集者が企画したような読み進めたくなる表現にしてください。",
+    "根拠が弱い内容は断定せず、参照元や未確認情報の扱いが読者に分かるようにしてください。",
+    improvements.length > 0
+      ? `改善が必要な項目:\n${improvements.join("\n")}`
+      : "現在の品質は高めですが、さらに現場感、具体性、独自の視点を強めてください。",
+  ].join("\n\n");
+}
+
+function combineQualityEvaluations(
+  titleEvaluation: ArticleQualityEvaluation,
+  bodyEvaluation: ArticleQualityEvaluation,
+  faqEvaluation: ArticleQualityEvaluation,
+  metaDescriptionEvaluation: ArticleQualityEvaluation,
+  imageAltEvaluation: ArticleQualityEvaluation,
+): ArticleQualityEvaluation {
+  return {
+    score: Math.min(
+      titleEvaluation.score,
+      bodyEvaluation.score,
+      faqEvaluation.score,
+      metaDescriptionEvaluation.score,
+      imageAltEvaluation.score,
+    ),
+    checks: [
+      ...titleEvaluation.checks,
+      ...bodyEvaluation.checks,
+      ...faqEvaluation.checks,
+      ...metaDescriptionEvaluation.checks,
+      ...imageAltEvaluation.checks,
+    ],
+    strengths: uniqueStrings([
+      ...titleEvaluation.strengths,
+      ...bodyEvaluation.strengths,
+      ...faqEvaluation.strengths,
+      ...metaDescriptionEvaluation.strengths,
+      ...imageAltEvaluation.strengths,
+    ]),
+    improvements: uniqueStrings([
+      ...titleEvaluation.improvements,
+      ...bodyEvaluation.improvements,
+      ...faqEvaluation.improvements,
+      ...metaDescriptionEvaluation.improvements,
+      ...imageAltEvaluation.improvements,
+    ]),
+  };
+}
+
+function draftEditorTargetTestId(checkId: string) {
+  if (checkId.startsWith("title-")) {
+    return "draft-title-input";
+  }
+
+  if (checkId.startsWith("meta-description-")) {
+    return "draft-meta-textarea";
+  }
+
+  if (checkId.startsWith("image-alt-")) {
+    return "draft-images-section";
+  }
+
+  if (checkId === "faq-count") {
+    return "draft-faq-add-button";
+  }
+
+  if (checkId === "faq-answer-specificity") {
+    return "draft-faq-answer-0";
+  }
+
+  if (checkId.startsWith("faq-")) {
+    return "draft-faq-question-0";
+  }
+
+  return "draft-body-html-textarea";
+}
+
+function uniqueStrings(items: string[]) {
+  return Array.from(new Set(items.filter((item) => item.trim())));
+}
+
+async function copyTextToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+      // Fall back for browsers that block Clipboard API outside a granted context.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  let copied = false;
+  try {
+    textarea.select();
+    copied = document.execCommand("copy");
+  } finally {
+    textarea.remove();
+  }
+
+  if (!copied) {
+    throw new Error("Clipboard copy failed.");
+  }
+}
+
+function copyManualRecoveryText(label: string) {
+  if (label === "タイトル") {
+    return "タイトル欄から手動でコピーしてください。";
+  }
+
+  if (label === "メタ") {
+    return "メタディスクリプション欄から手動でコピーしてください。";
+  }
+
+  if (label === "本文HTML") {
+    return "本文HTML欄から手動でコピーしてください。";
+  }
+
+  if (label === "入稿セット") {
+    return "タイトル、メタ、本文HTML、タグ、カテゴリを各編集欄から手動でコピーしてください。";
+  }
+
+  return "該当する編集欄から手動でコピーしてください。";
+}
+
+function downloadArticleHtml(draft: ArticleDraft) {
+  const html = buildExportArticleHtml(draft);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${safeDownloadName(draft.editedSlug || draft.editedTitle || "aio-article")}.html`;
+  try {
+    document.body.appendChild(anchor);
+    anchor.click();
+  } finally {
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}
+
+function buildExportArticleHtml(draft: ArticleDraft) {
+  return [
+    "<!doctype html>",
+    '<html lang="ja">',
+    "<head>",
+    '<meta charset="utf-8" />',
+    `<title>${escapeHtml(draft.editedTitle)}</title>`,
+    draft.editedMetaDescription
+      ? `<meta name="description" content="${escapeHtml(draft.editedMetaDescription)}" />`
+      : "",
+    "</head>",
+    "<body>",
+    "<article>",
+    `<h1>${escapeHtml(draft.editedTitle)}</h1>`,
+    renderArticleHtml(draft),
+    "</article>",
+    "</body>",
+    "</html>",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildEditorialHandoffText(draft: ArticleDraft) {
+  return [
+    `タイトル: ${draft.editedTitle}`,
+    `スラッグ: ${draft.editedSlug}`,
+    `メタディスクリプション: ${draft.editedMetaDescription}`,
+    `タグ: ${joinCsv(draft.tags) || "未設定"}`,
+    `カテゴリ: ${joinCsv(draft.categories) || "未設定"}`,
+    "",
+    "本文HTML:",
+    renderArticleHtml(draft),
+  ].join("\n");
+}
+
+function validateDraftForSubmission(draft: ArticleDraft) {
+  const missingFields = [
+    draft.editedTitle.trim() ? "" : "タイトル",
+    draft.editedSlug.trim() ? "" : "スラッグ",
+    stripHtmlText(draft.editedBodyHtml).trim() ? "" : "本文HTML",
+  ].filter(Boolean);
+
+  if (missingFields.length === 0) {
+    return "";
+  }
+
+  return `${missingFields.join("、")}を入力してください。保存・承認・WordPress投稿の前に編集内容を確認してください。`;
+}
+
+function stripHtmlText(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function safeDownloadName(value: string) {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 80) || "aio-article"
+  );
 }
 
 function replaceImageReferences(
@@ -2898,16 +3717,6 @@ function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function throwIfAborted(signal: AbortSignal) {
-  if (signal.aborted) {
-    throw new DOMException("Article generation stopped.", "AbortError");
-  }
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
 function imageGenerationEstimate(count: ImageCount, mode: VisualToneInput["mode"]) {
   if (count === 0) {
     return "生成目安：画像生成なし";
@@ -2968,12 +3777,38 @@ function readError(error: unknown) {
   return message.length > 420 ? `${message.slice(0, 420)}...` : message;
 }
 
+function mergeAttachmentRetries(
+  current: AttachedFileInput[],
+  incoming: AttachedFileInput[],
+) {
+  const merged = [...current];
+
+  for (const file of incoming) {
+    const retryIndex = merged.findIndex((existing) => isSameAttachmentFile(existing, file));
+    if (retryIndex >= 0) {
+      merged[retryIndex] = file;
+    } else {
+      merged.push(file);
+    }
+  }
+
+  return merged;
+}
+
+function isSameAttachmentFile(first: AttachedFileInput, second: AttachedFileInput) {
+  return first.name === second.name && first.size === second.size && first.type === second.type;
+}
+
 function normalizeErrorMessage(message: string) {
   return message
     .replaceAll("Failed to fetch", "通信エラー")
     .replaceAll(
       "unsupported Unicode escape sequence",
       "保存できない制御文字が含まれていたため、保存用に安全化してください",
+    )
+    .replaceAll(
+      "Generation job not found.",
+      "生成ジョブが見つかりません。古い生成状態をクリアし、もう一度「AIによる記事作成」を実行してください。",
     )
     .replaceAll("\\u0000 cannot be converted to text", "null文字は保存できません");
 }

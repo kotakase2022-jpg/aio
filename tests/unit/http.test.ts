@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { z } from "zod";
 import { ApiError, errorJson, okJson } from "@/lib/server/http";
 
 describe("HTTP response helpers", () => {
@@ -17,6 +18,17 @@ describe("HTTP response helpers", () => {
       ok: false,
       error: "Invalid input",
       detail: "field is required",
+    });
+  });
+
+  test("errorJson turns validation errors into recoverable 400 responses", async () => {
+    const response = errorJson(z.object({ draftId: z.string().min(1) }).safeParse({}).error);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: "入力内容が不正です。",
+      detail: expect.stringContaining("Invalid input"),
     });
   });
 

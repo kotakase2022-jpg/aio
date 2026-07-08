@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { approveDraft, saveDraft } from "@/lib/server/drafts";
-import { errorJson, okJson } from "@/lib/server/http";
+import { ApiError, errorJson, okJson } from "@/lib/server/http";
 import type { ArticleDraft } from "@/types/aio";
 
 export const runtime = "nodejs";
@@ -11,7 +11,7 @@ const schema = z
     draft: z.record(z.string(), z.unknown()).optional(),
   })
   .refine((value) => value.draftId || value.draft, {
-    message: "draftId or draft is required.",
+    message: "承認する下書き情報が見つかりません。下書きを保存してから、もう一度承認してください。",
   });
 
 export async function POST(request: Request) {
@@ -28,7 +28,11 @@ export async function POST(request: Request) {
     }
 
     if (!body.draftId) {
-      throw new Error("draftId is required.");
+      throw new ApiError(
+        "承認する下書き情報が見つかりません。",
+        400,
+        "下書きを保存してから、もう一度承認してください。",
+      );
     }
     const result = await approveDraft(body.draftId);
     return okJson(result);
