@@ -249,7 +249,17 @@ runtime code.
 The current local branch also includes implementation commit `3584f06`, which expands English
 commodity-AI boilerplate detection and regeneration guidance for phrases such as `today's rapidly
 evolving landscape`, `comprehensive guide`, `delve into`, and `navigate the complexities`. Hosted
-CodeRabbit and Actions must be re-checked after the handoff/docs update is pushed.
+CodeRabbit and Actions have been checked after the handoff/docs update was pushed.
+
+The latest pushed head containing that English boilerplate detection pass and handoff update was
+also checked:
+
+- Commit: `c2e66ab`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m47s
+
+Later status-only handoff commits should be re-checked on the current PR head; they do not change
+runtime code.
 
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
@@ -329,8 +339,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  are green through status-only head `f1b1e5e`; re-check the current pass after pushing the latest
-  implementation and handoff/docs commits.
+  are green through handoff/docs head `c2e66ab`; re-check any later status-only handoff commits on
+  the current PR head.
 
 ## Current Self Score
 
@@ -345,8 +355,8 @@ human review of real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit after implementation commit `3584f06` and the handoff/docs
-   update are pushed.
+1. Re-check hosted Actions and CodeRabbit if a new status-only handoff commit is pushed after
+   `c2e66ab`.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
