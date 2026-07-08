@@ -32,6 +32,32 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex pass on 2026-07-08 13:50 +09:00:
+
+- Hardened optional OpenAI live artifact capture so `AIO_LIVE_OPENAI_ARTIFACT_DIR` must resolve
+  inside `test-results` or the OS temp directory. This prevents generated review JSON/HTML from
+  being written accidentally into tracked repository paths such as `docs/` or the repo root.
+- The live OpenAI test now validates the artifact directory before `vi.resetModules()` and before
+  any provider call when artifact writing is enabled.
+- Added unit coverage for allowed/default artifact paths and rejected tracked paths.
+- `npx.cmd vitest run tests/unit/openai-live-artifacts.test.ts` passed, 1 file / 3 tests.
+- `npm.cmd run typecheck` passed.
+- Expected fail-fast verification passed: running the live OpenAI spec with
+  `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` and `AIO_LIVE_OPENAI_ARTIFACT_DIR=docs/live-openai` failed in
+  about 5ms with a local artifact-directory validation error, before any OpenAI API call.
+- `npm.cmd run quality` passed:
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 339 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.39%, branches 76.39%, functions 92.35%, lines 88.83%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
+- `npm.cmd run test:live:readiness:wordpress` failed closed because sandbox WordPress site URL,
+  username, application password, post/media allow flags, and non-production confirmation are not
+  configured. No WordPress live call was made.
+
 Latest Codex pass on 2026-07-08 13:34 +09:00:
 
 - Added optional OpenAI live artifact capture for representative generated article review:

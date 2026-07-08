@@ -6,7 +6,11 @@ import {
   expectRequiredEnv,
   loadLiveEnv,
 } from "./live-test-helpers";
-import { writeOpenAILiveArtifact } from "./openai-live-artifacts";
+import {
+  resolveOpenAILiveArtifactDir,
+  shouldWriteOpenAILiveArtifacts,
+  writeOpenAILiveArtifact,
+} from "./openai-live-artifacts";
 
 describe("OpenAI live sandbox contract", () => {
   test(
@@ -16,6 +20,9 @@ describe("OpenAI live sandbox contract", () => {
       expectLiveContractEnabled();
       expectRequiredEnv(["OPENAI_API_KEY"]);
       applyOpenAILiveModelOverride();
+      if (shouldWriteOpenAILiveArtifacts()) {
+        resolveOpenAILiveArtifactDir();
+      }
       vi.resetModules();
 
       const { createStructuredResponse, getTextModel } = await import("@/lib/server/openai");

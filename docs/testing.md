@@ -133,7 +133,8 @@ normal `OPENAI_TEXT_MODEL` setting.
 Set `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` when a demo or release needs human-readable review evidence
 for generated article quality. The live test then writes ignored JSON and HTML artifacts under
 `AIO_LIVE_OPENAI_ARTIFACT_DIR` (default `test-results/live-openai`) without including provider
-secrets or environment values.
+secrets or environment values. The artifact directory must resolve inside `test-results` or the OS
+temporary directory, so review files are not accidentally written to tracked repository paths.
 
 Supabase live checks should normally use a non-production project:
 

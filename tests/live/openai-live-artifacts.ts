@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import type {
   ArticleFormPayload,
@@ -38,7 +39,7 @@ export async function writeOpenAILiveArtifact(
     return null;
   }
 
-  const artifactDir = resolveArtifactDir(env);
+  const artifactDir = resolveOpenAILiveArtifactDir(env);
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const baseName = `${generatedAt.replace(/[:.]/g, "-")}-${sanitizeLiveArtifactName(
     input.sampleName,
@@ -52,6 +53,22 @@ export async function writeOpenAILiveArtifact(
   await writeFile(htmlPath, renderArtifactHtml(payload), "utf8");
 
   return { jsonPath, htmlPath };
+}
+
+export function resolveOpenAILiveArtifactDir(env: LiveArtifactEnv = process.env) {
+  const configuredDir =
+    cleanEnvValue(env.AIO_LIVE_OPENAI_ARTIFACT_DIR) || path.join("test-results", "live-openai");
+  const resolvedDir = path.resolve(configuredDir);
+  const allowedRoots = [path.resolve("test-results"), path.resolve(os.tmpdir())];
+  const isAllowed = allowedRoots.some((root) => pathIsInsideOrEqual(resolvedDir, root));
+
+  if (!isAllowed) {
+    throw new Error(
+      `AIO_LIVE_OPENAI_ARTIFACT_DIR must resolve inside test-results or the OS temp directory. Received: ${configuredDir}`,
+    );
+  }
+
+  return resolvedDir;
 }
 
 export function buildOpenAILiveArtifact(input: OpenAILiveArtifactInput) {
@@ -103,10 +120,6 @@ export function sanitizeLiveArtifactName(value: string) {
   );
 }
 
-function resolveArtifactDir(env: LiveArtifactEnv) {
-  return cleanEnvValue(env.AIO_LIVE_OPENAI_ARTIFACT_DIR) || path.join("test-results", "live-openai");
-}
-
 function renderArtifactHtml(payload: ReturnType<typeof buildOpenAILiveArtifact>) {
   return [
     "<!doctype html>",
@@ -152,6 +165,15 @@ function cleanEnvValue(value: string | undefined) {
     .replace(/^\uFEFF/, "")
     .trim()
     .replace(/^["']|["']$/g, "");
+}
+
+function pathIsInsideOrEqual(child: string, parent: string) {
+  const normalizedChild = path.normalize(child).toLowerCase();
+  const normalizedParent = path.normalize(parent).toLowerCase();
+  return (
+    normalizedChild === normalizedParent ||
+    normalizedChild.startsWith(`${normalizedParent}${path.sep}`)
+  );
 }
 
 function escapeHtml(value: string) {

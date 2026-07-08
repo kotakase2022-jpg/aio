@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import { sampleArticleResult, sampleFormPayload } from "../fixtures/article";
 import {
   buildOpenAILiveArtifact,
+  resolveOpenAILiveArtifactDir,
   sanitizeLiveArtifactName,
   shouldWriteOpenAILiveArtifacts,
   writeOpenAILiveArtifact,
@@ -50,6 +51,21 @@ describe("OpenAI live artifact helpers", () => {
     expect(artifact.input.referenceUrls).toEqual(["https://example.com/reference"]);
     expect(artifact.output.bodyHtml).toContain("<h2>What AIO means</h2>");
     expect(JSON.stringify(artifact)).not.toContain("OPENAI_API_KEY");
+  });
+
+  test("rejects artifact directories that could write tracked repository files", () => {
+    expect(() =>
+      resolveOpenAILiveArtifactDir({ AIO_LIVE_OPENAI_ARTIFACT_DIR: "test-results/live-openai" }),
+    ).not.toThrow();
+    expect(() =>
+      resolveOpenAILiveArtifactDir({ AIO_LIVE_OPENAI_ARTIFACT_DIR: path.join(os.tmpdir(), "aio") }),
+    ).not.toThrow();
+    expect(() => resolveOpenAILiveArtifactDir({ AIO_LIVE_OPENAI_ARTIFACT_DIR: "." })).toThrow(
+      "test-results or the OS temp directory",
+    );
+    expect(() =>
+      resolveOpenAILiveArtifactDir({ AIO_LIVE_OPENAI_ARTIFACT_DIR: "docs/live-openai" }),
+    ).toThrow("test-results or the OS temp directory");
   });
 });
 
