@@ -32,6 +32,34 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex continuation on 2026-07-08 18:10 +09:00:
+
+- Re-ran OpenAI live generation with artifact writing enabled:
+  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
+  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
+- `npm.cmd run test:live:openai` passed, 1 file / 1 test, in 227.55s after the prompt update.
+- Latest live article artifact scores:
+  - `2026-07-08T09-06-29-174Z-one-person-contractor-workers-compensation.json`: score 88; article
+    body 98, title 100, FAQ 100, meta 100; failed checks: none.
+  - `2026-07-08T09-07-49-202Z-saas-onboarding-operations.json`: score 88; article body 100, title
+    100, FAQ 100, meta 100; failed checks: none.
+  - `2026-07-08T09-08-48-443Z-aio-content-operations.json`: score 90; article body 100, title 100,
+    FAQ 100, meta 100; failed checks: none.
+- Human-read the latest generated openings and first H2s. The machine scores were clean, but the
+  pre-change run still showed a human-editing risk: definition-style openings could be followed by
+  a first H2 that repeated the same "Xとは..." angle.
+- Updated the article-generation instructions so the first H2/H3 after a definition-style opening
+  must use a different editorial angle, such as the reader's first decision, a failure pattern,
+  comparison axis, or operational checkpoint.
+- Verified the post-update artifacts moved the first H2s toward:
+  - "建設業の一人親方が最初に分けるべき確認事項"
+  - "初期設定完了をゴールにすると3週目で利用が止まる"
+  - "BtoBマーケティングチームが最初に決めるべき分離ルール"
+- Focused and full verification passed:
+  - `npx.cmd vitest run tests/unit/article-generation.test.ts`
+  - `npm.cmd run typecheck`
+  - `npm.cmd run quality`
+
 Latest Codex continuation on 2026-07-08 17:50 +09:00:
 
 - Re-checked PR #1 at head `5abd638`:
@@ -687,17 +715,18 @@ Additional manual PC browser smoke on 2026-07-06:
 These gaps prevent a true 100/100 completion claim:
 
 - Live OpenAI generation quality now has fresh artifact-producing evidence from 2026-07-08
-  17:30-17:34 +09:00 after the numeric-context and main-body-length pass. Three representative
+  18:06-18:09 +09:00 after the numeric-context, main-body-length, and first-heading-angle passes. Three representative
   samples passed the live threshold and wrote ignored JSON/HTML artifacts:
-  - `2026-07-08T08-32-08-408Z-one-person-contractor-workers-compensation.json`: score 88; article
+  - `2026-07-08T09-06-29-174Z-one-person-contractor-workers-compensation.json`: score 88; article
     body 98, title 100, FAQ 100, meta 100; article-body failed checks: none.
-  - `2026-07-08T08-33-19-923Z-saas-onboarding-operations.json`: score 91; article body 100, title
+  - `2026-07-08T09-07-49-202Z-saas-onboarding-operations.json`: score 88; article body 100, title
     100, FAQ 100, meta 100; article-body failed checks: none.
-  - `2026-07-08T08-34-27-812Z-aio-content-operations.json`: score 91; article body 98, title 100,
+  - `2026-07-08T09-08-48-443Z-aio-content-operations.json`: score 90; article body 100, title 100,
     FAQ 100, meta 100; article-body failed checks: none.
   These artifacts include the repeatable editorial checklist, reader/structure snapshot, and
   deterministic quality-check breakdown. The deterministic body checks no longer show failed
-  checks in the latest run, but the model's own self-evaluation still scores 88-91 because it
+  checks in the latest run, and the first H2s no longer repeat the opening definition angle in the
+  latest human-read sample. The model's own self-evaluation still scores 88-90 because it
   honestly notes missing real public/sandbox data. A final human editorial review remains useful
   before claiming perfect non-commodity article quality.
 - Supabase production write/delete verification passed again on 2026-07-08 17:50 +09:00 with

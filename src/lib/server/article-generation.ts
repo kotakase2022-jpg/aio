@@ -55,6 +55,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "When reference URLs or source URLs are available, keep the actual URLs visible in body_html as source notes or links so the WordPress draft remains independently checkable after publishing.",
       "In body_html itself, include at least one <ul> or <ol> and an FAQ section. Do not rely only on separate key_takeaways or faq_items arrays.",
       "The first paragraph of body_html must be answer-first and include a definition or decision sentence using a natural Japanese form such as '...とは...を指します' when the topic allows it.",
+      "Do not reuse the opening definition as the first H2/H3. After a definition-style opening, make the first heading a different editorial angle such as the reader's first decision, a failure pattern, a comparison axis, or an operational checkpoint.",
       "Write as a human editor who has interviewed the business: each major section should include at least one concrete decision criterion, field example, operational caveat, failure pattern, or source-backed detail.",
       "Avoid thin H2/H3 sections. Every H2/H3 body should include at least two concrete signals such as a number, field observation, decision criterion, failure/risk note, team/cost/timing detail, or source/caveat note.",
       "Across the full article, include at least three different types of editorial evidence: field observations, decision criteria, failure/risk notes, team/cost/timing details, and source/caveat notes.",

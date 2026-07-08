@@ -374,6 +374,9 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("2,600 characters");
     expect(call?.instructions).toContain("main article body before FAQ");
     expect(call?.instructions).toContain("above about 1,500 visible Japanese characters");
+    expect(call?.instructions).toContain("Do not reuse the opening definition as the first H2/H3");
+    expect(call?.instructions).toContain("reader's first decision");
+    expect(call?.instructions).toContain("operational checkpoint");
     expect(input.task).toContain("目標の90〜110%");
     expect(input.task).toContain("想定読者に役割名や職種名");
     expect(call?.instructions).toContain("Respect payload.form.imageCount");
