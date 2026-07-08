@@ -7,7 +7,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass resumed that same Codex phase after the OpenAI quota was restored.
 - Phase: Live OpenAI Verification / Generated Article Quality Fix / Handoff
-- Last updated: 2026-07-08 12:15 +09:00
+- Last updated: 2026-07-08 12:24 +09:00
 
 ## 1. Current Goal
 
@@ -21,12 +21,12 @@ Current objective:
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest commit before this handoff update: `04f65e5 Record live verification blockers`
+- Latest implementation commit: `6a4d7f0 Stabilize live OpenAI article quality`
 - Latest implementation commit before this pass: `712cdc4 Detect English conclusion boilerplate`
-- Last known good checked commit before this pass: `04f65e5`
+- Last known good checked commit: `6a4d7f0`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Not yet run on this uncommitted local diff. Previous PR head was green before this pass.
-- GitHub Actions status: Not yet run on this uncommitted local diff. Local `npm.cmd run quality` passes.
+- CodeRabbit OSS review status: Passed on PR #1 at head `6a4d7f0`.
+- GitHub Actions status: `Typecheck, lint, tests, E2E, build` passed on PR #1 at head `6a4d7f0` in 3m39s.
 
 ## 3. What Was Done
 
@@ -71,7 +71,8 @@ Main files changed in this pass:
   - full `npm.cmd run quality` passes
   - live OpenAI sandbox test passes
 - Supabase live write/delete testing remains intentionally not run against the current production-labeled project.
-- The current code changes are ready for Claude Code review after commit/push and CodeRabbit review.
+- The current implementation commit is pushed and green on PR #1.
+- If a later handoff-only commit follows this file update, re-check PR #1 at that newer head. Runtime code changed last in `6a4d7f0`.
 
 ## 6. Known Issues
 
@@ -85,12 +86,12 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Not run on this local uncommitted diff yet.
+- Review status: CodeRabbit passed on PR #1 at head `6a4d7f0`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
 - Deferred findings: none in this pass.
 - False positives / not applicable: none.
-- Next step: after commit and push, re-check PR #1 and CodeRabbit on the new head.
+- Next step: if this handoff update is committed as a status-only commit, re-check PR #1 on the new head.
 
 ## 8. Optional Bugbot Findings
 
@@ -115,6 +116,9 @@ npm.cmd run build
 git diff --check
 npm.cmd run quality
 $env:AIO_LIVE_CONTRACT_TESTS='1'; npm.cmd run test:live:openai
+git commit -m "Stabilize live OpenAI article quality"
+git push
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 ```
 
 Results:
@@ -139,6 +143,19 @@ Results:
   - Readiness: `openai: ready`
   - Live test: 1 file / 1 test passed
   - Duration: about 183 seconds
+- Implementation commit `6a4d7f0`: created and pushed.
+- Pre-commit hook for `6a4d7f0`: passed.
+  - lint passed
+  - test integrity passed
+- Pre-push hook for `6a4d7f0`: passed.
+  - lint passed
+  - typecheck passed
+  - test integrity passed
+  - test passed, 43 files / 333 tests
+  - contract tests passed, 3 files / 13 tests
+- PR #1 checks at `6a4d7f0`: passed.
+  - CodeRabbit passed.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m39s.
 
 Not run:
 
@@ -155,7 +172,7 @@ Next Claude Code should:
    - article-quality auxiliary heading filtering
    - sentence boundary handling for English and HTML block boundaries
 2. Confirm the new live OpenAI fixture scale and assertions are appropriate for sandbox cost and runtime.
-3. After Codex pushes this pass, check PR #1 CodeRabbit and GitHub Actions on the new head.
+3. Re-check PR #1 only if this handoff status update is pushed as a new head after `6a4d7f0`.
 4. Keep Supabase live write/delete tests blocked unless a non-production Supabase project is configured and explicitly confirmed.
 5. If all checks remain green, move next toward human review of representative generated articles or a staging-only Supabase contract test setup.
 
