@@ -32,6 +32,30 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex pass on 2026-07-08 14:09 +09:00:
+
+- Added an explicit WordPress live delete permission flag:
+  - `AIO_LIVE_WORDPRESS_ALLOW_DELETE=1`
+- The WordPress live contract test creates a disposable post and media item, then deletes both in
+  cleanup. Readiness now requires explicit post, media, and delete permissions so cleanup-capable
+  live tests cannot run by accident.
+- Updated `.env.live.example`, `docs/testing.md`, the readiness script, and the WordPress live spec.
+- Added readiness unit coverage proving WordPress live checks fail closed when the delete flag is
+  missing and pass only when post/media/delete/sandbox flags are all present.
+- `npx.cmd vitest run tests/unit/live-readiness-script.test.ts` passed, 1 file / 10 tests.
+- `npm.cmd run typecheck` passed.
+- `npm.cmd run test:live:readiness:wordpress` failed closed before any live calls because local
+  sandbox WordPress credentials and all allow flags are not configured.
+- `npm.cmd run quality` passed:
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 341 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.39%, branches 76.39%, functions 92.35%, lines 88.83%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
+
 Latest Codex pass on 2026-07-08 13:50 +09:00:
 
 - Hardened optional OpenAI live artifact capture so `AIO_LIVE_OPENAI_ARTIFACT_DIR` must resolve
@@ -405,11 +429,13 @@ These gaps prevent a true 100/100 completion claim:
   production-specific confirmation flag. A long-term staging-only procedure is still preferable for
   routine release checks.
 - WordPress posting remains guarded by a sandbox live test, but sandbox WordPress credentials are
-  not currently proven.
+  not currently proven. The live readiness gate now also requires explicit post, media, and delete
+  allow flags because the test creates and cleans up disposable WordPress resources.
 - `npm run test:live:readiness` was run on 2026-07-06 and failed closed before any live provider
   calls. Missing sandbox flags/credentials included `AIO_LIVE_CONTRACT_TESTS`, Supabase write
   confirmation variables, and WordPress sandbox credentials. Supabase later passed through the
-  explicitly approved production write/delete path; WordPress sandbox readiness remains unresolved.
+  explicitly approved production write/delete path; WordPress sandbox readiness remains unresolved
+  and now also requires `AIO_LIVE_WORDPRESS_ALLOW_DELETE=1`.
 - Manual PC browser review has partially confirmed visual polish and readability for login, the
   initial form, sticky CTA, generation logs, primary-information input, left-card anchor movement,
   generated draft preview/editing, fullscreen preview, copy recovery, HTML export messaging, and
@@ -439,6 +465,7 @@ Highest-value next actions:
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Re-run `npm run test:live:openai` with `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1` after provider quota
    or rate limiting recovers, then review the generated JSON/HTML artifacts.
-5. Prepare disposable WordPress sandbox settings in `.env.live.local`, then rerun
+5. Prepare disposable WordPress sandbox settings in `.env.live.local`, including
+   `AIO_LIVE_WORDPRESS_ALLOW_DELETE=1`, then rerun
    `npm run test:live:readiness:wordpress`.
 6. Complete the remaining sandbox browser pass focused on real WordPress posting recovery.

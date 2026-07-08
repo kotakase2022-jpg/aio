@@ -20,6 +20,7 @@ describe("WordPress live sandbox contract", () => {
       expectNonProductionConfirmed();
       expect(cleanEnvValue(process.env.AIO_LIVE_WORDPRESS_ALLOW_POST)).toBe("1");
       expect(cleanEnvValue(process.env.AIO_LIVE_WORDPRESS_ALLOW_MEDIA)).toBe("1");
+      expect(cleanEnvValue(process.env.AIO_LIVE_WORDPRESS_ALLOW_DELETE)).toBe("1");
       expectRequiredEnv([
         "WORDPRESS_SANDBOX_SITE_URL",
         "WORDPRESS_SANDBOX_USERNAME",

@@ -187,6 +187,54 @@ describe("check-live-readiness script", () => {
       );
     });
   });
+
+  test("requires explicit WordPress delete permission for cleanup-capable live tests", async () => {
+    await withTempProject(async (projectDir) => {
+      await writeFile(
+        path.join(projectDir, ".env.live.local"),
+        [
+          "AIO_LIVE_CONTRACT_TESTS=1",
+          "WORDPRESS_SANDBOX_SITE_URL=https://wordpress-sandbox.example.com",
+          "WORDPRESS_SANDBOX_USERNAME=sandbox-user",
+          "WORDPRESS_SANDBOX_APPLICATION_PASSWORD=sandbox-password",
+          "AIO_LIVE_WORDPRESS_ALLOW_POST=1",
+          "AIO_LIVE_WORDPRESS_ALLOW_MEDIA=1",
+          "AIO_LIVE_CONFIRM_NON_PRODUCTION=1",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await runReadiness(projectDir, "wordpress");
+
+      expect(result.code).toBe(1);
+      expect(result.stdout).toContain("AIO_LIVE_WORDPRESS_ALLOW_DELETE is missing.");
+      expect(result.stderr).toContain("Live sandbox checks are not ready.");
+    });
+  });
+
+  test("marks WordPress live checks ready only when post, media, delete, and sandbox flags are set", async () => {
+    await withTempProject(async (projectDir) => {
+      await writeFile(
+        path.join(projectDir, ".env.live.local"),
+        [
+          "AIO_LIVE_CONTRACT_TESTS=1",
+          "WORDPRESS_SANDBOX_SITE_URL=https://wordpress-sandbox.example.com",
+          "WORDPRESS_SANDBOX_USERNAME=sandbox-user",
+          "WORDPRESS_SANDBOX_APPLICATION_PASSWORD=sandbox-password",
+          "AIO_LIVE_WORDPRESS_ALLOW_POST=1",
+          "AIO_LIVE_WORDPRESS_ALLOW_MEDIA=1",
+          "AIO_LIVE_WORDPRESS_ALLOW_DELETE=1",
+          "AIO_LIVE_CONFIRM_NON_PRODUCTION=1",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await runReadiness(projectDir, "wordpress");
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("- wordpress: ready");
+    });
+  });
 });
 
 async function withTempProject(callback: (projectDir: string) => Promise<void>) {

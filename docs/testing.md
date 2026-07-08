@@ -174,6 +174,7 @@ WORDPRESS_SANDBOX_USERNAME=
 WORDPRESS_SANDBOX_APPLICATION_PASSWORD=
 AIO_LIVE_WORDPRESS_ALLOW_POST=1
 AIO_LIVE_WORDPRESS_ALLOW_MEDIA=1
+AIO_LIVE_WORDPRESS_ALLOW_DELETE=1
 AIO_LIVE_CONFIRM_NON_PRODUCTION=1
 AIO_LIVE_SANDBOX_HOST_ALLOWLIST=
 WORDPRESS_ENCRYPTION_KEY=
@@ -181,8 +182,10 @@ WORDPRESS_ENCRYPTION_KEY=
 
 `test:live:wordpress` creates a disposable draft post with a tiny featured image, verifies it
 through the REST API, and deletes both the post and uploaded media in cleanup. Use only a sandbox
-WordPress user that can create and delete posts and media. If the sandbox hostname is not visibly a
-sandbox/staging/test host, add the exact hostname to `AIO_LIVE_SANDBOX_HOST_ALLOWLIST`.
+WordPress user that can create and delete posts and media. The separate post, media, and delete
+allow flags must all be set to `1` so cleanup-capable live tests are never run by accident. If the
+sandbox hostname is not visibly a sandbox/staging/test host, add the exact hostname to
+`AIO_LIVE_SANDBOX_HOST_ALLOWLIST`.
 
 If any live test fails, do not mark the external integration risk as resolved. Fix the
 implementation or sandbox configuration, rerun the failing live command, and keep failure output out
