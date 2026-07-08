@@ -5,43 +5,44 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase and hardened the live OpenAI review-artifact path safety.
-- Phase: Live OpenAI Review Artifact Safety / Handoff
-- Last updated: 2026-07-08 13:56 +09:00
+- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase and hardened WordPress live-test safety before sandbox credentials are available.
+- Phase: WordPress Live Safety / Handoff
+- Last updated: 2026-07-08 14:09 +09:00
 
 ## 1. Current Goal
 
 Current objective:
 
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
-- This pass reduced risk around human-review artifacts for live OpenAI generated articles by preventing accidental writes into tracked repository paths.
+- This pass reduced risk around WordPress live verification by requiring explicit delete permission for cleanup-capable sandbox tests.
 - Overall goal is still not complete. Do not call the goal complete until representative article quality artifacts are generated/reviewed, WordPress live/sandbox posting is proven, and remaining high-risk flows are verified.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `7ca6e71 Guard OpenAI live artifact paths`
-- Latest implementation commit before this pass: `a113787 Add OpenAI live review artifacts`
-- Last known good local quality commit: `7ca6e71`
+- Latest implementation commit: `dd53a90 Require explicit WordPress live delete permission`
+- Latest implementation commit before this pass: `7ca6e71 Guard OpenAI live artifact paths`
+- Last known good local quality commit: `dd53a90`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed on PR #1 after this pass was pushed.
-- GitHub Actions status: `Typecheck, lint, tests, E2E, build` passed on PR #1 after this pass was pushed.
+- CodeRabbit OSS review status: Passed on PR #1 before this pass at head `bdef769`; needs re-check after this pass is pushed.
+- GitHub Actions status: Passed on PR #1 before this pass at head `bdef769`; needs re-check after this pass is pushed.
 
 ## 3. What Was Done
 
 Completed in this Codex pass:
 
 - Re-read current handoff, quality audit, package scripts, branch status, and PR check status.
-- Confirmed PR #1 was green before this pass at head `6bc2b8f`.
-- Ran `npm.cmd run test:live:readiness:wordpress`; it failed closed because sandbox WordPress settings are not configured. No WordPress live call was made.
-- Hardened optional OpenAI live artifact capture:
-  - `AIO_LIVE_OPENAI_ARTIFACT_DIR` must resolve inside `test-results` or the OS temp directory.
-  - Paths such as `.` or `docs/live-openai` now fail before artifact writing.
-  - The live OpenAI test validates artifact-directory safety before `vi.resetModules()` and before any OpenAI provider call when artifact writing is enabled.
-- Added unit coverage for allowed and rejected artifact paths.
-- Updated `docs/testing.md` and `docs/quality-audit.md`.
+- Confirmed PR #1 was green before this pass at head `bdef769`.
+- Added explicit WordPress live delete permission:
+  - `AIO_LIVE_WORDPRESS_ALLOW_DELETE=1`
+- Updated `scripts/check-live-readiness.mjs` so WordPress live readiness requires post, media, delete, and non-production confirmation flags.
+- Updated `tests/live/wordpress.live.test.ts` so the live WordPress spec checks the delete allow flag before creating disposable resources.
+- Updated `.env.live.example`, `docs/testing.md`, and `docs/quality-audit.md`.
+- Added readiness unit coverage proving:
+  - WordPress live checks fail closed when the delete flag is missing.
+  - WordPress live checks become ready only when post/media/delete/sandbox flags and sandbox credentials are all set.
+- Ran `npm.cmd run test:live:readiness:wordpress`; it failed closed because local sandbox WordPress settings are not configured. No WordPress live call was made.
 - Ran full local quality successfully.
-- Verified the invalid live artifact directory path fails in about 5ms with a local validation error before any OpenAI API call.
 
 Relevant prior completed work that still matters:
 
@@ -56,25 +57,25 @@ Relevant prior completed work that still matters:
 
 Main files changed in this pass:
 
+- `.env.live.example`
 - `docs/testing.md`
 - `docs/quality-audit.md`
-- `tests/live/openai.live.test.ts`
-- `tests/live/openai-live-artifacts.ts`
-- `tests/unit/openai-live-artifacts.test.ts`
+- `scripts/check-live-readiness.mjs`
+- `tests/live/wordpress.live.test.ts`
+- `tests/unit/live-readiness-script.test.ts`
 - `AI_HANDOFF.md`
 
 ## 5. Current Status
 
 - Local quality gate is green for this implementation.
-- The artifact helper is covered by unit tests and does not affect normal CI because live OpenAI tests are manual/live-only.
-- Unsafe OpenAI artifact directories now fail before provider calls.
-- OpenAI artifact-producing live generation is still blocked by provider quota/rate limiting from the prior pass unless the external state has recovered.
+- WordPress live readiness now fails closed unless post/media/delete permissions are all explicit.
 - WordPress live readiness is not configured locally and fails closed before live calls.
-- PR #1 is green after this pass was pushed.
+- OpenAI artifact-producing live generation is still blocked by provider quota/rate limiting from the prior pass unless the external state has recovered.
+- PR #1 needs CodeRabbit/GitHub Actions re-check after the new implementation and handoff commits are pushed.
 
 ## 6. Known Issues
 
-- `npm.cmd run test:live:openai` with artifact writing enabled failed in the prior pass at the initial Responses API health call due to OpenAI quota/rate limiting. Re-run after the provider limit recovers.
+- `npm.cmd run test:live:openai` with artifact writing enabled failed in a prior pass at the initial Responses API health call due to OpenAI quota/rate limiting. Re-run after the provider limit recovers.
 - No live OpenAI review artifacts have been produced yet.
 - `npm.cmd run test:live:readiness:wordpress` currently fails because sandbox WordPress credentials and allow flags are missing.
 - WordPress live posting was not run in this pass.
@@ -88,10 +89,10 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed on PR #1 after this pass was pushed.
+- Review status: Passed before this pass at PR head `bdef769`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
-- Deferred findings: none for this pass.
+- Deferred findings: current head needs CodeRabbit review after push.
 - False positives / not applicable: none.
 
 ## 8. Optional Bugbot Findings
@@ -109,56 +110,44 @@ Commands run during this pass:
 
 ```bash
 gh pr checks 1 --repo kotakase2022-jpg/aio
-npm.cmd run test:live:readiness:wordpress
-npx.cmd vitest run tests/unit/openai-live-artifacts.test.ts
+npx.cmd vitest run tests/unit/live-readiness-script.test.ts
 npm.cmd run typecheck
-$env:AIO_LIVE_OPENAI_WRITE_ARTIFACTS='1'; $env:AIO_LIVE_OPENAI_ARTIFACT_DIR='docs/live-openai'; npx.cmd vitest run --config vitest.live.config.ts tests/live/openai.live.test.ts
+npm.cmd run test:live:readiness:wordpress
 npm.cmd run quality
-git commit -m "Guard OpenAI live artifact paths"
-git push
-gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
+git commit -m "Require explicit WordPress live delete permission"
 ```
 
 Results:
 
-- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at pre-pass PR head `6bc2b8f`.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at pre-pass PR head `bdef769`.
   - CodeRabbit passed.
-  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m47s.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed.
+- Focused Vitest: passed, 1 file / 10 tests.
+- `npm.cmd run typecheck`: passed.
 - `npm.cmd run test:live:readiness:wordpress`: failed closed before live calls.
   - Missing `WORDPRESS_SANDBOX_SITE_URL`.
   - Missing `WORDPRESS_SANDBOX_USERNAME`.
   - Missing `WORDPRESS_SANDBOX_APPLICATION_PASSWORD`.
   - Missing `AIO_LIVE_WORDPRESS_ALLOW_POST`.
   - Missing `AIO_LIVE_WORDPRESS_ALLOW_MEDIA`.
+  - Missing `AIO_LIVE_WORDPRESS_ALLOW_DELETE`.
   - Missing `AIO_LIVE_CONFIRM_NON_PRODUCTION`.
-- Focused Vitest: passed, 1 file / 3 tests.
-- `npm.cmd run typecheck`: passed.
-- Expected invalid artifact-dir live spec check: failed locally before provider calls with `AIO_LIVE_OPENAI_ARTIFACT_DIR must resolve inside test-results or the OS temp directory`.
 - `npm.cmd run quality`: passed.
   - typecheck passed
   - lint passed
   - test integrity passed, 48 files
-  - unit/integration tests passed, 44 files / 339 tests
+  - unit/integration tests passed, 44 files / 341 tests
   - contract tests passed, 3 files / 13 tests
   - coverage passed: statements 88.39%, branches 76.39%, functions 92.35%, lines 88.83%
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
-- Pre-commit hook for `7ca6e71`: passed.
+- Pre-commit hook for `dd53a90`: passed.
   - lint passed
   - test integrity passed
-- Pre-push hook after the implementation and handoff commits: passed.
-  - lint passed
-  - typecheck passed
-  - test integrity passed
-  - unit/integration tests passed, 44 files / 339 tests
-  - contract tests passed, 3 files / 13 tests
-- PR #1 checks after push: passed.
-  - CodeRabbit passed.
-  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed.
 
 Not run in this pass:
 
-- `npm.cmd run test:live:openai` with a valid artifact directory.
+- `npm.cmd run test:live:openai`
 - `npm.cmd run test:live:supabase`
 - `npm.cmd run test:live:wordpress`
 
@@ -166,8 +155,10 @@ Not run in this pass:
 
 Next Claude Code should:
 
-1. Review the OpenAI artifact path guard for Windows path behavior and secret hygiene.
-2. After OpenAI quota/rate limiting recovers, run:
+1. Review the new `AIO_LIVE_WORDPRESS_ALLOW_DELETE` readiness gate and live test assertion.
+2. Re-check PR #1 CodeRabbit and GitHub Actions after this handoff is pushed.
+3. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
+4. After OpenAI quota/rate limiting recovers, run:
 
 ```bash
 $env:AIO_LIVE_OPENAI_WRITE_ARTIFACTS='1'
@@ -175,22 +166,20 @@ $env:AIO_LIVE_OPENAI_ARTIFACT_DIR='test-results/live-openai'
 npm.cmd run test:live:openai
 ```
 
-3. Inspect the generated JSON/HTML artifacts for human editorial quality, not just machine score.
-4. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
+5. Inspect the generated JSON/HTML artifacts for human editorial quality, not just machine score.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `tests/live/openai-live-artifacts.ts`: confirm path guard accepts only ignored/temp locations and does not leak secrets.
-- `tests/live/openai.live.test.ts`: confirm path validation happens before provider calls when artifact writing is enabled.
-- `tests/unit/openai-live-artifacts.test.ts`: confirm the safety regression covers valid and invalid locations.
-- `docs/testing.md` and `docs/quality-audit.md`: confirm the new path restriction and remaining proof gaps are clear.
+- `scripts/check-live-readiness.mjs`: confirm WordPress live tests require all explicit mutation permissions.
+- `tests/live/wordpress.live.test.ts`: confirm the delete flag is checked before any live mutation.
+- `tests/unit/live-readiness-script.test.ts`: confirm the safety regression covers missing and present delete flags.
+- `docs/testing.md` and `docs/quality-audit.md`: confirm the new WordPress delete flag and remaining proof gaps are clear.
 
 ## 12. Risk Notes
 
-- Artifact HTML includes `result.body_html`; `generateAioArticle` sanitizes this before returning. Keep this assumption in mind if future tests write raw provider output.
-- Artifact files are written under ignored `test-results/` by default. The new guard also allows OS temp paths for test isolation.
+- WordPress live posting still needs sandbox credentials before execution.
+- The live WordPress test creates and deletes disposable resources; keep post, media, delete, and non-production confirmations explicit.
 - Provider/model behavior can drift. Keep deterministic local article-quality scoring as the final safety cap.
-- WordPress live posting still needs sandbox or explicit production approval before execution.
 - Production Supabase live verification was explicitly authorized and passed previously, but should remain guarded.
 
 ## 13. Do Not Touch
