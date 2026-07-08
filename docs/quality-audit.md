@@ -559,8 +559,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  were green at PR head `9538ffa` after the OpenAI error-guidance and live-artifact preservation
-  pass was pushed.
+  were green after the OpenAI error-guidance and live-artifact preservation pass was pushed. The
+  runtime implementation commit is `9538ffa`; later head commits are handoff/docs-only.
 
 ## Current Self Score
 

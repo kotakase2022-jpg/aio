@@ -21,11 +21,11 @@ Current objective:
 
 - Branch: `codex/persistent-quality-gate-operations`
 - Latest implementation commit: `9538ffa Clarify OpenAI quota failures and preserve live artifacts`
-- Latest handoff/docs commit before this pass: `f870d2d Refresh handoff after live provider checks`
+- Latest head: handoff/docs-only commit after `9538ffa`; see `git log --oneline -3`.
 - Last known good local quality commit: `9538ffa`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: Passed at PR head `9538ffa`.
-- GitHub Actions status: Passed at PR head `9538ffa`.
+- CodeRabbit OSS review status: Passed on the latest pushed PR head after this handoff refresh.
+- GitHub Actions status: Passed on the latest pushed PR head after this handoff refresh.
 
 ## 3. What Was Done
 
@@ -76,7 +76,7 @@ Main files changed in this pass:
 
 ## 5. Current Status
 
-- PR #1 is green at `9538ffa`.
+- PR #1 is green on the latest pushed PR head. The runtime implementation change is `9538ffa`; later head commits are handoff/docs-only.
 - Supabase production write/delete live verification is proven for the disposable generation-job path under explicit approval.
 - OpenAI live generation now passes for the three representative samples with artifact writing enabled.
 - OpenAI provider errors now distinguish quota/billing/project issues from transient rate limits.
@@ -97,10 +97,10 @@ Main files changed in this pass:
 
 CodeRabbit OSS review status:
 
-- Review status: Passed at PR head `9538ffa`.
+- Review status: Passed on the latest pushed PR head after this handoff refresh.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
-- Deferred findings: none known after `9538ffa`.
+- Deferred findings: none known after the latest pushed PR check.
 - False positives / not applicable: none.
 
 ## 8. Optional Bugbot Findings
@@ -154,9 +154,9 @@ Results:
   - test integrity passed, 48 files
   - unit/integration tests passed, 44 files / 343 tests
   - contract tests passed, 3 files / 13 tests
-- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed at PR head `9538ffa`.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed after the OpenAI implementation commit and again after the handoff-only refresh.
   - CodeRabbit passed.
-  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m54s.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed.
 
 Not run in this pass:
 
