@@ -454,7 +454,7 @@ export function evaluateArticleQuality(
   const genericPhraseHits = countPhraseHits(text, genericPhrases);
   const verboseAiPhraseHits = countPhraseHits(text, verboseAiPhrases);
   const repetitiveNecessityPhraseHits = countPhraseHits(text, repetitiveNecessityPhrases);
-  const unsupportedClaimHits = countPhraseHits(text, unsupportedStrongClaims);
+  const unsupportedClaimHits = countUnsupportedStrongClaimHits(text);
   const numericClaims = extractNumericClaims(text);
   const unsupportedNumericClaims = numericClaims.filter(
     (claim) => !hasNearbyNumericClaimSupport(text, claim.index),
@@ -475,6 +475,7 @@ export function evaluateArticleQuality(
   const genericEndingHits = findGenericEndingHits(endingText);
   const hasSpecificEndingFrame = genericEndingHits.length === 0;
   const editorialAnchorCount = editorialAnchorPatterns.filter((pattern) => pattern.test(text)).length;
+  const hasConcreteDetail = hasConcreteAnchors && (hasNumbers || editorialAnchorCount >= 3);
   const tableTexts = extractTableTexts(html);
   const hasTable = tableTexts.length > 0;
   const hasUsefulTable = tableTexts.some(isUsefulDecisionTable);
@@ -666,9 +667,11 @@ export function evaluateArticleQuality(
     {
       id: "concrete-detail",
       label: "具体性",
-      passed: hasNumbers && hasConcreteAnchors,
-      detail: hasNumbers && hasConcreteAnchors
-        ? "数字や現場文脈を含む具体的な説明があります。"
+      passed: hasConcreteDetail,
+      detail: hasConcreteDetail
+        ? hasNumbers
+          ? "数字や現場文脈を含む具体的な説明があります。"
+          : "現場例、判断基準、注意点などを含む具体的な説明があります。"
         : "数字、現場例、判断基準、失敗例などを増やす余地があります。",
     },
     {
@@ -1127,6 +1130,86 @@ function countPhraseHits(text: string, phrases: string[]) {
     const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return total + (text.match(new RegExp(escaped, "gi"))?.length ?? 0);
   }, 0);
+}
+
+function countUnsupportedStrongClaimHits(text: string) {
+  return unsupportedStrongClaims.reduce((total, phrase) => {
+    let count = 0;
+    let fromIndex = 0;
+
+    while (fromIndex < text.length) {
+      const index = text.indexOf(phrase, fromIndex);
+      if (index < 0) {
+        break;
+      }
+
+      if (!isQualifiedStrongClaimUsage(text, phrase, index)) {
+        count += 1;
+      }
+
+      fromIndex = index + phrase.length;
+    }
+
+    return total + count;
+  }, 0);
+}
+
+function isQualifiedStrongClaimUsage(text: string, phrase: string, index: number) {
+  const sentence = extractSentenceAround(text, index);
+  const before = text.slice(Math.max(0, index - 18), index);
+  const after = text.slice(index + phrase.length, index + phrase.length + 32);
+
+  if (isInsideJapaneseOrAsciiQuote(text, index)) {
+    return true;
+  }
+
+  if (/(?:です|ます|できます|でしょう|よい|良い|可能)か[。．！？?]?/.test(sentence)) {
+    return true;
+  }
+
+  if (/(とは)?(?:言えません|いえません|言えない|いえない|限りません|限らない|ではありません|断定できません|断定しません)/.test(after)) {
+    return true;
+  }
+
+  if (phrase === "必ず" && /しも/.test(after) && /(ない|ありません|限りません|限らない)/.test(sentence)) {
+    return true;
+  }
+
+  return /[「『“"]\s*$/.test(before) && /^[」』”"]/.test(after.trimStart());
+}
+
+function isInsideJapaneseOrAsciiQuote(text: string, index: number) {
+  const before = text.slice(0, index);
+  const after = text.slice(index);
+  const quotePairs: Array<[string, string]> = [
+    ["「", "」"],
+    ["『", "』"],
+    ["“", "”"],
+    ['"', '"'],
+  ];
+
+  return quotePairs.some(([open, close]) => {
+    const lastOpen = before.lastIndexOf(open);
+    const lastClose = before.lastIndexOf(close);
+    if (lastOpen <= lastClose) {
+      return false;
+    }
+
+    return after.indexOf(close) >= 0;
+  });
+}
+
+function extractSentenceAround(text: string, index: number) {
+  const beforeStops = ["。", "．", ".", "!", "！", "?", "？"].map((mark) =>
+    text.lastIndexOf(mark, index - 1),
+  );
+  const sentenceStart = Math.max(0, Math.max(...beforeStops) + 1);
+  const afterStops = ["。", "．", ".", "!", "！", "?", "？"]
+    .map((mark) => text.indexOf(mark, index))
+    .filter((position) => position >= 0);
+  const sentenceEnd = afterStops.length ? Math.min(...afterStops) + 1 : text.length;
+
+  return text.slice(sentenceStart, sentenceEnd).trim();
 }
 
 function findGenericOpeningHits(openingText: string) {

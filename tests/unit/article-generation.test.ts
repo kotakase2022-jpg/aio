@@ -358,6 +358,9 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("Treat payload.form.theme as the editorial brief");
     expect(call?.instructions).toContain("preserve at least one role phrase");
     expect(call?.instructions).toContain("same audience signal");
+    expect(call?.instructions).toContain("multiple roles separated by commas");
+    expect(call?.instructions).toContain("do not collapse them into one broad team label");
+    expect(call?.instructions).toContain("Reuse each explicit role phrase");
     expect(call?.instructions).toContain("comparison axes");
     expect(call?.instructions).toContain("Do not merely summarize competitors");
     expect(call?.instructions).toContain("Do not state uncertain facts as facts");
@@ -380,6 +383,8 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("Do not open with boilerplate framing");
     expect(call?.instructions).toContain("Avoid mechanical heading sequences");
     expect(call?.instructions).toContain("Avoid single Japanese sentences over roughly 130");
+    expect(call?.timeoutMs).toBe(150_000);
+    expect(call?.maxOutputTokens).toBe(16_000);
     expect(input.payload.form.imageCount).toBe(3);
     expect(input.payload.form.wordCount).toBe(5000);
   });

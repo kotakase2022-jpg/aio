@@ -17,6 +17,8 @@ export type ArticleGenerationPayload = {
   competitorResearch?: Record<string, unknown> | null;
 };
 
+const ARTICLE_GENERATION_TIMEOUT_MS = 150_000;
+
 export async function generateAioArticle(payload: ArticleGenerationPayload) {
   const compactPayload = {
     form: compactForm(payload.form),
@@ -36,6 +38,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "When using tables, make them useful decision tables. Avoid thin tables with only 項目/内容 or 概要/説明; include comparison axes, conditions, costs, timing, owner/team, caveats, source notes, or field observations.",
       "Treat payload.form.theme as the editorial brief. Reflect its topic, keywords, target reader, search intent, and article goal in the title, opening answer, headings, examples, FAQ, tags, and categories.",
       "When target reader or audience text includes explicit roles or job titles, preserve at least one role phrase in the opening answer and return the same audience signal in at least one heading, example, or FAQ item.",
+      "If the target reader lists multiple roles separated by commas, do not collapse them into one broad team label. Reuse each explicit role phrase, or a very close natural equivalent, at least once across body_html, headings, examples, or FAQ.",
       "When competitor material or competitorResearch is provided, use it to identify comparison axes, missing perspectives, objections, and differentiation points. Do not merely summarize competitors.",
       "Do not paste long reference or competitor passages verbatim. Keep source meaning and facts, then rewrite them as definitions, decision criteria, caveats, comparison axes, or source notes.",
       "Treat payload.form.primaryInfo as high-priority first-party information. Use it to add original field observations, concrete examples, company-specific viewpoints, caveats, and practical nuance so the article does not become commodity content.",
@@ -78,7 +81,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
         "AIO最適化済みの記事ドラフトを日本語で生成してください。payload.form.regenerationInstruction がある場合は、既存入力を前提にその再作成方針を優先して、構成・本文・タイトル・FAQ・画像プロンプトを再作成してください。冒頭に結論、明確なH2/H3、定義文、箇条書き、必要なら表、FAQを含めてください。想定読者に役割名や職種名がある場合は、冒頭と少なくとも1つの見出し・具体例・FAQにその読者語を自然に戻してください。各H2では、一次情報・参照情報・競合情報から得られる具体例、判断基準、注意点、現場で起きる失敗パターンのいずれかを必ず入れ、薄い1段落だけで終えないでください。根拠が薄い内容は断定しないでください。数字・費用・期間・件数・割合・人数・順位に見える表現は、近くに出典、条件、時点、目安、現場観察、または未確認である旨を添えてください。body_htmlはHTML込みで9000文字以内に収め、JSONを必ず最後まで閉じてください。結び文章が入力されている場合は、記事末尾に自然に反映してください。執筆者情報がある場合は本文末尾に「この記事の執筆者」ブロックを入れてください。payload.form.wordCount をHTMLタグを除いた本文の目標文字数として扱い、目標の90〜110%を狙い、130%を超えないよう本文量を調整してください。payload.form.imageCount が0の場合は image_prompts を空配列にし、1以上の場合は featured から順に指定枚数分だけ返してください。",
       payload: compactPayload,
     }),
-    timeoutMs: 105_000,
+    timeoutMs: ARTICLE_GENERATION_TIMEOUT_MS,
     maxOutputTokens: 16_000,
   });
 
