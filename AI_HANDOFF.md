@@ -7,7 +7,7 @@
 - Loop: 3 continuation
 - Loop number inferred from: The previous handoff used `Loop: 3 continuation`; the active 100/100 objective still lacks live sandbox proof and human article-quality review, so this remains a narrow continuation rather than a new loop.
 - Phase: Autonomous Improvement / English Conclusion Boilerplate Detection / Handoff
-- Last updated: 2026-07-08 09:37 +09:00
+- Last updated: 2026-07-08 09:43 +09:00
 
 ## 1. Current Goal
 
@@ -37,7 +37,10 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 - PR status before this pass at pushed head `5d674fb`:
   - CodeRabbit: pass
   - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m54s
-- PR status after `712cdc4`: not yet checked on GitHub until this handoff/docs update is pushed.
+- PR status after this pass at pushed head `2634144`:
+  - CodeRabbit: pass
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m34s
+- If this file is included in a later status-only handoff commit, re-check the latest PR head; status-only handoff commits do not change runtime code.
 - CodeRabbit OSS review status: CodeRabbit is installed and responding on PR #1. Current pass is a narrow generated-output-quality heuristic/prompt/test update.
 
 ## 3. What Was Done
@@ -69,8 +72,8 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 
 - Implementation/test commit `712cdc4` exists locally and passed focused checks plus the full local quality gate.
 - Handoff/docs updates are prepared in this file and `docs/quality-audit.md`.
-- Local branch is ahead of origin until the handoff/docs commit is pushed.
-- Hosted CodeRabbit and GitHub Actions are green on the previous pushed head `5d674fb`; they need to be re-checked after pushing this implementation and handoff/docs update.
+- Hosted CodeRabbit and GitHub Actions are green on pushed head `2634144`.
+- If a later status-only handoff commit is pushed, Claude Code should re-check the latest PR head.
 
 ## 6. Known Issues
 
@@ -84,7 +87,7 @@ The overall goal is not complete. Live sandbox contract tests for OpenAI/Supabas
 ## 7. CodeRabbit Review
 
 - Review status before this pass: PR #1 open; CodeRabbit SUCCESS and GitHub Actions SUCCESS at head `5d674fb`.
-- Review status after this pass: not yet checked on GitHub until the current local commits are pushed.
+- Review status after this pass: CodeRabbit SUCCESS and GitHub Actions SUCCESS at pushed head `2634144`.
 - Current pass:
   - Strengthens English commodity-AI ending phrase detection.
   - Keeps detection narrow to obvious boilerplate rather than broad legitimate business vocabulary.
@@ -115,6 +118,9 @@ npx.cmd vitest run tests/unit/article-quality.test.ts tests/unit/article-generat
 git diff --check
 npm.cmd run quality
 git commit -m "Detect English conclusion boilerplate"
+git commit -m "Update handoff after English conclusion detection"
+git push
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
 ```
 
 Results:
@@ -134,23 +140,32 @@ Results:
   - `npm run test:e2e`: passed, 49 PC Chromium tests.
   - `npm run build`: passed, Next.js 16.2.9 production build.
 - Commit pre-commit hook for `712cdc4`: passed, `npm run lint` and `npm run test:integrity`.
+- Handoff/docs commit `2634144`: passed pre-commit, `npm run lint` and `npm run test:integrity`.
+- `git push`: passed pre-push.
+  - `npm run lint`: passed.
+  - `npm run typecheck`: passed.
+  - `npm run test:integrity`: passed, 47 files.
+  - `npm run test`: passed, 43 files / 329 tests.
+  - `npm run test:contract`: passed, 3 files / 13 tests.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed at head `2634144`.
+  - CodeRabbit: pass.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m34s.
 
 Not run:
 
 - `npm.cmd run test:live:*` because sandbox credentials and explicit non-production confirmation are required.
-- Hosted PR checks after pushing this pass. Claude Code should re-check after the handoff/docs commit is pushed.
+- Hosted PR checks after any later status-only handoff commit.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Re-check PR #1 after the latest commits are pushed:
-   - `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`
-2. Review the English conclusion boilerplate detection and prompt alignment:
+1. Review the English conclusion boilerplate detection and prompt alignment:
    - `src/lib/article-quality.ts`
    - `src/lib/server/article-generation.ts`
    - `src/lib/quality-regeneration-action.ts`
    - related unit tests
+2. Confirm CodeRabbit does not raise a new concern around the phrase list or false-positive risk.
 3. If checks stay green and no major CodeRabbit comments appear, decide whether the next pass should be live/sandbox readiness or another small generated-output quality regression test.
 4. Run `npm.cmd run quality` after any code changes and record the result here.
 

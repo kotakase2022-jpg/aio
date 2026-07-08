@@ -65,7 +65,14 @@ runtime code.
 
 The current local branch also includes implementation commit `712cdc4`, which detects English
 conclusion boilerplate, aligns generation/regeneration instructions, and adds focused unit coverage.
-Hosted CodeRabbit and Actions must be re-checked after the handoff/docs update is pushed.
+The latest pushed head containing that conclusion-boilerplate pass and handoff update was checked:
+
+- Commit: `2634144`
+- CodeRabbit: success
+- GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m34s
+
+Later status-only handoff commits should be re-checked on the current PR head; they do not change
+runtime code.
 
 The latest verified pushed PR head before the image-alt HTML sync pass was:
 
