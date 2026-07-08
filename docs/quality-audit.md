@@ -32,17 +32,17 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 08:39 +09:00 after extending shared English token
-matching to FAQ input-reflection checks. The shared helper now preserves the same boundary behavior
-across title-quality, article-quality, and FAQ-quality layers: hyphen, slash, and colon can work as
-natural editorial separators, while underscore-joined technical tokens and longer words do not
-accidentally satisfy input signals:
+The latest local full gate passed on 2026-07-08 08:57 +09:00 after strengthening English
+commodity-AI boilerplate detection and regeneration guidance. The app now flags and discourages
+additional phrases such as `today's rapidly evolving landscape`, `comprehensive guide`,
+`delve into`, and `navigate the complexities`, while keeping the prior shared English token boundary
+behavior across title-quality, article-quality, and FAQ-quality layers:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
   - `npm run lint`: passed
   - `npm run test:integrity`: passed, 47 files
-  - `npm run test`: passed, 43 files / 327 tests
+  - `npm run test`: passed, 43 files / 328 tests
   - `npm run test:contract`: passed, 3 files / 13 tests
   - `npm run test:coverage`: passed, statements 88.2%, branches 76.19%, functions 92.13%,
     lines 88.64%
@@ -246,6 +246,11 @@ The latest pushed head containing that FAQ token-boundary pass and handoff updat
 Later status-only handoff commits should be re-checked on the current PR head; they do not change
 runtime code.
 
+The current local branch also includes implementation commit `3584f06`, which expands English
+commodity-AI boilerplate detection and regeneration guidance for phrases such as `today's rapidly
+evolving landscape`, `comprehensive guide`, `delve into`, and `navigate the complexities`. Hosted
+CodeRabbit and Actions must be re-checked after the handoff/docs update is pushed.
+
 Current E2E coverage includes 48 Chromium PC tests across the core article workflow, required-input
 validation, failure recovery, file/URL retry behavior, generation logs, WordPress posting, draft
 state transitions, copy/export recovery, persistent generation jobs, uploaded images, and previous
@@ -256,9 +261,11 @@ decision frame, not only later in the body. It also checks common AI-ish commodi
 including generic openings, English boilerplate, repeated formulaic sentence frames, thin sections,
 mechanical headings, repeated "necessary" phrasing such as "必要があります", and alternate Japanese
 commodity phrases such as "求められています" and "と言えます". This prevents drafts from passing
-quality checks when they read like generic AI copy. It also verifies shared English first-party
-signal boundaries in article bodies: `form-based` can preserve the input term `form`, but
-`platform_form` does not count as a natural reflection.
+quality checks when they read like generic AI copy. It also flags English boilerplate such as
+`today's fast-paced digital landscape`, `today's rapidly evolving landscape`, `comprehensive guide`,
+`delve into`, `navigate the complexities`, and `unlock the potential`. Shared English first-party
+signal boundaries are also verified in article bodies: `form-based` can preserve the input term
+`form`, but `platform_form` does not count as a natural reflection.
 
 Title-quality coverage checks that selected titles and title candidates are specific enough for the
 topic. It now also flags short-topic beginner/explainer templates that can make otherwise useful
@@ -322,8 +329,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  are green through test/handoff head `032a07f`; re-check any later status-only handoff commits on
-  the current PR head.
+  are green through status-only head `f1b1e5e`; re-check the current pass after pushing the latest
+  implementation and handoff/docs commits.
 
 ## Current Self Score
 
@@ -338,8 +345,8 @@ human review of real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit if a new status-only handoff commit is pushed after
-   `ae15e74`.
+1. Re-check hosted Actions and CodeRabbit after implementation commit `3584f06` and the handoff/docs
+   update are pushed.
 2. Re-check PR #1 for any later CodeRabbit inline findings after the latest push.
 3. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 4. Prepare disposable live-test settings in `.env.live.local`, then rerun `npm run test:live:readiness`.
