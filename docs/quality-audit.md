@@ -32,6 +32,21 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex continuation on 2026-07-08 17:50 +09:00:
+
+- Re-checked PR #1 at head `5abd638`:
+  - CodeRabbit: success.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success.
+- Re-ran live provider readiness for the remaining external proof gaps:
+  - `npm.cmd run test:live:readiness:supabase` passed.
+  - `npm.cmd run test:live:readiness:wordpress` failed closed before live calls because sandbox
+    WordPress site URL, username, application password, post/media/delete allow flags, and
+    non-production confirmation are not configured.
+- Re-ran the explicitly approved production Supabase write/delete contract path:
+  - `npm.cmd run test:live:supabase` passed, 1 file / 1 test.
+  - The test created, read, listed, updated, and deleted a disposable generation-job record.
+- No application code changed in this continuation.
+
 Latest Codex pass on 2026-07-08 16:33 +09:00:
 
 - Tightened OpenAI article-generation instructions for non-commodity output:
@@ -685,7 +700,7 @@ These gaps prevent a true 100/100 completion claim:
   checks in the latest run, but the model's own self-evaluation still scores 88-91 because it
   honestly notes missing real public/sandbox data. A final human editorial review remains useful
   before claiming perfect non-commodity article quality.
-- Supabase production write/delete verification passed again on 2026-07-08 15:53 +09:00 with
+- Supabase production write/delete verification passed again on 2026-07-08 17:50 +09:00 with
   explicit user approval and a production-specific confirmation flag. A long-term staging-only
   procedure is still preferable for routine release checks.
 - WordPress posting remains guarded by a sandbox live test, but sandbox WordPress credentials are
@@ -703,9 +718,9 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  were green at PR head `34be79d` after the `4b58edc` implementation pass and the follow-up handoff
-  update. GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m34s, and CodeRabbit
-  completed successfully. Re-check any subsequent status-only handoff commit if pushed.
+  were green at PR head `5abd638` after the `4b58edc` implementation pass and follow-up handoff /
+  audit updates. GitHub Actions `Typecheck, lint, tests, E2E, build` and CodeRabbit completed
+  successfully. Re-check any subsequent status-only handoff commit if pushed.
 
 ## Current Self Score
 

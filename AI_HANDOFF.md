@@ -5,19 +5,18 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: Previous handoffs kept Loop 3 continuation for the long-running reliability / live-verification / non-commodity article-quality objective. This pass continued the same Codex implementation phase by addressing the remaining OpenAI live artifact weaknesses from the prior handoff.
-- Phase: Article Quality Improvement / Live Verification / Handoff
-- Last updated: 2026-07-08 17:36 +09:00
+- Loop number inferred from: Previous handoffs kept Loop 3 continuation for the long-running reliability / live-verification / non-commodity article-quality objective. This short continuation stayed in Loop 3 because it only rechecked the remaining live provider proof gaps and refreshed handoff evidence.
+- Phase: Live Verification / Handoff
+- Last updated: 2026-07-08 17:50 +09:00
 
 ## 1. Current Goal
 
 Current objective:
 
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
-- This pass focused on the next concrete article-quality gaps:
-  - recognize numeric claims supported by a short previous sentence with real first-party / estimate / condition context;
-  - reduce short-main-body failures by telling the model that the body before FAQ / author / source blocks must still carry enough substance;
-  - rerun live OpenAI artifacts and full local quality.
+- This short continuation focused on the next remaining proof gap that could be executed safely:
+  - rerun Supabase live readiness and the explicitly approved production write/delete contract test;
+  - confirm WordPress live posting still fails closed before live calls until sandbox credentials and allow flags are configured.
 - Overall goal is still not complete. Do not call the goal complete until WordPress sandbox/live posting is proven and representative generated outputs receive human editorial review.
 
 ## 2. Current Branch / Commit / PR
@@ -25,12 +24,12 @@ Current objective:
 - Branch: `codex/persistent-quality-gate-operations`
 - Latest implementation commit: `4b58edc Tighten numeric and body length quality checks`
 - Latest checked local quality state: `4b58edc`, verified by `npm.cmd run quality`.
-- Latest pushed code-bearing / handoff head checked before this final status-only update: `34be79d Refresh handoff after clean live article checks`
-- Hosted state checked for `34be79d`:
+- Latest pushed code-bearing / handoff head checked before this final status-only update: `5abd638 Record hosted checks after live article cleanup`
+- Hosted state checked for `5abd638`:
   - CodeRabbit: success
-  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m34s
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: passed for `34be79d`. Re-check this status-only handoff update if pushed.
+- CodeRabbit OSS review status: passed for `5abd638`. Re-check this status-only handoff update if pushed.
 
 ## 3. What Was Done
 
@@ -53,6 +52,11 @@ Completed in this Codex pass:
 - Pushed `4b58edc` + `34be79d` and confirmed hosted PR checks:
   - CodeRabbit: pass.
   - GitHub Actions `Typecheck, lint, tests, E2E, build`: pass in 3m34s.
+- In this short continuation, rechecked PR #1 at `5abd638`; CodeRabbit and GitHub Actions were still green.
+- Ran `npm.cmd run test:live:readiness:supabase`; it passed.
+- Ran `npm.cmd run test:live:supabase` with the previously approved production write/delete path; it passed and cleaned up the disposable generation-job record.
+- Ran `npm.cmd run test:live:readiness:wordpress`; it failed closed before live calls because sandbox WordPress credentials and explicit allow flags are not configured.
+- Updated `docs/quality-audit.md` and this handoff with the latest live-provider evidence.
 
 ## 4. Files Changed
 
@@ -77,7 +81,7 @@ Current state:
   - `2026-07-08T08-33-19-923Z-saas-onboarding-operations.json`: score 91; article body 100, title 100, FAQ 100, meta 100; article-body failed checks: none.
   - `2026-07-08T08-34-27-812Z-aio-content-operations.json`: score 91; article body 98, title 100, FAQ 100, meta 100; article-body failed checks: none.
 - WordPress live readiness is still not configured locally and is expected to fail closed before live calls.
-- Supabase production write/delete passed in a prior explicitly approved run; it was not rerun in this pass because this pass did not touch Supabase behavior.
+- Supabase production write/delete passed again in this continuation with explicit user approval and the production-specific confirmation flag.
 
 ## 6. Known Issues
 
@@ -93,7 +97,7 @@ Known issues:
   - `AIO_LIVE_CONFIRM_NON_PRODUCTION`
 - WordPress live posting was not run in this pass.
 - OpenAI live samples now have no deterministic article-body failed checks, but model self-evaluation remains 88-91 because the model honestly notes missing real public/sandbox data. Do not inflate the score by hiding those caveats.
-- Supabase production live write/delete has passed in a prior approved run, but keep using `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1` only when explicitly authorized. Do not set `AIO_LIVE_CONFIRM_NON_PRODUCTION=1` for the production project.
+- Supabase production live write/delete has passed again in this continuation, but keep using `AIO_LIVE_CONFIRM_PRODUCTION_WRITE=1` only when explicitly authorized. Do not set `AIO_LIVE_CONFIRM_NON_PRODUCTION=1` for the production project.
 - `.env.local` contains live provider credentials locally. Do not print, commit, or paste secrets anywhere.
 - Do not mark the active 100/100 goal complete yet.
 
@@ -101,7 +105,7 @@ Known issues:
 
 CodeRabbit OSS review status:
 
-- Review status: success at checked pushed head `34be79d`; re-check this status-only handoff update if pushed.
+- Review status: success at checked pushed head `5abd638`; re-check this status-only handoff update if pushed.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
 - Deferred findings: none known.
@@ -129,6 +133,9 @@ npm.cmd run quality
 git commit -m "Tighten numeric and body length quality checks"
 git push
 gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
+npm.cmd run test:live:readiness:supabase
+npm.cmd run test:live:readiness:wordpress
+npm.cmd run test:live:supabase
 ```
 
 Results:
@@ -158,12 +165,15 @@ Results:
 - `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed for `34be79d`.
   - CodeRabbit passed.
   - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m34s.
+- `gh pr view 1 --repo kotakase2022-jpg/aio --json headRefOid,statusCheckRollup,url,isDraft,state,title`: PR #1 open and ready, head `5abd638`; CodeRabbit and GitHub Actions success.
+- `npm.cmd run test:live:readiness:supabase`: passed.
+- `npm.cmd run test:live:readiness:wordpress`: failed closed before live calls because sandbox WordPress credentials and explicit post/media/delete/non-production allow flags are not configured.
+- `npm.cmd run test:live:supabase`: passed, 1 file / 1 test, in 891ms after readiness; disposable generation-job record was cleaned up.
 
 Not run in this pass:
 
-- `npm.cmd run test:live:supabase` because production Supabase write/delete had already passed in the prior explicitly approved run and this pass did not touch Supabase behavior.
-- `npm.cmd run test:live:readiness:wordpress` because known missing sandbox credentials and allow flags remain unchanged.
 - `npm.cmd run test:live:wordpress` because sandbox WordPress credentials and allow flags are still not configured.
+- Full `npm.cmd run quality` was not rerun in this short continuation because no application code or tests changed after the already-green local and hosted quality gates.
 
 ## 10. Next Recommended Action
 
