@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 3 continuation
 - Loop number inferred from: Previous handoffs kept Loop 3 continuation for the long-running reliability / live-verification / non-commodity article-quality objective. This pass continued Loop 3 by turning the latest human editorial article-quality findings into deterministic checks and repair guidance.
-- Phase: Article Quality Improvement / Live Verification / Handoff
-- Last updated: 2026-07-08 18:35 +09:00
+- Phase: Production Merge / Deployment / Handoff
+- Last updated: 2026-07-08 18:48 +09:00
 
 ## 1. Current Goal
 
@@ -19,18 +19,24 @@ Current objective:
   - keep quality edit guidance and regeneration actions specialized for the new check id;
   - recognize concrete SaaS onboarding operational FAQ answers as practical specificity instead of generic filler.
 - Overall goal is still not complete. Do not call the goal complete until WordPress sandbox/live posting is proven and representative generated outputs receive human editorial review.
+- This handoff was refreshed after PR #1 was merged to `main` and deployed to Vercel production.
 
 ## 2. Current Branch / Commit / PR
 
-- Branch: `codex/persistent-quality-gate-operations`
+- Branch: `main`
+- Latest merge commit on `main`: `ca59610 Merge pull request #1 from kotakase2022-jpg/codex/persistent-quality-gate-operations`
+- Latest PR head merged: `774521b Refresh handoff after deterministic quality checks`
 - Latest implementation commit: `ee1a9de Add deterministic checks for repetitive heading quality`
-- Latest checked local quality state: `ee1a9de`, verified by `npm.cmd run quality`.
-- Latest pushed code-bearing / handoff head checked before this final status-only update: `5abd638 Record hosted checks after live article cleanup`
-- Hosted state checked for `5abd638`:
-  - CodeRabbit: success
-  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success
+- Latest checked local quality state: `ee1a9de`, verified by `npm.cmd run quality`; push-time checks for `774521b` also passed.
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
-- CodeRabbit OSS review status: passed for `5abd638`. Re-check this status-only handoff update if pushed.
+- PR status: merged to `main` on 2026-07-08 18:43 +09:00.
+- CodeRabbit OSS review status: passed for `774521b`.
+- GitHub Actions status for `774521b`: `Typecheck, lint, tests, E2E, build` passed in 3m41s.
+- Vercel production deployment:
+  - Deployment ID: `dpl_8qHKF8PDEQpKLFiYmTNNoofnL5jj`
+  - Production URL: https://aio-article-generator.vercel.app
+  - Deployment URL: https://aio-article-generator-mra8mi2e1-sl2026.vercel.app
+  - Status: Ready
 
 ## 3. What Was Done
 
@@ -74,6 +80,15 @@ Completed in this Codex pass:
 - Added unit coverage for the new article-quality check, the valid first-heading decision-angle case, SaaS onboarding FAQ specificity, and the quality-guidance / regeneration-action coverage guard.
 - Re-ran OpenAI live generation after these deterministic evaluator updates. The latest three representative artifacts have no failed article, title, FAQ, or meta checks.
 - Re-ran full `npm.cmd run quality`; it passed.
+- Pushed final local commits `ee1a9de` and `774521b`; pre-push checks passed.
+- Rechecked PR #1 at head `774521b`; CodeRabbit and GitHub Actions were green.
+- Merged PR #1 to `main` with merge commit `ca59610`.
+- Synced local `main` to `origin/main`.
+- Deployed `main` to Vercel production:
+  - `vercel --prod --yes` completed successfully.
+  - Production alias: https://aio-article-generator.vercel.app
+  - Deployment inspect with `--scope sl2026` reported status Ready.
+- Ran a production HTTP smoke check; `/` returned 200 and redirected to `/demo-login?next=%2F`, which is expected because simple demo auth protects the app.
 
 ## 4. Files Changed
 
@@ -96,6 +111,9 @@ Current state:
 
 - Focused tests are green.
 - Local full quality gate is green.
+- PR #1 is merged to `main`.
+- Vercel production deployment is Ready at https://aio-article-generator.vercel.app.
+- Production root smoke check returned HTTP 200 and landed on the demo login flow.
 - OpenAI live generation passed after the numeric-context and main-body-length pass.
 - Latest OpenAI live artifacts from the final successful deterministic-check run:
   - `2026-07-08T09-28-51-571Z-one-person-contractor-workers-compensation.json`: score 88; article body 100, title 100, FAQ 100, meta 100; failed checks: none.
@@ -127,7 +145,7 @@ Known issues:
 
 CodeRabbit OSS review status:
 
-- Review status: success at checked pushed head `5abd638`; re-check this status-only handoff update if pushed.
+- Review status: success at merged PR head `774521b`.
 - Critical findings: none known for this pass.
 - Resolved findings: none in this pass.
 - Deferred findings: none known.
@@ -140,7 +158,7 @@ Cursor Bugbot optional review:
 - Status: Not run.
 - Findings: none.
 - Actions taken: none.
-- Reason: Cursor Bugbot is optional/backup only. This pass did not change auth, credential handling, payment, production deployment, or application production write/delete behavior.
+- Reason: Cursor Bugbot is optional/backup only. CodeRabbit and GitHub Actions passed before merge. This pass performed a production deployment, but did not add new auth, credential-handling, payment, or application write/delete behavior after CodeRabbit review.
 
 ## 9. Verification Results
 
@@ -171,6 +189,16 @@ npm.cmd run quality
 npx.cmd vitest run tests/unit/article-quality.test.ts tests/unit/faq-quality.test.ts tests/unit/quality-edit-guidance.test.ts tests/unit/quality-regeneration-action-coverage.test.ts
 npm.cmd run typecheck
 npm.cmd run quality
+git push
+gh pr view 1 --repo kotakase2022-jpg/aio --json headRefOid,statusCheckRollup,url,isDraft,state,title,mergeStateStatus,mergeable
+gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
+gh pr merge 1 --repo kotakase2022-jpg/aio --merge
+git fetch origin main
+git checkout main
+git pull --ff-only origin main
+vercel --prod --yes
+Invoke-WebRequest -Uri 'https://aio-article-generator.vercel.app' -UseBasicParsing -TimeoutSec 30
+vercel inspect https://aio-article-generator-mra8mi2e1-sl2026.vercel.app --scope sl2026
 ```
 
 Results:
@@ -237,6 +265,16 @@ Results:
   - coverage passed: statements 88.6%, branches 76.64%, functions 92.52%, lines 89.03%
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
+- `git push`: passed; pre-push hook ran lint, typecheck, test integrity, unit/integration tests, and contract tests successfully.
+- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed for `774521b`.
+  - CodeRabbit passed.
+  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed in 3m41s.
+- `gh pr merge 1 --repo kotakase2022-jpg/aio --merge`: passed; PR #1 merged with merge commit `ca59610`.
+- `git checkout main` and `git pull --ff-only origin main`: passed; local `main` is aligned with `origin/main`.
+- `vercel --prod --yes`: passed; deployment `dpl_8qHKF8PDEQpKLFiYmTNNoofnL5jj` is Ready and aliased to https://aio-article-generator.vercel.app.
+- Production smoke via `Invoke-WebRequest`: passed; HTTP 200, final URI `https://aio-article-generator.vercel.app/demo-login?next=%2F`.
+- `vercel inspect https://aio-article-generator.vercel.app`: failed when run without `--scope` because the local CLI defaulted to the wrong Vercel scope. This was not a deployment failure.
+- `vercel inspect https://aio-article-generator-mra8mi2e1-sl2026.vercel.app --scope sl2026`: passed; deployment status Ready and production aliases listed.
 
 Not run in this pass:
 
@@ -246,9 +284,10 @@ Not run in this pass:
 
 Next Claude Code should:
 
-1. Review implementation commits `4b58edc`, `f6d1c24`, and `ee1a9de`, especially whether previous-sentence numeric support, first-heading-angle evaluation, and SaaS FAQ operational specificity are narrow enough.
-2. Human-read the latest ignored OpenAI live HTML artifacts for editorial naturalness, because the deterministic checks are now clean but the model still self-scores 88.
-3. Prepare a disposable WordPress sandbox and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
+1. Review merged PR #1 on `main`, especially whether previous-sentence numeric support, first-heading-angle evaluation, and SaaS FAQ operational specificity are narrow enough.
+2. Open https://aio-article-generator.vercel.app in a PC browser and run a manual smoke through demo login and the primary article-generation screen.
+3. Human-read the latest ignored OpenAI live HTML artifacts for editorial naturalness, because the deterministic checks are now clean but the model still self-scores 88.
+4. Prepare a disposable WordPress sandbox and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 
 ## 11. Suggested Review Scope for Claude Code
 
@@ -269,6 +308,7 @@ Suggested review scope:
 Risks / human confirmation needed:
 
 - OpenAI live artifact generation passed, but provider behavior is stochastic and can drift.
+- Production deploy completed and the root HTTP smoke passed, but a full production browser E2E was not run after deploy.
 - The latest deterministic body, FAQ, title, and meta checks are clean, and the first H2s in the current sample no longer repeat the opening definition angle. The model's self-evaluation still reflects missing real source data. Do not treat that as a bug unless product requirements prefer deterministic scoring over model self-review.
 - WordPress live posting still needs sandbox credentials before execution.
 - The live WordPress test creates and deletes disposable resources; keep post, media, delete, and non-production confirmations explicit.
