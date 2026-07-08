@@ -622,6 +622,17 @@ deduplication, author block preservation, edited image alt text in publishable H
 content, featured image alt text in WordPress media metadata, and WordPress post route propagation of
 recoverable publishing failures.
 
+The current local branch also includes implementation commit `89fe2b5`, which hardens article
+quality checks and live OpenAI timeout handling:
+
+- Strong-claim detection no longer treats quoted terms, FAQ questions, or explicit negated answers
+  as unsupported claims.
+- The concrete-detail check can pass with rich editorial anchors such as field examples, decision
+  criteria, caveats, and failure patterns even when adding a fabricated number would be worse.
+- Article generation now preserves multiple explicit target-reader role phrases more directly.
+- Article generation uses a 150 second request timeout, still inside the `/api/generate-article`
+  route's 180 second maximum duration.
+
 Additional manual PC browser smoke on 2026-07-06:
 
 - Started a local dev server with dummy test credentials only.
@@ -650,10 +661,16 @@ Additional manual PC browser smoke on 2026-07-06:
 These gaps prevent a true 100/100 completion claim:
 
 - Live OpenAI generation quality now has fresh artifact-producing evidence from 2026-07-08
-  15:50 +09:00. Three representative samples passed the live threshold and wrote ignored JSON/HTML
-  artifacts. New artifact output includes a repeatable editorial checklist, reader/structure
-  snapshot, and deterministic quality-check breakdown. One sample still flagged target-length and
-  numeric-claim support improvements, so a final human editorial review remains useful before
+  17:01-17:04 +09:00 after the timeout and evaluator hardening pass. Three representative samples
+  passed the live threshold and wrote ignored JSON/HTML artifacts:
+  - `2026-07-08T08-02-32-424Z-one-person-contractor-workers-compensation.json`: score 88; article
+    body 92, title 100, FAQ 100, meta 100; remaining body issue was `target-length-alignment`.
+  - `2026-07-08T08-03-39-283Z-saas-onboarding-operations.json`: score 88; article body 92, title
+    100, FAQ 100, meta 100; remaining body issue was `section-specificity`.
+  - `2026-07-08T08-04-38-293Z-aio-content-operations.json`: score 88; article body 100, title 100,
+    FAQ 100, meta 100.
+  These artifacts include the repeatable editorial checklist, reader/structure snapshot, and
+  deterministic quality-check breakdown. A final human editorial review remains useful before
   claiming perfect non-commodity article quality.
 - Supabase production write/delete verification passed again on 2026-07-08 15:53 +09:00 with
   explicit user approval and a production-specific confirmation flag. A long-term staging-only
@@ -673,8 +690,8 @@ These gaps prevent a true 100/100 completion claim:
 - CodeRabbit OSS is installed for `kotakase2022-jpg/aio` and responds on PR #1. It is the standard
   PR review path. Cursor Bugbot is optional/backup only.
 - The large Loop 2 + Loop 3 work has been committed and pushed to PR #1. Hosted CI and CodeRabbit
-  were green after the prior OpenAI live-artifact checklist pass. The current deterministic
-  quality-review artifact pass still needs hosted PR automation confirmation after it is pushed.
+  were green at PR head `e7374f7` before the local `89fe2b5` implementation pass. Hosted PR
+  automation still needs re-checking after the current local commits are pushed.
 
 ## Current Self Score
 
@@ -689,7 +706,7 @@ for real generated-output quality are not yet complete.
 
 Highest-value next actions:
 
-1. Re-check hosted Actions and CodeRabbit after any subsequent handoff-only push.
+1. Push the current local commits, then re-check hosted Actions and CodeRabbit on PR #1.
 2. Fix any new CodeRabbit Critical/High findings first; otherwise proceed to Claude Code review.
 3. Review the latest `test-results/live-openai/*.html` outputs for editorial naturalness, not just
    machine score. Pay particular attention to FAQ specificity and whether the target reader is
