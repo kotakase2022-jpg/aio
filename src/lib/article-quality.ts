@@ -474,6 +474,8 @@ export function evaluateArticleQuality(
   const hasSpecificOpeningFrame = genericOpeningHits.length === 0;
   const genericOpeningPhraseHits = countPhraseHits(openingText, genericPhrases);
   const hasLowGenericOpeningDensity = genericOpeningPhraseHits <= 1;
+  const openingBeforeFirstHeading = extractTextBeforeFirstHeading(html);
+  const openingBeforeFirstHeadingHasDefinition = hasDefinitionStyleText(openingBeforeFirstHeading);
   const endingText = text.slice(-520);
   const genericEndingHits = findGenericEndingHits(endingText);
   const hasSpecificEndingFrame = genericEndingHits.length === 0;
@@ -500,6 +502,11 @@ export function evaluateArticleQuality(
     !lengthRange ||
     (visibleCharacterCount >= lengthRange.min && visibleCharacterCount <= lengthRange.max);
   const headings = extractHeadings(html);
+  const firstHeading = headings[0] ?? "";
+  const hasDistinctFirstHeadingAngle =
+    !openingBeforeFirstHeadingHasDefinition ||
+    !firstHeading ||
+    !isDefinitionStyleHeading(firstHeading);
   const mechanicalHeadingHits = headings.filter(isMechanicalHeading).length;
   const mechanicalSequenceHeadingHits = headings.filter(isMechanicalSequenceHeading).length;
   const hasEditorialHeadings = headings.length >= 2 && mechanicalHeadingHits === 0;
@@ -873,6 +880,14 @@ export function evaluateArticleQuality(
             .filter(isMechanicalSequenceHeading)
             .slice(0, 3)
             .join("」「")}」のような連番・手順型の見出しが続いています。まず/次に/最後に型ではなく、判断、失敗、比較、現場差分が伝わる見出しへ変えると編集記事らしくなります。`,
+    },
+    {
+      id: "opening-heading-angle",
+      label: "冒頭定義後の見出し角度",
+      passed: hasDistinctFirstHeadingAngle,
+      detail: hasDistinctFirstHeadingAngle
+        ? "冒頭の定義文を、最初の見出しが別の判断・失敗・比較・運用角度へ展開しています。"
+        : "冒頭で定義を書いた直後に、最初のH2/H3も定義型になっています。最初の見出しは、読者が最初に判断すること、失敗パターン、比較軸、運用チェックポイントへ変えると編集記事らしくなります。",
     },
     {
       id: "comparison-table",
@@ -1354,6 +1369,20 @@ function extractHeadings(html: string) {
   }
 
   return headings.filter(Boolean);
+}
+
+function extractTextBeforeFirstHeading(html: string) {
+  const firstHeading = /<h[23][^>]*>/i.exec(html);
+  const openingHtml = firstHeading?.index ? html.slice(0, firstHeading.index) : "";
+  return normalizeText(stripHtml(openingHtml));
+}
+
+function hasDefinitionStyleText(value: string) {
+  return /(とは|を指します|を意味します|\bmeans\b|\brefers to\b)/i.test(value);
+}
+
+function isDefinitionStyleHeading(heading: string) {
+  return hasDefinitionStyleText(heading);
 }
 
 function extractTableTexts(html: string) {

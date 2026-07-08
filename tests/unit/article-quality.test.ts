@@ -17,6 +17,40 @@ describe("evaluateArticleQuality", () => {
     expect(result.checks.every((check) => check.passed)).toBe(true);
   });
 
+  test("flags a first heading that repeats the opening definition angle", () => {
+    const result = evaluateArticleQuality(`
+      <p>AIO記事制作フローとは、参照情報、一次情報、競合調査、WordPress投稿を分けて管理する編集工程を指します。当社の支援現場では、承認担当と出典確認が分かれず、公開前に手戻りする相談が12件ありました。</p>
+      <h2>AIO記事制作フローとは、AI出力ではなく情報管理の設計を指す</h2>
+      <p>判断基準は、参照元、一次情報、競合差分、担当、期間、費用を別々に確認することです。失敗例として、出典と自社経験を同じ根拠として断定するケースがあります。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>現場観察は一次情報として扱います。</li><li>注意点は、公開前に出典URLを本文へ残すことです。</li></ul>
+      <h2>FAQ</h2>
+      <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "opening-heading-angle", passed: false }),
+    );
+    expect(result.improvements.join(" ")).toContain("最初のH2/H3も定義型");
+    expect(result.score).toBeLessThan(100);
+  });
+
+  test("allows a first heading that turns the opening definition into a decision angle", () => {
+    const result = evaluateArticleQuality(`
+      <p>AIO記事制作フローとは、参照情報、一次情報、競合調査、WordPress投稿を分けて管理する編集工程を指します。当社の支援現場では、承認担当と出典確認が分かれず、公開前に手戻りする相談が12件ありました。</p>
+      <h2>公開前に分けるべき承認と出典の確認軸</h2>
+      <p>判断基準は、参照元、一次情報、競合差分、担当、期間、費用を別々に確認することです。失敗例として、出典と自社経験を同じ根拠として断定するケースがあります。</p>
+      <table><tr><th>判断基準</th><td>担当、期間、費用、参照元、未確認情報の扱いを比較します。</td></tr></table>
+      <ul><li>現場観察は一次情報として扱います。</li><li>注意点は、公開前に出典URLを本文へ残すことです。</li></ul>
+      <h2>FAQ</h2>
+      <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。出典: https://example.com/reference</p>
+    `);
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "opening-heading-angle", passed: true }),
+    );
+  });
+
   test("passes primary information reflection when first-party terms return in the body", () => {
     const result = evaluateArticleQuality(
       `

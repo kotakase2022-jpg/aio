@@ -32,6 +32,43 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex continuation on 2026-07-08 18:34 +09:00:
+
+- Promoted the first-heading editorial issue from prompt-only guidance to deterministic quality
+  evaluation:
+  - `article-quality` now flags `opening-heading-angle` when a definition-style opening paragraph
+    is followed by a first H2/H3 that repeats the same definition angle.
+  - Edit guidance and quality-regeneration actions now include specialized instructions for that
+    check, so the UI does not fall back to generic repair copy.
+- Updated FAQ specificity evaluation for SaaS onboarding answers that use concrete operational
+  terms such as management education, usage logs, work outputs, approval flow, approval owners,
+  and continuation decisions. This keeps practical SaaS FAQ answers from being misclassified as
+  generic while preserving the minimum answer-length and generic-filler checks.
+- Added focused unit coverage for:
+  - repeated definition opening / first-heading failures;
+  - valid decision-angle first headings after a definition opening;
+  - SaaS onboarding operational FAQ answers;
+  - quality edit guidance and regeneration-action coverage for the new check id.
+- Re-ran OpenAI live generation with artifact writing enabled:
+  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
+  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
+- Latest live article artifact scores:
+  - `2026-07-08T09-28-51-571Z-one-person-contractor-workers-compensation.json`: score 88; article
+    body 100, title 100, FAQ 100, meta 100; failed checks: none.
+  - `2026-07-08T09-30-02-161Z-saas-onboarding-operations.json`: score 88; article body 98, title
+    100, FAQ 100, meta 100; failed checks: none.
+  - `2026-07-08T09-31-06-515Z-aio-content-operations.json`: score 88; article body 100, title 100,
+    FAQ 100, meta 100; failed checks: none.
+- `npm.cmd run quality` passed after the implementation:
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 349 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.6%, branches 76.64%, functions 92.52%, lines 89.03%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
+
 Latest Codex continuation on 2026-07-08 18:10 +09:00:
 
 - Re-ran OpenAI live generation with artifact writing enabled:
@@ -715,18 +752,20 @@ Additional manual PC browser smoke on 2026-07-06:
 These gaps prevent a true 100/100 completion claim:
 
 - Live OpenAI generation quality now has fresh artifact-producing evidence from 2026-07-08
-  18:06-18:09 +09:00 after the numeric-context, main-body-length, and first-heading-angle passes. Three representative
+  18:28-18:31 +09:00 after the numeric-context, main-body-length, first-heading-angle, and
+  SaaS FAQ specificity passes. Three representative
   samples passed the live threshold and wrote ignored JSON/HTML artifacts:
-  - `2026-07-08T09-06-29-174Z-one-person-contractor-workers-compensation.json`: score 88; article
-    body 98, title 100, FAQ 100, meta 100; article-body failed checks: none.
-  - `2026-07-08T09-07-49-202Z-saas-onboarding-operations.json`: score 88; article body 100, title
-    100, FAQ 100, meta 100; article-body failed checks: none.
-  - `2026-07-08T09-08-48-443Z-aio-content-operations.json`: score 90; article body 100, title 100,
-    FAQ 100, meta 100; article-body failed checks: none.
+  - `2026-07-08T09-28-51-571Z-one-person-contractor-workers-compensation.json`: score 88; article
+    body 100, title 100, FAQ 100, meta 100; failed checks: none.
+  - `2026-07-08T09-30-02-161Z-saas-onboarding-operations.json`: score 88; article body 98, title
+    100, FAQ 100, meta 100; failed checks: none.
+  - `2026-07-08T09-31-06-515Z-aio-content-operations.json`: score 88; article body 100, title 100,
+    FAQ 100, meta 100; failed checks: none.
   These artifacts include the repeatable editorial checklist, reader/structure snapshot, and
   deterministic quality-check breakdown. The deterministic body checks no longer show failed
-  checks in the latest run, and the first H2s no longer repeat the opening definition angle in the
-  latest human-read sample. The model's own self-evaluation still scores 88-90 because it
+  checks in the latest run, the first H2s no longer repeat the opening definition angle, and FAQ
+  specificity now recognizes concrete SaaS operational answers. The model's own self-evaluation
+  still scores 88 because it
   honestly notes missing real public/sandbox data. A final human editorial review remains useful
   before claiming perfect non-commodity article quality.
 - Supabase production write/delete verification passed again on 2026-07-08 17:50 +09:00 with

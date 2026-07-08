@@ -70,6 +70,10 @@ export function qualityRegenerationAction(checkId: string) {
     return "重要なポイント、メリット等の見出しを、読者の判断、失敗、比較軸が分かる見出しに変える。";
   }
 
+  if (checkId === "opening-heading-angle") {
+    return "冒頭で定義を書いた直後の最初のH2/H3を、定義の言い換えではなく、読者の最初の判断、失敗パターン、比較軸、運用チェックポイントが伝わる見出しへ置き換える。";
+  }
+
   if (checkId === "sentence-length") {
     return "長い一文を、結論、条件、例外、具体例に分けて短くする。";
   }

@@ -143,6 +143,10 @@ export function qualityCheckEditGuidance(checkId: string) {
     return "修正先: 本文HTML。まず/次に型の見出しを、判断、失敗、比較、現場差分が伝わる見出しへ変えます。";
   }
 
+  if (checkId === "opening-heading-angle") {
+    return "修正先: 本文HTML。冒頭で定義を書いた直後の最初のH2/H3は、同じ定義の言い換えではなく、読者の最初の判断、失敗パターン、比較軸、運用チェックポイントが伝わる見出しに変えます。";
+  }
+
   if (checkId === "sentence-length") {
     return "修正先: 本文HTML。長い一文を、結論、条件、例外、具体例に分けて短くします。";
   }

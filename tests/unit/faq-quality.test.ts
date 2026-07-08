@@ -52,6 +52,34 @@ describe("evaluateFaqQuality", () => {
     expect(result.improvements.join(" ")).toContain("一般論寄り");
   });
 
+  test("recognizes SaaS onboarding operational terms as practical FAQ specificity", () => {
+    const result = evaluateFaqQuality({
+      faqItems: [
+        {
+          question: "初期設定が終わっていればオンボーディングは成功ですか？",
+          answer:
+            "成功判定には早いです。判断基準は、顧客管理者が権限変更や社内説明を自力で進められるかです。CSが設定を代行した場合ほど、管理者教育の確認を別日に置きます。",
+        },
+        {
+          question: "3週目の利用定着は何を見ればよいですか？",
+          answer:
+            "3週目は当社支援で相談が増えやすい目安です。ログイン数だけでなく、顧客の業務成果物がSaaS内で作られたかを見ます。月次業務の商材では、初回の月次処理後にずらします。",
+        },
+        {
+          question: "社内承認フローが曖昧な場合、CSはどこまで介入しますか？",
+          answer:
+            "CSが承認を代行するのではなく、申請先、承認者、想定期間、止まりやすい操作を顧客と可視化します。決裁者と管理者の認識が違う場合は、継続判断前に同席の場を作ります。",
+        },
+      ],
+      themeText: "BtoB SaaS オンボーディング 管理者教育 利用定着 承認フロー",
+      primaryInfo: "当社支援では初期設定後の3週目に利用が止まる相談が目立つ。",
+    });
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "faq-answer-specificity", passed: true }),
+    );
+  });
+
   test("flags short English FAQ questions that sound like commodity AI copy", () => {
     const result = evaluateFaqQuality({
       faqItems: [

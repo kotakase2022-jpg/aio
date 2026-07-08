@@ -184,6 +184,9 @@ function isGenericQuestion(question: string) {
   return genericQuestionPatterns.some((pattern) => pattern.test(normalized));
 }
 
+const operationalAnswerSpecificityPattern =
+  /(管理者教育|利用ログ|業務成果物|承認フロー|申請先|承認者|決裁者|理解度|継続判断|同席|月次処理|初回利用|権限変更|社内説明|問い合わせ件数)/;
+
 function hasSpecificAnswer(answer: string) {
   const normalized = answer.replace(/\s+/g, " ").trim();
   if (Array.from(normalized).length < 35) {
@@ -192,6 +195,7 @@ function hasSpecificAnswer(answer: string) {
 
   return (
     /[0-9０-９]/.test(normalized) ||
+    operationalAnswerSpecificityPattern.test(normalized) ||
     /(例|現場|相談|判断|条件|注意|失敗|費用|期間|担当|体制|参照|出典|未確認|比較|差分|リスク|line|forms?|cost|team|timeline|source|risk|example|condition|case|field|client)/i.test(
       normalized,
     )
