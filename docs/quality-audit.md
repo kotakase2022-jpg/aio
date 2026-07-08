@@ -32,11 +32,12 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
-The latest local full gate passed on 2026-07-08 08:57 +09:00 after strengthening English
-commodity-AI boilerplate detection and regeneration guidance. The app now flags and discourages
-additional phrases such as `today's rapidly evolving landscape`, `comprehensive guide`,
-`delve into`, and `navigate the complexities`, while keeping the prior shared English token boundary
-behavior across title-quality, article-quality, and FAQ-quality layers:
+The latest local full gate passed on 2026-07-08 09:18 +09:00 after scoping missing generated-image
+recovery to the image slots requested by `imageCount`. A one-image draft with an extra `inline-1`
+prompt no longer shows an unnecessary recovery banner, while real partial failures inside the
+requested slots remain visible and recoverable. This sits on top of the existing English
+commodity-AI boilerplate detection and regeneration guidance for phrases such as `today's rapidly
+evolving landscape`, `comprehensive guide`, `delve into`, and `navigate the complexities`:
 
 - `npm.cmd run quality`
   - `npm run typecheck`: passed
@@ -46,8 +47,13 @@ behavior across title-quality, article-quality, and FAQ-quality layers:
   - `npm run test:contract`: passed, 3 files / 13 tests
   - `npm run test:coverage`: passed, statements 88.2%, branches 76.19%, functions 92.13%,
     lines 88.64%
-  - `npm run test:e2e`: passed, 48 Chromium PC tests
+  - `npm run test:e2e`: passed, 49 Chromium PC tests
   - `npm run build`: passed, Next.js 16.2.9 production build
+
+The current local branch includes implementation commit `96ef26b`, which respects saved
+`imageCount` when showing missing-image recovery prompts and adds E2E coverage for extra prompts
+beyond the requested image count. Hosted CodeRabbit and Actions must be re-checked after the
+handoff/docs update is pushed.
 
 The latest verified pushed PR head before the image-alt HTML sync pass was:
 
