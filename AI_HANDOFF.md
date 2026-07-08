@@ -5,24 +5,24 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 3 continuation
-- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase by improving OpenAI failure guidance, producing fresh live article artifacts, and confirming PR automation.
-- Phase: OpenAI Reliability / Article Quality Evidence / Handoff
-- Last updated: 2026-07-08 15:18 +09:00
+- Loop number inferred from: The prior handoff kept Loop 3 continuation for the long-running reliability and 100/100 improvement objective. This pass continued the same Codex phase by making live OpenAI artifacts easier to review for non-commodity quality.
+- Phase: Article Quality Evidence / Handoff
+- Last updated: 2026-07-08 15:32 +09:00
 
 ## 1. Current Goal
 
 Current objective:
 
 - Move the AIO article generator closer to 100/100 for functional reliability, PC browser flows, daily-use UX, and non-commodity generated article quality.
-- This pass focused on OpenAI live reliability and article-quality proof after the prior run exposed ambiguous quota/rate-limit messaging.
+- This pass focused on making OpenAI live article artifacts more useful for human editorial review.
 - Overall goal is still not complete. Do not call the goal complete until representative OpenAI article artifacts are generated/reviewed, WordPress live/sandbox posting is proven, and remaining high-risk flows are verified.
 
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/persistent-quality-gate-operations`
-- Latest implementation commit: `9538ffa Clarify OpenAI quota failures and preserve live artifacts`
-- Latest head: handoff/docs-only commit after `9538ffa`; see `git log --oneline -3`.
-- Last known good local quality commit: `9538ffa`
+- Latest implementation commit before this pass: `9538ffa Clarify OpenAI quota failures and preserve live artifacts`
+- Latest head before this pass: `1ec2b4a Clarify latest handoff-only PR head`
+- Last known good local quality commit before this pass: `9538ffa`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/1
 - CodeRabbit OSS review status: Passed on the latest pushed PR head after this handoff refresh.
 - GitHub Actions status: Passed on the latest pushed PR head after this handoff refresh.
@@ -32,28 +32,16 @@ Current objective:
 Completed in this Codex pass:
 
 - Re-read `AGENTS.md`, `CLAUDE.md`, `AI_HANDOFF.md`, `README.md`, and `package.json`.
-- Confirmed PR #1 was green at head `f870d2d`:
+- Confirmed PR #1 was green at head `1ec2b4a`:
   - CodeRabbit: success
-  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m36s
-- Split OpenAI 429 handling into precise messages:
-  - `insufficient_quota` / `billing_hard_limit_reached` now points to OpenAI Billing/Usage and API-key project configuration.
-  - transient 429 rate limits now keep wait/reduce-input guidance.
-- Added unit coverage for `billing_hard_limit_reached` and updated unit/contract expectations for rate-limit vs quota guidance.
-- Adjusted `tests/live/openai.live.test.ts` so generated JSON/HTML artifacts are written before quality assertions. If a future sample fails, the failed output remains available for review.
-- Re-ran OpenAI live generation with:
-  - `AIO_LIVE_CONTRACT_TESTS=1`
-  - `AIO_LIVE_OPENAI_WRITE_ARTIFACTS=1`
-  - `AIO_LIVE_OPENAI_ARTIFACT_DIR=test-results/live-openai`
-- `npm.cmd run test:live:openai` passed in 196.88s.
-- Live artifact scores:
-  - one-person contractor workers compensation: 88
-  - SaaS onboarding operations: 84
-  - AIO content operations: 90
-- `npm.cmd run quality` passed after the OpenAI error and live-test changes.
-- Updated `docs/quality-audit.md` and this handoff with the new OpenAI live evidence.
-- Pushed `9538ffa` and watched PR #1 automation to completion:
-  - CodeRabbit: success
-  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m54s
+  - GitHub Actions `Typecheck, lint, tests, E2E, build`: success in 3m34s
+- Improved OpenAI live artifact review output:
+  - `buildOpenAILiveArtifact` now includes a stable `reviewChecklist`.
+  - Rendered artifact HTML now includes an `Editorial Review Checklist` section.
+  - Rendered artifact HTML now includes a `Reader And Structure Snapshot` with target reader, search intent, headings, and FAQ answers.
+- Updated artifact unit coverage so JSON and HTML review aids are asserted and secrets are still not exposed.
+- Ran full local quality successfully.
+- Ran WordPress live readiness; it failed closed before any live calls because sandbox WordPress credentials and explicit allow flags remain unset.
 
 Relevant prior completed work that still matters:
 
@@ -67,10 +55,8 @@ Relevant prior completed work that still matters:
 
 Main files changed in this pass:
 
-- `src/lib/server/openai.ts`
-- `tests/unit/openai.test.ts`
-- `tests/contract/openai.contract.test.ts`
-- `tests/live/openai.live.test.ts`
+- `tests/live/openai-live-artifacts.ts`
+- `tests/unit/openai-live-artifacts.test.ts`
 - `docs/quality-audit.md`
 - `AI_HANDOFF.md`
 
@@ -80,9 +66,9 @@ Main files changed in this pass:
 - Supabase production write/delete live verification is proven for the disposable generation-job path under explicit approval.
 - OpenAI live generation now passes for the three representative samples with artifact writing enabled.
 - OpenAI provider errors now distinguish quota/billing/project issues from transient rate limits.
-- Live OpenAI JSON/HTML artifacts are available under ignored `test-results/live-openai/`.
+- Future live OpenAI JSON/HTML artifacts will include a human editorial checklist and reader/structure snapshot for more repeatable non-commodity review.
 - WordPress live readiness is not configured locally and fails closed before live calls.
-- Local full quality gate is green for this implementation pass.
+- Local full quality gate is green for this pass.
 
 ## 6. Known Issues
 
@@ -117,25 +103,19 @@ Cursor Bugbot optional review:
 Commands run during this pass:
 
 ```bash
-gh pr checks 1 --repo kotakase2022-jpg/aio
-npx.cmd vitest run tests/unit/openai.test.ts tests/contract/openai.contract.test.ts
+npx.cmd vitest run tests/unit/openai-live-artifacts.test.ts
 npm.cmd run typecheck
-npm.cmd run test:live:openai
 npm.cmd run quality
-git commit -m "Clarify OpenAI quota failures and preserve live artifacts"
-git push
-gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15
+npm.cmd run test:live:readiness:wordpress
 ```
 
 Results:
 
-- Initial `gh pr checks 1 --repo kotakase2022-jpg/aio`: passed at PR head `f870d2d`.
+- Initial PR status check: passed at PR head `1ec2b4a`.
   - CodeRabbit passed.
   - GitHub Actions `Typecheck, lint, tests, E2E, build` passed.
-- Focused Vitest: passed, 2 files / 21 tests.
+- Focused Vitest: passed, 1 file / 3 tests.
 - `npm.cmd run typecheck`: passed.
-- First `npm.cmd run test:live:openai` after error-message change reached live generation but failed because the SaaS sample scored 71 against the 75 threshold. It wrote the first sample artifact before failing.
-- After moving artifact writing before assertions, `npm.cmd run test:live:openai` passed, 1 file / 1 test, in 196.88s.
 - `npm.cmd run quality`: passed.
   - typecheck passed
   - lint passed
@@ -145,18 +125,7 @@ Results:
   - coverage passed: statements 88.4%, branches 76.46%, functions 92.35%, lines 88.84%
   - E2E passed, 49 Chromium PC tests
   - build passed, Next.js 16.2.9 production build
-- Pre-commit hook for `9538ffa`: passed.
-  - lint passed
-  - test integrity passed, 48 files
-- Pre-push hook for `9538ffa`: passed.
-  - lint passed
-  - typecheck passed
-  - test integrity passed, 48 files
-  - unit/integration tests passed, 44 files / 343 tests
-  - contract tests passed, 3 files / 13 tests
-- `gh pr checks 1 --repo kotakase2022-jpg/aio --watch --interval 15`: passed after the OpenAI implementation commit and again after the handoff-only refresh.
-  - CodeRabbit passed.
-  - GitHub Actions `Typecheck, lint, tests, E2E, build` passed.
+- `npm.cmd run test:live:readiness:wordpress`: failed closed before live calls because `WORDPRESS_SANDBOX_SITE_URL`, `WORDPRESS_SANDBOX_USERNAME`, `WORDPRESS_SANDBOX_APPLICATION_PASSWORD`, `AIO_LIVE_WORDPRESS_ALLOW_POST`, `AIO_LIVE_WORDPRESS_ALLOW_MEDIA`, `AIO_LIVE_WORDPRESS_ALLOW_DELETE`, and `AIO_LIVE_CONFIRM_NON_PRODUCTION` are missing.
 
 Not run in this pass:
 
@@ -166,16 +135,16 @@ Not run in this pass:
 
 Next Claude Code should:
 
-1. Review the OpenAI error-message split in `src/lib/server/openai.ts`.
-2. Review the live OpenAI artifact ordering in `tests/live/openai.live.test.ts`.
+1. Review the new live artifact checklist and reader/structure snapshot in `tests/live/openai-live-artifacts.ts`.
+2. Re-run `npm.cmd run test:live:openai` with artifact writing enabled when provider cost is acceptable, then inspect the generated HTML using the new checklist.
 3. Inspect the latest `test-results/live-openai/*.html` outputs for editorial naturalness if local ignored artifacts are available.
 4. Prepare a real sandbox WordPress setup and run `npm.cmd run test:live:readiness:wordpress`, then `npm.cmd run test:live:wordpress` only after the sandbox target is confirmed.
 5. Continue with WordPress sandbox live verification or focused editorial review of the live artifacts.
 
 ## 11. Suggested Review Scope for Claude Code
 
-- `src/lib/server/openai.ts`: confirm quota/billing and transient rate-limit messages are correctly separated.
-- `tests/live/openai.live.test.ts`: confirm failed-quality live samples will leave artifacts before assertions fail.
+- `tests/live/openai-live-artifacts.ts`: confirm the review checklist is helpful, not noisy, and remains free of secrets.
+- `tests/unit/openai-live-artifacts.test.ts`: confirm artifact JSON/HTML coverage is sufficient.
 - `docs/quality-audit.md`: confirm live OpenAI scores and remaining proof gaps are accurate.
 - WordPress live sandbox readiness: confirm missing credentials and allow flags before attempting any live posting.
 

@@ -33,8 +33,11 @@ describe("OpenAI live artifact helpers", () => {
       ]);
       expect(json).toContain('"sampleName": "AIO / live review sample"');
       expect(json).toContain('"selectedTitle": "AIO Content Operations Guide"');
+      expect(json).toContain("reviewChecklist");
       expect(html).toContain("AIO Content Operations Guide");
       expect(html).toContain("OpenAI live artifact");
+      expect(html).toContain("Editorial Review Checklist");
+      expect(html).toContain("Reader And Structure Snapshot");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -50,6 +53,9 @@ describe("OpenAI live artifact helpers", () => {
     expect(artifact.input.theme).toBe(sampleFormPayload.theme);
     expect(artifact.input.referenceUrls).toEqual(["https://example.com/reference"]);
     expect(artifact.output.bodyHtml).toContain("<h2>What AIO means</h2>");
+    expect(artifact.reviewChecklist).toContain(
+      "FAQ回答が一般論で終わらず、条件、判断基準、失敗例、費用・期間・体制、参照元への注意のいずれかを含むか。",
+    );
     expect(JSON.stringify(artifact)).not.toContain("OPENAI_API_KEY");
   });
 

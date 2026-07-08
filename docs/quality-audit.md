@@ -32,6 +32,30 @@ Primary user-facing areas:
 
 ## Current Mechanical Evidence
 
+Latest Codex pass on 2026-07-08 15:32 +09:00:
+
+- Improved OpenAI live article artifacts for human editorial review:
+  - JSON artifacts now include a stable `reviewChecklist`.
+  - HTML artifacts now include an `Editorial Review Checklist` section.
+  - HTML artifacts now include a `Reader And Structure Snapshot` with target reader, search
+    intent, headings, and FAQ answers.
+- The checklist is designed to make non-commodity review reproducible instead of relying only on a
+  numeric quality score.
+- Focused verification passed:
+  - `npx.cmd vitest run tests/unit/openai-live-artifacts.test.ts`
+  - `npm.cmd run typecheck`
+- `npm.cmd run quality` passed:
+  - typecheck passed
+  - lint passed
+  - test integrity passed, 48 files
+  - unit/integration tests passed, 44 files / 343 tests
+  - contract tests passed, 3 files / 13 tests
+  - coverage passed: statements 88.4%, branches 76.46%, functions 92.35%, lines 88.84%
+  - E2E passed, 49 Chromium PC tests
+  - build passed, Next.js 16.2.9 production build
+- `npm.cmd run test:live:readiness:wordpress` failed closed before live calls because sandbox
+  WordPress credentials and explicit post/media/delete/non-production allow flags are not configured.
+
 Latest Codex pass on 2026-07-08 15:09 +09:00:
 
 - Split OpenAI 429 error guidance into two clearer product-facing paths:
@@ -539,7 +563,8 @@ These gaps prevent a true 100/100 completion claim:
 
 - Live OpenAI generation quality now has fresh artifact-producing evidence from 2026-07-08
   15:05 +09:00. Three representative samples passed the live threshold and wrote ignored JSON/HTML
-  artifacts. A final human editorial review of those artifacts is still useful before claiming
+  artifacts. New artifact output includes a repeatable editorial checklist and reader/structure
+  snapshot, but a final human editorial review of those artifacts is still useful before claiming
   perfect non-commodity article quality.
 - Supabase production write/delete verification passed again on 2026-07-08 14:45 +09:00 with
   explicit user approval and a production-specific confirmation flag. A long-term staging-only
