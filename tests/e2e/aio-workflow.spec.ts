@@ -62,20 +62,8 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.locator('a[href="#approval"]')).toHaveCount(0);
   await expect(page.locator('a[href="#wordpress"]')).toHaveCount(0);
 
-  await page.locator('a[href="#theme"]').click();
-  await expect(page).toHaveURL(/#theme/);
-  await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const themeCard = document.querySelector("#theme");
-        const stickyNav = document.querySelector('aside [class*="sticky"]');
-        const themeTop = themeCard?.getBoundingClientRect().top ?? 0;
-        const stickyBottom = stickyNav?.getBoundingClientRect().bottom ?? 0;
-
-        return Math.round(themeTop - stickyBottom);
-      }),
-    )
-    .toBeGreaterThanOrEqual(8);
+  await expect(page.getByTestId("input-wizard-step-references")).toBeVisible();
+  await expect(page.getByTestId("input-wizard-step-competitors")).toHaveCount(0);
 
   await page.getByTestId("reference-url-0").fill("https://example.com/reference");
   await page
@@ -89,6 +77,8 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   });
   await expect(page.getByText("reference.txt")).toBeVisible();
 
+  await page.getByTestId("input-wizard-next").click();
+  await expect(page.getByTestId("input-wizard-step-competitors")).toBeVisible();
   await page
     .getByTestId("competitor-text-0")
     .fill("Competitor emphasizes generic automation and one-click publishing.");
@@ -119,6 +109,8 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     ),
   );
 
+  await page.getByTestId("input-wizard-next").click();
+  await expect(page.getByTestId("input-wizard-step-theme")).toBeVisible();
   await page.getByTestId("theme-candidates-button").click();
   expect(calls.themeCandidateCompetitorSummary).toBe("Edited competitor summary for E2E");
   await expect(page.getByTestId("theme-candidate-card-0")).toContainText(
@@ -131,12 +123,26 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await page
     .getByTestId("closing-textarea")
     .fill("AIO記事の運用設計について無料相談をご希望の方は、問い合わせフォームからご相談ください。");
+
+  await page.getByTestId("input-wizard-next").click();
+  await expect(page.getByTestId("input-wizard-step-primary-info")).toBeVisible();
+  await page.getByTestId("primary-info-type-frequent-consultations").click();
   await page
     .getByTestId("primary-info-textarea")
     .fill("当社の支援現場では、一人親方の事務作業はLINEでのやり取りが多く帳票不在も多い。");
 
+  await page.getByTestId("input-wizard-next").click();
+  await expect(page.getByTestId("input-wizard-step-visual-tone")).toBeVisible();
+  await page.getByTestId("input-wizard-next").click();
+  await expect(page.getByTestId("input-wizard-step-word-count")).toBeVisible();
+  await page.getByTestId("input-wizard-next").click();
+  await expect(page.getByTestId("input-wizard-message")).toContainText("入力が完了しました");
+
   await page.getByTestId("article-primary-button").click();
   expect(calls.articlePrimaryInfo).toContain("一人親方");
+  expect(calls.articlePrimaryInfoTypes).toEqual(
+    expect.arrayContaining(["criteria-knowhow", "frequent-consultations"]),
+  );
   expect(calls.articleClosingText).toContain("無料相談");
   expect(calls.articleCompetitorResearchSummary).toBe("Edited competitor summary for E2E");
   expect(calls.articleCompetitorFileNames).toEqual(["competitor.txt"]);
@@ -149,18 +155,7 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.locator('a[href="#wordpress"]')).toHaveCount(1);
   await page.locator('a[href="#approval"]').click();
   await expect(page).toHaveURL(/#approval/);
-  await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const approvalCard = document.querySelector("#approval");
-        const stickyNav = document.querySelector('aside [class*="sticky"]');
-        const approvalTop = approvalCard?.getBoundingClientRect().top ?? 0;
-        const stickyBottom = stickyNav?.getBoundingClientRect().bottom ?? 0;
-
-        return Math.round(approvalTop - stickyBottom);
-      }),
-    )
-    .toBeGreaterThanOrEqual(8);
+  await expect(page.locator("#approval")).toBeVisible();
   await expect(page.getByText("編集品質チェック")).toBeVisible();
   await expect(page.getByText("AI風の汎用表現")).toBeVisible();
   await expect(page.getByText("一次情報の反映")).toBeVisible();
@@ -755,7 +750,9 @@ test("source digestion quality checks explain how to edit pasted inputs", async 
 
   await login(page);
   await page.getByTestId("reference-text-0").fill(referenceText);
+  await openInputStep(page, "competitors");
   await page.getByTestId("competitor-text-0").fill(competitorText);
+  await openInputStep(page, "primary-info");
   await page.getByTestId("primary-info-textarea").fill(primaryInfo);
   await page.getByTestId("article-primary-button").click();
 
@@ -802,7 +799,8 @@ test("target word count quality check catches short generated drafts", async ({ 
   await page
     .getByTestId("reference-text-0")
     .fill("Reference text for checking whether generated article length matches the selected word count.");
-  await page.locator("#word-count select").selectOption("6000");
+  await openInputStep(page, "word-count");
+  await page.getByTestId("word-count-select").selectOption("6000");
   await page.getByTestId("article-primary-button").click();
 
   await expect(page.getByText("指定文字数との整合")).toBeVisible();
@@ -845,7 +843,8 @@ test("target word count quality check catches overly long generated drafts", asy
   await page
     .getByTestId("reference-text-0")
     .fill("Reference text for checking whether overly long generated article length is detected.");
-  await page.locator("#word-count select").selectOption("1000");
+  await openInputStep(page, "word-count");
+  await page.getByTestId("word-count-select").selectOption("1000");
   await page.getByTestId("article-primary-button").click();
 
   await expect(page.getByText("指定文字数との整合")).toBeVisible();
@@ -876,6 +875,7 @@ test("API failure is shown in the UI without console errors or crashes", async (
   await login(page);
 
   await page.getByTestId("reference-text-0").fill("Reference text for failure handling.");
+  await openInputStep(page, "theme");
   await page.getByTestId("theme-candidates-button").click();
 
   await expect(page.getByTestId("theme-candidates-error")).toContainText("theme candidate failed");
@@ -894,9 +894,11 @@ test("theme candidate failure can be retried and then applied", async ({ page })
 
   await login(page);
   await page.getByTestId("reference-text-0").fill("Reference text for theme retry handling.");
+  await openInputStep(page, "primary-info");
   await page
     .getByTestId("primary-info-textarea")
     .fill("Primary field observation for theme retry handling.");
+  await openInputStep(page, "theme");
   await page.getByTestId("theme-candidates-button").click();
 
   expect(calls.themeCandidates).toBe(1);
@@ -925,16 +927,31 @@ test("primary generation CTA explains which required inputs are missing", async 
     await route.fulfill({ json: { ok: true, logs: [] } });
   });
 
-  await login(page);
+  await login(page, { preparePrimaryInfo: false });
   await expect(page.getByTestId("article-primary-button")).toBeDisabled();
   await expect(page.getByTestId("generate-requirement-message")).toContainText(
-    "参照情報を入力すると記事作成を開始できます。",
+    "参照情報と一次情報を入力すると記事作成を開始できます。",
   );
 
   await page.getByTestId("reference-text-0").fill("Reference text for requirement guidance.");
+  await expect(page.getByTestId("article-primary-button")).toBeDisabled();
+  await expect(page.getByTestId("generate-requirement-message")).toContainText(
+    "一次情報を入力すると記事作成を開始できます。",
+  );
+
+  await openInputStep(page, "primary-info");
+  await page.getByTestId("input-wizard-next").click();
+  await expect(page.getByTestId("input-wizard-message")).toContainText(
+    "一次情報の種類を1つ以上選び、具体的な内容を入力してください。",
+  );
+  await page.getByTestId("primary-info-type-frequent-consultations").click();
+  await page
+    .getByTestId("primary-info-textarea")
+    .fill("当社の支援現場では、公開前の根拠確認に関する相談が多い。");
   await expect(page.getByTestId("article-primary-button")).toBeEnabled();
   await expect(page.getByTestId("generate-requirement-message")).toBeHidden();
 
+  await openInputStep(page, "visual-tone");
   await page.getByTestId("visual-tone-mode-custom").click();
   await expect(page.getByTestId("article-primary-button")).toBeDisabled();
   await expect(page.getByTestId("generate-requirement-message")).toContainText(
@@ -995,6 +1012,7 @@ test("image count zero creates a text-only draft from the PC form", async ({ pag
 
   await login(page);
   await page.getByTestId("reference-text-0").fill("Reference text for text-only generation.");
+  await openInputStep(page, "visual-tone");
   await page.getByRole("button", { name: "0枚" }).click();
   await expect(page.getByText("生成目安：画像生成なし")).toBeVisible();
   await page.getByTestId("article-primary-button").click();
@@ -1020,6 +1038,7 @@ test("competitor research failure resets progress and remains recoverable", asyn
 
   await login(page);
   await page.getByTestId("reference-text-0").fill("Reference text for competitor research failure.");
+  await openInputStep(page, "competitors");
   await page
     .getByTestId("competitor-text-0")
     .fill("Competitor memo for recoverable research failure.");
@@ -1044,6 +1063,7 @@ test("competitor research failure can be retried and edited", async ({ page }) =
 
   await login(page);
   await page.getByTestId("reference-text-0").fill("Reference text for competitor retry flow.");
+  await openInputStep(page, "competitors");
   await page
     .getByTestId("competitor-text-0")
     .fill("Competitor memo for one failed research attempt followed by a retry.");
@@ -1265,7 +1285,9 @@ test("missing generated image recovery ignores prompts beyond requested image co
   await mockCommonApiRoutes(page, completedJob);
 
   await login(page);
+  await openInputStep(page, "visual-tone");
   await page.getByRole("button", { name: "1枚" }).click();
+  await openInputStep(page, "references");
   await page
     .getByTestId("reference-text-0")
     .fill("Reference text for intentionally single image generation.");
@@ -1612,6 +1634,7 @@ test("competitor file extraction retry replaces the failed row before generation
 
   await login(page);
   await page.getByTestId("reference-text-0").fill("Reference text for competitor retry.");
+  await openInputStep(page, "competitors");
   await page.getByTestId("competitor-file-input").setInputFiles(filePayload);
   await expect(page.getByText("retry-competitor.docx")).toHaveCount(1);
   await expect(page.getByText(/解析エラー/)).toBeVisible();
@@ -1756,6 +1779,7 @@ test("competitor URL fetch failure is visible while manual competitor notes stil
 
   await login(page);
   await page.getByTestId("reference-text-0").fill("Reference text for competitor URL fallback.");
+  await openInputStep(page, "competitors");
   await page.getByTestId("competitor-url-0").fill(failedUrl);
   await page
     .getByTestId("competitor-text-0")
@@ -1791,6 +1815,7 @@ test("invalid editable competitor research JSON can be fixed before generation",
   await login(page);
 
   await page.getByTestId("reference-text-0").fill("Reference text for invalid JSON recovery.");
+  await openInputStep(page, "competitors");
   await page.getByTestId("competitor-research-button").click();
   await expect(page.getByTestId("competitor-research-json")).toHaveValue(
     /Generic automation LP/,
@@ -2911,6 +2936,7 @@ test("uploaded visual tone image is sent to generation as upload mode", async ({
 
   await login(page);
   await page.getByTestId("reference-text-0").fill("Reference text for uploaded visual tone.");
+  await openInputStep(page, "visual-tone");
   await page.getByTestId("visual-tone-mode-upload").click();
   await expect(
     page.getByText(
@@ -2967,6 +2993,7 @@ test("visual tone upload failure can be retried with the same file", async ({ pa
   });
 
   await login(page);
+  await openInputStep(page, "visual-tone");
   await page.getByTestId("visual-tone-mode-upload").click();
   const filePayload = {
     name: "tone.png",
@@ -3016,6 +3043,7 @@ test("author image upload failure can be retried with the same file", async ({ p
   });
 
   await login(page);
+  await openInputStep(page, "theme");
   const filePayload = {
     name: "author.png",
     mimeType: "image/png",
@@ -3063,6 +3091,7 @@ test("previous closing text and author inputs can be reused from local storage",
   await page.getByTestId("demo-login-submit").click();
   await page.waitForURL("**/");
 
+  await openInputStep(page, "theme");
   await page.getByTestId("closing-reuse-checkbox").setChecked(true);
   await expect(page.getByTestId("closing-textarea")).toHaveValue(
     "前回保存した問い合わせ誘導文です。",
@@ -3083,11 +3112,37 @@ test("previous closing text and author inputs can be reused from local storage",
   expect(errors()).toEqual([]);
 });
 
-async function login(page: Page) {
+async function openInputStep(
+  page: Page,
+  step:
+    | "references"
+    | "competitors"
+    | "theme"
+    | "primary-info"
+    | "visual-tone"
+    | "word-count",
+) {
+  await page.getByTestId(`input-wizard-step-button-${step}`).click();
+  await expect(page.getByTestId(`input-wizard-step-${step}`)).toBeVisible();
+}
+
+async function login(
+  page: Page,
+  { preparePrimaryInfo = true }: { preparePrimaryInfo?: boolean } = {},
+) {
   await page.goto("/demo-login");
   await page.getByTestId("demo-access-code").fill("202607");
   await page.getByTestId("demo-login-submit").click();
   await page.waitForURL("**/");
+
+  if (preparePrimaryInfo) {
+    await openInputStep(page, "primary-info");
+    await page.getByTestId("primary-info-type-criteria-knowhow").click();
+    await page
+      .getByTestId("primary-info-textarea")
+      .fill("当社では、公開前に根拠、条件、判断基準を分けて確認しています。");
+    await openInputStep(page, "references");
+  }
 }
 
 async function mockCommonApiRoutes(
@@ -3123,6 +3178,7 @@ async function mockCommonApiRoutes(
     themeCandidatePrimaryInfo: "",
     articleGenerationJobs: 0,
     articlePrimaryInfo: "",
+    articlePrimaryInfoTypes: [] as string[],
     articleClosingText: "",
     articleRegenerationInstruction: "",
     articleCompetitorResearchSummary: "",
@@ -3223,6 +3279,7 @@ async function mockCommonApiRoutes(
     const body = route.request().postDataJSON() as {
       form?: {
         primaryInfo?: string;
+        primaryInfoTypes?: string[];
         closingText?: string;
         regenerationInstruction?: string;
         competitorFiles?: Array<{ name?: string }>;
@@ -3231,6 +3288,7 @@ async function mockCommonApiRoutes(
     };
     calls.articleGenerationJobs += 1;
     calls.articlePrimaryInfo = body.form?.primaryInfo ?? "";
+    calls.articlePrimaryInfoTypes = body.form?.primaryInfoTypes ?? [];
     calls.articleClosingText = body.form?.closingText ?? "";
     calls.articleRegenerationInstruction = body.form?.regenerationInstruction ?? "";
     calls.articleCompetitorFileNames =

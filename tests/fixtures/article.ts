@@ -20,6 +20,7 @@ export const sampleFormPayload: ArticleFormPayload = {
   referenceFiles: [],
   competitorFiles: [],
   theme: "AIO article generation for B2B marketing teams",
+  primaryInfoTypes: ["criteria-knowhow", "frequent-consultations"],
   primaryInfo:
     "In our support work, teams struggle most when AI drafts lack field observations and approval context.",
   closingText: "Contact us for an AIO content workflow consultation.",

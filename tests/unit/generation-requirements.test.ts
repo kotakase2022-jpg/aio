@@ -3,6 +3,7 @@ import {
   formatGenerationRequirementMessage,
   getMissingGenerationRequirements,
 } from "@/lib/generation-requirements";
+import type { PrimaryInformationType } from "@/lib/primary-information";
 import type { AttachedFileInput, KeyValueInput, VisualToneInput } from "@/types/aio";
 
 const emptyReference: KeyValueInput = { id: "reference-1", url: "", text: "" };
@@ -22,13 +23,23 @@ const emptyCustomTone: VisualToneInput = {
 function missingRequirements({
   references = [emptyReference],
   referenceFiles = [],
+  primaryInfoTypes = ["criteria-knowhow"],
+  primaryInfo = "当社では公開前に根拠と判断基準を分けて確認しています。",
   visualTone = presetTone,
 }: {
   references?: KeyValueInput[];
   referenceFiles?: AttachedFileInput[];
+  primaryInfoTypes?: PrimaryInformationType[];
+  primaryInfo?: string;
   visualTone?: VisualToneInput;
 } = {}) {
-  return getMissingGenerationRequirements({ references, referenceFiles, visualTone });
+  return getMissingGenerationRequirements({
+    references,
+    referenceFiles,
+    primaryInfoTypes,
+    primaryInfo,
+    visualTone,
+  });
 }
 
 describe("generation requirements", () => {
@@ -46,6 +57,32 @@ describe("generation requirements", () => {
       missingRequirements({
         references: [{ id: "reference-1", url: "", text: "現場で確認した一次情報" }],
         visualTone: presetTone,
+      }),
+    ).toEqual([]);
+  });
+
+  test("requires both a primary-information type and concrete free text", () => {
+    expect(
+      missingRequirements({
+        references: [{ id: "reference-1", text: "参照情報" }],
+        primaryInfoTypes: [],
+        primaryInfo: "",
+      }),
+    ).toEqual(["一次情報"]);
+
+    expect(
+      missingRequirements({
+        references: [{ id: "reference-1", text: "参照情報" }],
+        primaryInfoTypes: ["frequent-consultations"],
+        primaryInfo: "  ",
+      }),
+    ).toEqual(["一次情報"]);
+
+    expect(
+      missingRequirements({
+        references: [{ id: "reference-1", text: "参照情報" }],
+        primaryInfoTypes: ["frequent-consultations"],
+        primaryInfo: "当社の支援現場では、帳票不在の相談が多い。",
       }),
     ).toEqual([]);
   });

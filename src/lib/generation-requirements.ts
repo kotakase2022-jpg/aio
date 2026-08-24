@@ -1,6 +1,7 @@
+import type { PrimaryInformationType } from "@/lib/primary-information";
 import type { AttachedFileInput, KeyValueInput, VisualToneInput } from "@/types/aio";
 
-export type GenerationRequirementLabel = "参照情報" | "画像トーン";
+export type GenerationRequirementLabel = "参照情報" | "一次情報" | "画像トーン";
 
 export function hasUsableReferenceInput(
   references: KeyValueInput[],
@@ -20,18 +21,32 @@ export function hasUsableVisualTone(visualTone: VisualToneInput) {
   );
 }
 
+export function hasUsablePrimaryInformation(
+  primaryInfoTypes: readonly PrimaryInformationType[],
+  primaryInfo: string,
+) {
+  return primaryInfoTypes.length > 0 && primaryInfo.trim().length > 0;
+}
+
 export function getMissingGenerationRequirements({
   references,
   referenceFiles,
+  primaryInfoTypes,
+  primaryInfo,
   visualTone,
 }: {
   references: KeyValueInput[];
   referenceFiles: AttachedFileInput[];
+  primaryInfoTypes: readonly PrimaryInformationType[];
+  primaryInfo: string;
   visualTone: VisualToneInput;
 }) {
   const missing: GenerationRequirementLabel[] = [];
   if (!hasUsableReferenceInput(references, referenceFiles)) {
     missing.push("参照情報");
+  }
+  if (!hasUsablePrimaryInformation(primaryInfoTypes, primaryInfo)) {
+    missing.push("一次情報");
   }
   if (!hasUsableVisualTone(visualTone)) {
     missing.push("画像トーン");

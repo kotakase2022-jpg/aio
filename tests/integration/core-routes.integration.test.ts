@@ -62,6 +62,33 @@ describe("core API route handlers", () => {
     );
   });
 
+  test("generate article route rejects missing categorized primary information", async () => {
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(generateAioArticle).mockClear();
+    const { POST } = await import("@/app/api/generate-article/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/generate-article", {
+        method: "POST",
+        body: JSON.stringify({
+          form: {
+            ...sampleFormPayload,
+            primaryInfoTypes: [],
+            primaryInfo: "",
+          },
+          fetchedReferences: [],
+          fetchedCompetitors: [],
+          competitorResearch: null,
+        }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toContain("一次情報（種類の選択と具体的な内容）");
+    expect(generateAioArticle).not.toHaveBeenCalled();
+  });
+
   test("fetch URL content route validates URL and returns extracted result", async () => {
     const { fetchUrlContent } = await import("@/lib/server/content");
     vi.mocked(fetchUrlContent).mockResolvedValueOnce({
@@ -221,5 +248,30 @@ describe("core API route handlers", () => {
     expect(typeof scheduled).toBe("function");
     await scheduled?.();
     expect(runArticleGenerationJob).toHaveBeenCalledWith("job-created-1");
+  });
+
+  test("generation jobs route rejects missing primary information before job creation", async () => {
+    const { createGenerationJob } = await import("@/lib/server/generation-jobs");
+    vi.mocked(createGenerationJob).mockClear();
+    const { POST } = await import("@/app/api/generation-jobs/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/generation-jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          form: {
+            ...sampleFormPayload,
+            primaryInfoTypes: ["criteria-knowhow"],
+            primaryInfo: "   ",
+          },
+          competitorResearch: null,
+        }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toContain("一次情報（種類の選択と具体的な内容）");
+    expect(createGenerationJob).not.toHaveBeenCalled();
   });
 });

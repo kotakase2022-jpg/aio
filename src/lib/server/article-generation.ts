@@ -5,6 +5,7 @@ import { evaluateArticleQuality } from "@/lib/article-quality";
 import { evaluateFaqQuality } from "@/lib/faq-quality";
 import { evaluateImageAltQuality } from "@/lib/image-alt-quality";
 import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
+import { primaryInformationLabels } from "@/lib/primary-information";
 import { truncatePromptLine } from "@/lib/prompt-text";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import { compactOptionalText, truncateText } from "@/lib/utils";
@@ -42,6 +43,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "When competitor material or competitorResearch is provided, use it to identify comparison axes, missing perspectives, objections, and differentiation points. Do not merely summarize competitors.",
       "Do not paste long reference or competitor passages verbatim. Keep source meaning and facts, then rewrite them as definitions, decision criteria, caveats, comparison axes, or source notes.",
       "Treat payload.form.primaryInfo as high-priority first-party information. Use it to add original field observations, concrete examples, company-specific viewpoints, caveats, and practical nuance so the article does not become commodity content.",
+      "Treat payload.form.primaryInfoTypes as the declared evidence categories for primaryInfo. Use those categories to frame attribution and article structure, but rely on the concrete primaryInfo text for factual details.",
       "When primaryInfo is provided, weave it naturally into the introduction, examples, body sections, and key takeaways. Do not overstate it as universal fact; attribute it as company experience or observed tendency when appropriate.",
       "Do not paste primaryInfo verbatim as article copy. Preserve its concrete nouns and meaning, then rewrite it into reader-facing editorial observations, decision criteria, caveats, or examples.",
       "If primaryInfo is long, do not reuse a full clause as-is. Break it into observed problem, affected reader, operational cause, decision criterion, and caveat, then write those pieces in new sentences.",
@@ -318,6 +320,7 @@ function compactForm(form: Record<string, unknown>) {
       typeof form.primaryInfo === "string"
         ? compactOptionalText(form.primaryInfo, 2400)
         : form.primaryInfo,
+    primaryInfoTypes: primaryInformationLabels(readStringList(form.primaryInfoTypes)).slice(0, 8),
     closingText:
       typeof form.closingText === "string"
         ? compactOptionalText(form.closingText, 1000)

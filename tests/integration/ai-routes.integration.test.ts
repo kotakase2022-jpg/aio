@@ -40,6 +40,7 @@ describe("AI route handlers", () => {
           competitorFiles: [],
           competitorResearch: null,
           currentTheme: "theme ".repeat(300),
+          primaryInfoTypes: ["frequent-consultations", "criteria-knowhow"],
           primaryInfo: `  ${"field observation ".repeat(200)}  `,
         }),
       }),
@@ -51,6 +52,7 @@ describe("AI route handlers", () => {
         references: Array<{ text?: string }>;
         referenceFiles: Array<{ text?: string }>;
         currentTheme: string;
+        primaryInfoTypes: string[];
         primaryInfo: string;
       };
     };
@@ -66,6 +68,10 @@ describe("AI route handlers", () => {
     expect(input.payload.primaryInfo).toContain("[truncated]");
     expect(input.payload.primaryInfo).toContain("field observation");
     expect(input.payload.primaryInfo.startsWith(" ")).toBe(false);
+    expect(input.payload.primaryInfoTypes).toEqual([
+      "顧客・現場から多い相談",
+      "自社の判断基準・ノウハウ",
+    ]);
     expect(call?.instructions).toContain("primary first-party information");
     expect(call?.instructions).toContain("original angles");
     expect(call?.instructions).toContain("Do not paste it verbatim");

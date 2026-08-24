@@ -5,7 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   Check,
+  ChevronLeft,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   CheckCircle2,
   ClipboardCopy,
@@ -44,10 +46,17 @@ import { evaluateFaqQuality } from "@/lib/faq-quality";
 import {
   formatGenerationRequirementMessage,
   getMissingGenerationRequirements,
+  hasUsablePrimaryInformation,
+  hasUsableReferenceInput,
+  hasUsableVisualTone,
 } from "@/lib/generation-requirements";
 import { evaluateImageAltQuality } from "@/lib/image-alt-quality";
 import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
 import { truncatePromptLine } from "@/lib/prompt-text";
+import {
+  primaryInformationOptions,
+  type PrimaryInformationType,
+} from "@/lib/primary-information";
 import { qualityCheckEditGuidance } from "@/lib/quality-edit-guidance";
 import { qualityRegenerationAction } from "@/lib/quality-regeneration-action";
 import { evaluateTitleQuality } from "@/lib/title-quality";
@@ -115,6 +124,27 @@ const tonePresets = [
 const imageCountOptions: ImageCount[] = [0, 1, 2, 3];
 const wordCountOptions: WordCount[] = [1000, 2000, 3000, 4000, 5000, 6000];
 
+type InputWizardStepId =
+  | "references"
+  | "competitors"
+  | "theme"
+  | "primary-info"
+  | "visual-tone"
+  | "word-count";
+
+const inputWizardSteps: Array<{
+  id: InputWizardStepId;
+  label: string;
+  required: boolean;
+}> = [
+  { id: "references", label: "参照情報", required: true },
+  { id: "competitors", label: "競合情報", required: false },
+  { id: "theme", label: "テーマ・結び・執筆者", required: false },
+  { id: "primary-info", label: "AIOのための一次情報", required: true },
+  { id: "visual-tone", label: "画像トーン", required: true },
+  { id: "word-count", label: "文字数", required: false },
+];
+
 const generationSteps: GenerationStep[] = [
   { id: "fetch_refs", label: "参照URL本文抽出", status: "pending" },
   { id: "fetch_competitors", label: "競合URL本文抽出", status: "pending" },
@@ -137,6 +167,7 @@ export function ArticleGeneratorApp() {
   const [referenceFiles, setReferenceFiles] = useState<AttachedFileInput[]>([]);
   const [competitorFiles, setCompetitorFiles] = useState<AttachedFileInput[]>([]);
   const [theme, setTheme] = useState("");
+  const [primaryInfoTypes, setPrimaryInfoTypes] = useState<PrimaryInformationType[]>([]);
   const [primaryInfo, setPrimaryInfo] = useState("");
   const [closingText, setClosingText] = useState("");
   const [closingReuseChecked, setClosingReuseChecked] = useState(false);
@@ -201,6 +232,9 @@ export function ArticleGeneratorApp() {
     applicationPassword: "",
     status: "draft" as "draft" | "publish",
   });
+  const [activeInputStep, setActiveInputStep] =
+    useState<InputWizardStepId>("references");
+  const [inputWizardMessage, setInputWizardMessage] = useState("");
   const generationPollingRef = useRef<string | null>(null);
   const themeCandidateApplyTimerRef = useRef<number | null>(null);
 
@@ -211,6 +245,7 @@ export function ArticleGeneratorApp() {
       referenceFiles,
       competitorFiles,
       theme,
+      primaryInfoTypes,
       primaryInfo,
       closingText,
       author,
@@ -225,6 +260,7 @@ export function ArticleGeneratorApp() {
       competitors,
       imageCount,
       primaryInfo,
+      primaryInfoTypes,
       referenceFiles,
       references,
       theme,
@@ -234,8 +270,15 @@ export function ArticleGeneratorApp() {
   );
 
   const missingGenerationRequirements = useMemo(
-    () => getMissingGenerationRequirements({ references, referenceFiles, visualTone }),
-    [referenceFiles, references, visualTone],
+    () =>
+      getMissingGenerationRequirements({
+        references,
+        referenceFiles,
+        primaryInfoTypes,
+        primaryInfo,
+        visualTone,
+      }),
+    [primaryInfo, primaryInfoTypes, referenceFiles, references, visualTone],
   );
   const canGenerate = missingGenerationRequirements.length === 0;
   const generateRequirementMessage = useMemo(
@@ -378,6 +421,7 @@ export function ArticleGeneratorApp() {
         competitorFiles,
         competitorResearch: editableResearch,
         currentTheme: theme,
+        primaryInfoTypes,
         primaryInfo,
       });
       setThemeCandidates(result.result);
@@ -390,7 +434,10 @@ export function ArticleGeneratorApp() {
 
   async function generateArticle(regenerationInstruction = "") {
     if (!canGenerate) {
-      setActiveError("参照情報と画像トーンを入力してください。");
+      setActiveError(
+        formatGenerationRequirementMessage(missingGenerationRequirements) ||
+          "必須項目を入力してください。",
+      );
       return;
     }
 
@@ -1143,6 +1190,78 @@ export function ArticleGeneratorApp() {
     }, 0);
   }
 
+  const activeInputStepIndex = inputWizardSteps.findIndex(
+    (step) => step.id === activeInputStep,
+  );
+
+  function selectInputStep(stepId: InputWizardStepId) {
+    setActiveInputStep(stepId);
+    setInputWizardMessage("");
+  }
+
+  function togglePrimaryInformationType(type: PrimaryInformationType) {
+    setPrimaryInfoTypes((current) =>
+      current.includes(type)
+        ? current.filter((candidate) => candidate !== type)
+        : [...current, type],
+    );
+    setInputWizardMessage("");
+  }
+
+  function inputStepValidationMessage(stepId: InputWizardStepId) {
+    if (
+      stepId === "references" &&
+      !hasUsableReferenceInput(references, referenceFiles)
+    ) {
+      return "参照URL・参照テキスト・参照ファイルのいずれかを入力してください。";
+    }
+
+    if (
+      stepId === "primary-info" &&
+      !hasUsablePrimaryInformation(primaryInfoTypes, primaryInfo)
+    ) {
+      if (primaryInfoTypes.length === 0 && !primaryInfo.trim()) {
+        return "一次情報の種類を1つ以上選び、具体的な内容を入力してください。";
+      }
+      if (primaryInfoTypes.length === 0) {
+        return "一次情報の種類を1つ以上選択してください。";
+      }
+      return "選択した一次情報について、具体的な内容を入力してください。";
+    }
+
+    if (stepId === "visual-tone" && !hasUsableVisualTone(visualTone)) {
+      return "画像トーンを選択または入力してください。";
+    }
+
+    return "";
+  }
+
+  function advanceInputWizard() {
+    const validationMessage = inputStepValidationMessage(activeInputStep);
+    if (validationMessage) {
+      setInputWizardMessage(validationMessage);
+      return;
+    }
+
+    if (activeInputStepIndex >= inputWizardSteps.length - 1) {
+      setInputWizardMessage(
+        canGenerate
+          ? "入力が完了しました。右上の「AIによる記事作成」から生成できます。"
+          : formatGenerationRequirementMessage(missingGenerationRequirements),
+      );
+      return;
+    }
+
+    setActiveInputStep(inputWizardSteps[activeInputStepIndex + 1].id);
+    setInputWizardMessage("");
+  }
+
+  function goBackInputWizard() {
+    if (activeInputStepIndex <= 0) return;
+    setActiveInputStep(inputWizardSteps[activeInputStepIndex - 1].id);
+    setInputWizardMessage("");
+  }
+
   return (
     <main className="min-h-screen bg-slate-900 text-slate-950">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
@@ -1187,49 +1306,85 @@ export function ArticleGeneratorApp() {
       </header>
 
       <div className="mx-auto grid max-w-[1680px] grid-cols-[560px_minmax(0,1fr)] gap-6 px-8 py-6">
-        <aside className="space-y-4">
-          <Card className="sticky top-24 z-10">
-            <CardContent className="p-4">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                {[
-                  { label: "参照", href: "#references" },
-                  { label: "競合", href: "#competitors" },
-                  { label: "テーマ", href: "#theme" },
-                  { label: "一次情報", href: "#primary-info" },
-                  { label: "画像", href: "#visual-tone" },
-                  { label: "文字数", href: "#word-count" },
-                  { label: "承認", href: "#approval", requiresDraft: true },
-                  { label: "WordPress", href: "#wordpress", requiresDraft: true },
-                ].map(({ label, href, requiresDraft }) =>
-                  requiresDraft && !draft ? (
+        <aside>
+          <div className="sticky top-24 z-10 space-y-3" data-testid="input-wizard">
+            <Card className="border-slate-200 shadow-lg">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <CardTitle>入力ガイド</CardTitle>
+                    <CardDescription>
+                      1項目ずつ確認し、「次へ」で順番に進みます。
+                    </CardDescription>
+                  </div>
+                  <Badge variant="default">
+                    {activeInputStepIndex + 1} / {inputWizardSteps.length}
+                  </Badge>
+                </div>
+                <div
+                  className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"
+                  role="progressbar"
+                  aria-label="入力ステップの進捗"
+                  aria-valuemin={1}
+                  aria-valuemax={inputWizardSteps.length}
+                  aria-valuenow={activeInputStepIndex + 1}
+                >
+                  <div
+                    className="h-full rounded-full bg-sky-600 transition-all duration-300"
+                    style={{
+                      width: `${((activeInputStepIndex + 1) / inputWizardSteps.length) * 100}%`,
+                    }}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-2 pt-0">
+                {inputWizardSteps.map((step, index) => (
+                  <button
+                    key={step.id}
+                    data-testid={`input-wizard-step-button-${step.id}`}
+                    type="button"
+                    onClick={() => selectInputStep(step.id)}
+                    aria-current={activeInputStep === step.id ? "step" : undefined}
+                    className={cn(
+                      "flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition",
+                      activeInputStep === step.id
+                        ? "border-sky-500 bg-sky-50 text-sky-900"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:bg-sky-50",
+                    )}
+                  >
                     <span
-                      key={href}
-                      aria-disabled="true"
-                      data-testid={`step-nav-disabled-${href.slice(1)}`}
-                      title="記事生成後に利用できます。"
-                      className="cursor-not-allowed rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-center text-slate-400"
+                      className={cn(
+                        "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                        activeInputStep === step.id
+                          ? "bg-sky-600 text-white"
+                          : "bg-slate-100 text-slate-600",
+                      )}
                     >
-                      {label}
+                      {index + 1}
                     </span>
-                  ) : (
-                    <a
-                      key={href}
-                      href={href}
-                      className="rounded-md border border-slate-200 px-3 py-2 text-center text-slate-700 transition hover:border-sky-200 hover:bg-sky-50"
-                    >
-                      {label}
-                    </a>
-                  ),
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                    <span className="min-w-0 flex-1 leading-5">{step.label}</span>
+                    {step.required ? (
+                      <span className="text-[11px] font-semibold text-rose-600">必須</span>
+                    ) : null}
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
 
-          <Card id="references" className="scroll-mt-[360px]">
+            <div
+              role="dialog"
+              aria-modal="false"
+              aria-labelledby={`input-wizard-title-${activeInputStep}`}
+              data-testid={`input-wizard-step-${activeInputStep}`}
+              className="max-h-[calc(100vh-390px)] min-h-[320px] overflow-y-auto rounded-lg shadow-2xl ring-1 ring-slate-950/10"
+            >
+
+          {activeInputStep === "references" ? (
+          <Card id="references" className="border-sky-100">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>参照情報</CardTitle>
+                  <CardTitle id="input-wizard-title-references">参照情報</CardTitle>
                   <CardDescription>URLとテキストは同じ行に併用できます。</CardDescription>
                 </div>
                 <Badge variant="required">必須</Badge>
@@ -1254,12 +1409,14 @@ export function ArticleGeneratorApp() {
               <FetchFailures results={fetchedReferences} />
             </CardContent>
           </Card>
+          ) : null}
 
-          <Card id="competitors" className="scroll-mt-[360px]">
+          {activeInputStep === "competitors" ? (
+          <Card id="competitors" className="border-sky-100">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>競合情報</CardTitle>
+                  <CardTitle id="input-wizard-title-competitors">競合情報</CardTitle>
                   <CardDescription>未入力でも記事生成できます。</CardDescription>
                 </div>
                 <Badge variant="optional">任意</Badge>
@@ -1340,12 +1497,14 @@ export function ArticleGeneratorApp() {
               <FetchFailures results={fetchedCompetitors} />
             </CardContent>
           </Card>
+          ) : null}
 
-          <Card id="theme" className="scroll-mt-[360px]">
+          {activeInputStep === "theme" ? (
+          <Card id="theme" className="border-sky-100">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>テーマ・結び・執筆者</CardTitle>
+                  <CardTitle id="input-wizard-title-theme">テーマ・結び・執筆者</CardTitle>
                   <CardDescription>検索意図、読者、CTA、著者情報をまとめます。</CardDescription>
                 </div>
                 <Badge variant="optional">任意</Badge>
@@ -1476,35 +1635,98 @@ export function ArticleGeneratorApp() {
               />
             </CardContent>
           </Card>
+          ) : null}
 
-          <Card id="primary-info" className="scroll-mt-[360px]">
+          {activeInputStep === "primary-info" ? (
+          <Card id="primary-info" className="border-sky-100">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>AIOのための一次情報</CardTitle>
+                  <CardTitle id="input-wizard-title-primary-info">
+                    AIOのための一次情報
+                  </CardTitle>
                   <CardDescription>
                     自社固有の経験、現場感、考え方を記事の差別化材料として使います。
                   </CardDescription>
                 </div>
-                <Badge variant="optional">任意</Badge>
+                <Badge variant="required">必須</Badge>
               </div>
             </CardHeader>
-            <CardContent>
-              <Textarea
-                data-testid="primary-info-textarea"
-                value={primaryInfo}
-                onChange={(event) => setPrimaryInfo(event.target.value)}
-                placeholder="自社固有の経験や考えを書いて下さい。例：当社の支援現場では、◯◯の相談が多い。一人親方の事務作業はLINEでのやり取りが多く帳票不在も多い。"
-                className="min-h-36"
-              />
+            <CardContent className="space-y-5">
+              <fieldset>
+                <legend className="text-sm font-semibold text-slate-800">
+                  一次情報の種類
+                  <span className="ml-2 text-xs font-normal text-slate-500">
+                    複数選択できます
+                  </span>
+                </legend>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {primaryInformationOptions.map((option) => {
+                    const selected = primaryInfoTypes.includes(option.id);
+                    return (
+                      <button
+                        key={option.id}
+                        data-testid={`primary-info-type-${option.id}`}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => togglePrimaryInformationType(option.id)}
+                        className={cn(
+                          "min-h-20 rounded-md border p-3 text-left transition",
+                          selected
+                            ? "border-sky-500 bg-sky-50 text-sky-950"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:bg-sky-50/50",
+                        )}
+                      >
+                        <span className="flex items-start gap-2 text-sm font-semibold leading-5">
+                          <span
+                            className={cn(
+                              "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border",
+                              selected
+                                ? "border-sky-600 bg-sky-600 text-white"
+                                : "border-slate-300 bg-white text-transparent",
+                            )}
+                            aria-hidden="true"
+                          >
+                            <Check className="size-3.5" />
+                          </span>
+                          {option.label}
+                        </span>
+                        <span className="mt-1.5 block pl-7 text-xs leading-5 text-slate-500">
+                          {option.description}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+              <Field label="具体的な一次情報">
+                <Textarea
+                  data-testid="primary-info-textarea"
+                  value={primaryInfo}
+                  required
+                  onChange={(event) => {
+                    setPrimaryInfo(event.target.value);
+                    setInputWizardMessage("");
+                  }}
+                  placeholder="自社固有の経験や考えを書いて下さい。例：当社の支援現場では、◯◯の相談が多い。一人親方の事務作業はLINEでのやり取りが多く帳票不在も多い。"
+                  className="min-h-36"
+                />
+              </Field>
+              <p className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-900">
+                選択した種類と入力内容は、一般論を避けるための最重要情報として記事生成に渡します。
+              </p>
             </CardContent>
           </Card>
+          ) : null}
 
-          <Card id="visual-tone" className="scroll-mt-[360px]">
+          {activeInputStep === "visual-tone" ? (
+          <Card id="visual-tone" className="border-sky-100">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>記事挿入画像のビジュアルトーン</CardTitle>
+                  <CardTitle id="input-wizard-title-visual-tone">
+                    記事挿入画像のビジュアルトーン
+                  </CardTitle>
                   <CardDescription>3方式のいずれかを選択してください。</CardDescription>
                 </div>
                 <Badge variant="required">必須</Badge>
@@ -1588,6 +1810,7 @@ export function ArticleGeneratorApp() {
 
               {visualTone.mode === "custom" ? (
                 <Textarea
+                  data-testid="visual-tone-custom-textarea"
                   value={visualTone.custom ?? ""}
                   onChange={(event) =>
                     setVisualTone({ mode: "custom", custom: event.target.value })
@@ -1607,12 +1830,14 @@ export function ArticleGeneratorApp() {
               ) : null}
             </CardContent>
           </Card>
+          ) : null}
 
-          <Card id="word-count" className="scroll-mt-[360px]">
+          {activeInputStep === "word-count" ? (
+          <Card id="word-count" className="border-sky-100">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>文字数</CardTitle>
+                  <CardTitle id="input-wizard-title-word-count">文字数</CardTitle>
                   <CardDescription>記事生成時の目標文字数です。</CardDescription>
                 </div>
                 <Badge variant="optional">任意</Badge>
@@ -1620,6 +1845,7 @@ export function ArticleGeneratorApp() {
             </CardHeader>
             <CardContent className="space-y-3">
               <select
+                data-testid="word-count-select"
                 value={wordCount}
                 onChange={(event) => setWordCount(Number(event.target.value) as WordCount)}
                 className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
@@ -1635,6 +1861,84 @@ export function ArticleGeneratorApp() {
               </p>
             </CardContent>
           </Card>
+          ) : null}
+
+              <div className="border-t border-slate-200 bg-white px-5 py-4">
+                {inputWizardMessage ? (
+                  <div
+                    data-testid="input-wizard-message"
+                    className={cn(
+                      "mb-3 rounded-md border px-3 py-2 text-xs leading-5",
+                      inputWizardMessage.startsWith("入力が完了")
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        : "border-amber-200 bg-amber-50 text-amber-900",
+                    )}
+                    aria-live="polite"
+                  >
+                    {inputWizardMessage}
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between gap-3">
+                  <Button
+                    data-testid="input-wizard-back"
+                    type="button"
+                    variant="secondary"
+                    onClick={goBackInputWizard}
+                    disabled={activeInputStepIndex === 0}
+                  >
+                    <ChevronLeft />
+                    戻る
+                  </Button>
+                  <div className="text-xs text-slate-500">
+                    {inputWizardSteps[activeInputStepIndex].required
+                      ? "この項目は必須です"
+                      : "この項目は任意です"}
+                  </div>
+                  <Button
+                    data-testid="input-wizard-next"
+                    type="button"
+                    onClick={advanceInputWizard}
+                  >
+                    {activeInputStepIndex === inputWizardSteps.length - 1
+                      ? "入力を完了"
+                      : "次へ"}
+                    {activeInputStepIndex < inputWizardSteps.length - 1 ? (
+                      <ChevronRight />
+                    ) : (
+                      <Check />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              {[
+                { label: "保存・承認へ", href: "#approval", id: "approval" },
+                { label: "WordPressへ", href: "#wordpress", id: "wordpress" },
+              ].map(({ label, href, id }) =>
+                draft ? (
+                  <a
+                    key={href}
+                    href={href}
+                    className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-center text-slate-100 transition hover:border-sky-400 hover:bg-slate-700"
+                  >
+                    {label}
+                  </a>
+                ) : (
+                  <span
+                    key={href}
+                    aria-disabled="true"
+                    data-testid={`step-nav-disabled-${id}`}
+                    title="記事生成後に利用できます。"
+                    className="cursor-not-allowed rounded-md border border-slate-800 bg-slate-900 px-3 py-2 text-center text-slate-500"
+                  >
+                    {label}
+                  </span>
+                ),
+              )}
+            </div>
+          </div>
         </aside>
 
         <section className="space-y-4">

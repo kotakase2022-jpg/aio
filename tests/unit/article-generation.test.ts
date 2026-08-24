@@ -75,10 +75,11 @@ describe("generateAioArticle", () => {
 
     const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
     const input = JSON.parse(String(call?.input)) as {
-      payload: { form: { primaryInfo?: string } };
+      payload: { form: { primaryInfo?: string; primaryInfoTypes?: string[] } };
     };
 
     expect(call?.instructions).toContain("high-priority first-party information");
+    expect(call?.instructions).toContain("primaryInfoTypes");
     expect(call?.instructions).toContain("Avoid commodity content");
     expect(call?.instructions).toContain("generic AI-like filler");
     expect(call?.instructions).toContain("重要になります");
@@ -130,6 +131,10 @@ describe("generateAioArticle", () => {
     expect(input.payload.form.primaryInfo?.startsWith(" ")).toBe(false);
     expect(input.payload.form.primaryInfo).toContain("one-person contractors");
     expect(input.payload.form.primaryInfo).toContain("LINE");
+    expect(input.payload.form.primaryInfoTypes).toEqual([
+      "自社の判断基準・ノウハウ",
+      "顧客・現場から多い相談",
+    ]);
   });
 
   test("normalizes model self-evaluation scores that use a 0-10 scale", async () => {
