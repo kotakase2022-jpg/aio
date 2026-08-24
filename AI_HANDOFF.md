@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 4
 - Loop number inferred from: The previous handoff remained in Loop 3 for reliability and generated-content quality. This is a new user-requested PC input-flow feature, so Codex starts Loop 4.
-- Phase: Review Fix / Verification / Handoff
-- Last updated: 2026-08-24 19:44 +09:00
+- Phase: Post-deploy Visual Fix / Verification / Handoff
+- Last updated: 2026-08-24 19:57 +09:00
 
 ## 1. Current Goal
 
@@ -21,10 +21,10 @@ Current objective:
 
 ## 2. Current Branch / Commit / PR
 
-- Branch: `codex/sequential-input-wizard`
-- Latest commit: `9e36c86` (the fetch-result visibility review fix is not committed yet at this checkpoint)
-- Last known good commit: `9e36c86`
-- PR: https://github.com/kotakase2022-jpg/aio/pull/3
+- Branch: `codex/wizard-scroll-reset`
+- Latest commit: `ef585b1` (the wizard scroll-reset fix is not committed yet at this checkpoint)
+- Last known good commit: `ef585b1`
+- PR: https://github.com/kotakase2022-jpg/aio/pull/3 (merged); follow-up scroll-reset PR not created yet
 - CodeRabbit OSS review status: Check passed but detailed review was rate-limited; no CodeRabbit finding was produced
 
 ## 3. What Was Done
@@ -51,6 +51,13 @@ Current objective:
 - Moved URL extraction notices into a persistent right-column panel that shows the URL and Japanese reason from every wizard step, with buttons that return to the relevant input.
 - Updated both URL failure E2E scenarios to generate from the final wizard step, verify the persistent details, and verify the correction navigation.
 - Re-ran the full quality gate after the review fix; it remained green.
+- Pushed the Bugbot fix and confirmed hosted GitHub Actions passed again at `c0f8359` in 4m52s.
+- Merged PR #3 to `main` as `ef585b1` and deployed it to Vercel production.
+- Verified the production login, one-card wizard, eight primary-information choices, required-message behavior, free-text input, and transition to the visual-tone step in a 1440 x 1000 browser.
+- During that production visual smoke, found that the scroll position of a long input card was retained after changing steps, which could hide the next card's heading.
+- Added an input-panel ref and reset its internal scroll position to zero whenever the active wizard step changes.
+- Added a deterministic core E2E assertion that scrolls the primary-information panel to the bottom, advances, and verifies the visual-tone panel starts at scroll position zero.
+- Re-ran the full local quality gate after the scroll fix; it passed.
 
 ## 4. Files Changed
 
@@ -76,16 +83,17 @@ Main files changed:
 
 ## 5. Current Status
 
-- Implementation and the review fix are complete locally.
+- The requested feature and URL-result review fix are merged in `main` and deployed.
+- The production visual smoke found one scroll-position issue; its fix is complete locally on `codex/wizard-scroll-reset`.
 - Full deterministic quality validation is green.
-- PR #3 is open. The initial feature commit passed hosted GitHub Actions; the review fix still needs commit, push, and hosted revalidation.
-- Production deployment and production browser smoke verification are pending.
+- The scroll-reset fix still needs commit, PR, hosted CI, merge, production redeploy, and a final visual smoke.
+- Current production deployment before the scroll-reset follow-up: `dpl_1DoFxnfvLb5ABarWVjPQ5xyNoHFY`, Ready and aliased to `https://aio-article-generator.vercel.app`.
 - Existing untracked `output/` files are generated usage-manual artifacts. They are intentionally excluded from this feature commit and must not be deleted.
 
 ## 6. Known Issues
 
 - CodeRabbit could not provide a detailed review because the free-plan review limit was reached. Its status check passed with a rate-limit notice.
-- Hosted GitHub Actions must re-run after the local review fix is pushed.
+- Hosted GitHub Actions must run for the follow-up scroll-reset PR.
 - The browser automation CLI accessibility command did not return usable output. Existing Playwright interaction/label checks passed, but this pass does not claim a standalone accessibility audit.
 - The local visual session saw the generation-log request fail against the current live local provider configuration; this did not crash the page and is outside the wizard change. The mocked E2E error paths passed. Recheck production logs after deployment.
 - OpenAI, WordPress, and Supabase live mutation tests were not run for this UI change. The full suite uses isolated provider mocks and does not change production data.
@@ -119,6 +127,8 @@ npm.cmd run test:e2e
 npm.cmd run lint
 git diff --check
 npm.cmd run quality
+npx.cmd playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep "PC browser can complete the core"
+npm.cmd run quality
 npx.cmd playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep "URL fetch failure"
 npm.cmd run quality
 ```
@@ -140,12 +150,18 @@ Results:
 - Hosted GitHub Actions for `9e36c86`: passed in 5m43s, including typecheck, lint, integrity, unit/integration, contract, coverage, 49 Chromium PC E2E scenarios, production build, and artifact upload.
 - Focused URL failure E2E after the review fix: passed, 2 scenarios.
 - Full quality gate after the review fix: passed again with 45 files / 356 unit/integration tests, 3 files / 13 contract tests, 49 Chromium PC E2E scenarios, the same coverage thresholds, and a successful production build.
+- Hosted GitHub Actions for `c0f8359`: passed in 4m52s; PR #3 merged as `ef585b1`.
+- Vercel deployment `dpl_1DoFxnfvLb5ABarWVjPQ5xyNoHFY`: Ready, production target, canonical alias applied.
+- Production HTTP smoke: `307` to `/demo-login?next=%2F`, followed by `200`.
+- Production PC browser smoke: login, single-card rendering, primary choices, required feedback, free text, and step transition worked; the retained scroll position issue was found visually.
+- Focused core E2E after scroll reset: passed, 1 scenario with explicit `scrollTop === 0` verification after changing steps.
+- Full quality gate after scroll reset: passed with 45 files / 356 unit/integration tests, 3 files / 13 contract tests, 49 Chromium PC E2E scenarios, coverage thresholds, and production build.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Review PR #3, including the accepted optional Bugbot finding and its persistent URL-result panel fix.
+1. Review the follow-up scroll-reset PR after Codex creates it.
 2. Verify that rendering only one card at a time does not hide any prior editing path needed by existing users.
 3. Review client/server parity for reference, primary-information, and visual-tone requirements.
 4. Confirm backward compatibility for old saved drafts that have no `primaryInfoTypes` field.
