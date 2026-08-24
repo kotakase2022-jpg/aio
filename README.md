@@ -33,6 +33,10 @@ Required for production WordPress credential storage:
 
 - `WORDPRESS_ENCRYPTION_KEY`
 
+Required for signed demo sessions in production:
+
+- `DEMO_AUTH_SECRET` (32文字以上のランダム値。`DEMO_ACCESS_CODE`とは別に管理する)
+
 When Supabase is not configured, drafts and WordPress connections are stored in `.data/` for local MVP verification only.
 
 ## Scripts

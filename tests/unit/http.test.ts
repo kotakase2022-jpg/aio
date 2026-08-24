@@ -1,6 +1,14 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { ApiError, errorJson, okJson } from "@/lib/server/http";
+import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
+
+const processEnvSnapshot = snapshotProcessEnv();
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  restoreProcessEnv(processEnvSnapshot);
+});
 
 describe("HTTP response helpers", () => {
   test("okJson returns a stable success envelope", async () => {
@@ -39,6 +47,16 @@ describe("HTTP response helpers", () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: "Unexpected failure",
+    });
+  });
+
+  test("errorJson does not expose internal exception details in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const response = errorJson(new Error("C:\\internal\\secret-path"));
+
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "サーバー処理中にエラーが発生しました。時間をおいて再実行してください。",
     });
   });
 });

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  createDemoSessionToken,
+  DEMO_AUTH_COOKIE_NAME,
+  DEMO_SESSION_MAX_AGE_SECONDS,
+} from "@/lib/demo-session";
 
-const AUTH_COOKIE_NAME = "aio_demo_auth";
-const AUTH_COOKIE_VALUE = "demo-access-granted";
 const DEFAULT_ACCESS_CODE = "202607";
 
 export const runtime = "nodejs";
@@ -18,15 +21,28 @@ export async function POST(request: Request) {
     );
   }
 
+  let sessionToken: string;
+  try {
+    sessionToken = await createDemoSessionToken();
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "認証設定に不備があります。管理者に連絡してください。",
+      },
+      { status: 500 },
+    );
+  }
+
   const response = NextResponse.json({ ok: true });
   response.cookies.set({
-    name: AUTH_COOKIE_NAME,
-    value: AUTH_COOKIE_VALUE,
+    name: DEMO_AUTH_COOKIE_NAME,
+    value: sessionToken,
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 14,
+    maxAge: DEMO_SESSION_MAX_AGE_SECONDS,
   });
   return response;
 }
@@ -34,7 +50,7 @@ export async function POST(request: Request) {
 export async function DELETE() {
   const response = NextResponse.json({ ok: true });
   response.cookies.set({
-    name: AUTH_COOKIE_NAME,
+    name: DEMO_AUTH_COOKIE_NAME,
     value: "",
     httpOnly: true,
     sameSite: "lax",

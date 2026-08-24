@@ -35,6 +35,11 @@ export function errorJson(error: unknown) {
     );
   }
 
-  const message = error instanceof Error ? error.message : "Unexpected error";
+  const message =
+    process.env.NODE_ENV === "production"
+      ? "サーバー処理中にエラーが発生しました。時間をおいて再実行してください。"
+      : error instanceof Error
+        ? error.message
+        : "Unexpected error";
   return Response.json({ ok: false, error: message }, { status: 500 });
 }

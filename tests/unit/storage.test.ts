@@ -20,6 +20,7 @@ beforeEach(async () => {
   originalCwd = process.cwd();
   process.chdir(tempDir);
   process.env.SUPABASE_STORAGE_BUCKET = "";
+  process.env.VERCEL = "";
   vi.spyOn(Date, "now").mockReturnValue(1_789_000_000_000);
   vi.resetModules();
 });
@@ -28,6 +29,7 @@ afterEach(async () => {
   process.chdir(originalCwd);
   await rm(tempDir, { recursive: true, force: true });
   delete process.env.SUPABASE_STORAGE_BUCKET;
+  delete process.env.VERCEL;
   vi.restoreAllMocks();
 });
 
@@ -89,5 +91,49 @@ describe("storeAsset", () => {
         url: "https://cdn.example.com/article-assets/generated/1789000000000-featured.png",
       }),
     );
+  });
+
+  test("fails closed on Vercel when durable storage upload fails", async () => {
+    const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+    const { isSupabaseGatewayConfigured } = await import("@/lib/server/supabase-gateway");
+    const { storeAsset } = await import("@/lib/server/storage");
+    process.env.VERCEL = "1";
+    vi.mocked(getSupabaseAdmin).mockReturnValue({
+      storage: {
+        from: vi.fn(() => ({
+          upload: vi.fn(async () => ({ error: { message: "bucket unavailable" } })),
+        })),
+      },
+    } as unknown as ReturnType<typeof getSupabaseAdmin>);
+    vi.mocked(isSupabaseGatewayConfigured).mockReturnValue(false);
+
+    await expect(
+      storeAsset({
+        buffer: Buffer.from("image bytes"),
+        contentType: "image/png",
+        filename: "featured.png",
+        folder: "generated",
+      }),
+    ).rejects.toMatchObject({
+      status: 503,
+      message: "画像の永続保存に失敗しました。",
+      detail: "bucket unavailable",
+    });
+  });
+
+  test("rejects path traversal in asset folders", async () => {
+    const { storeAsset } = await import("@/lib/server/storage");
+
+    await expect(
+      storeAsset({
+        buffer: Buffer.from("image bytes"),
+        contentType: "image/png",
+        filename: "escape.png",
+        folder: "../../src",
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "画像の保存先が正しくありません。",
+    });
   });
 });

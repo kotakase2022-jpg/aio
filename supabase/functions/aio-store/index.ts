@@ -120,15 +120,23 @@ async function upsertDraft(payload: Payload) {
   const { error } = await supabase.from("article_drafts").upsert(row);
   if (error) throw new HttpError(error.message, 500);
 
-  const { error: deleteError } = await supabase
-    .from("article_images")
-    .delete()
-    .eq("draft_id", draftId);
-  if (deleteError) throw new HttpError(deleteError.message, 500);
-
   if (images.length > 0) {
-    const { error: imageError } = await supabase.from("article_images").insert(images);
+    const { error: imageError } = await supabase.from("article_images").upsert(images);
     if (imageError) throw new HttpError(imageError.message, 500);
+
+    const imageIds = images.map((image) => requireString(image.id, "images[].id"));
+    const { error: cleanupError } = await supabase
+      .from("article_images")
+      .delete()
+      .eq("draft_id", draftId)
+      .not("id", "in", `(${imageIds.join(",")})`);
+    if (cleanupError) throw new HttpError(cleanupError.message, 500);
+  } else {
+    const { error: deleteError } = await supabase
+      .from("article_images")
+      .delete()
+      .eq("draft_id", draftId);
+    if (deleteError) throw new HttpError(deleteError.message, 500);
   }
 
   return { draftId };

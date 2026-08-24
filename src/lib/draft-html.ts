@@ -1,4 +1,5 @@
 import type { ArticleDraft, ArticleImage, AuthorInput, FaqItem } from "@/types/aio";
+import { sanitizeArticleHtml } from "@/lib/article-html";
 import {
   articleContainsCanonicalSourceUrl,
   canonicalSourceUrlKey,
@@ -20,7 +21,7 @@ export function buildDraftArticleHtml(
   const withImages = replaceDraftImageReferences(draft.editedBodyHtml, draft.images, options);
   const withFaq = appendFaqBlockWhenNeeded(withImages, draft.faqItems);
   const withAuthor = appendAuthorBlockWhenNeeded(withFaq, draft.author, options);
-  return appendSourceBlockWhenNeeded(withAuthor, draft);
+  return sanitizeArticleHtml(appendSourceBlockWhenNeeded(withAuthor, draft));
 }
 
 export function replaceDraftImageReferences(

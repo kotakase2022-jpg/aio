@@ -1,9 +1,19 @@
 import * as cheerio from "cheerio";
 import { ApiError } from "@/lib/server/http";
 import { truncateText } from "@/lib/utils";
+import {
+  assertSafeOutboundUrl,
+  OutboundResponseTooLargeError,
+  safeFetch,
+  type SafeFetch,
+  UnsafeOutboundUrlError,
+} from "@/lib/server/safe-http";
 import type { FetchResult } from "@/types/aio";
 
-export async function fetchUrlContent(url: string): Promise<FetchResult> {
+export async function fetchUrlContent(
+  url: string,
+  fetcher: SafeFetch = safeFetch,
+): Promise<FetchResult> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -15,18 +25,31 @@ export async function fetchUrlContent(url: string): Promise<FetchResult> {
     throw new ApiError("httpまたはhttpsのURLを入力してください。", 400);
   }
 
+  try {
+    assertSafeOutboundUrl(parsed);
+  } catch (error) {
+    if (error instanceof UnsafeOutboundUrlError) {
+      throw new ApiError(error.message, 400);
+    }
+    throw error;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const response = await fetch(parsed.toString(), {
+    const response = await fetcher(parsed.toString(), {
       signal: controller.signal,
-      redirect: "follow",
       headers: {
         "User-Agent":
           "Mozilla/5.0 (compatible; AIOArticleGenerator/1.0; +https://vercel.com)",
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
+    }, {
+      allowRedirects: true,
+      maxRedirects: 4,
+      maxResponseBytes: 5 * 1024 * 1024,
+      timeoutMs: 15_000,
     });
 
     if (!response.ok) {
@@ -109,8 +132,12 @@ export async function fetchUrlContent(url: string): Promise<FetchResult> {
     };
   } catch (error) {
     const reason =
-      error instanceof Error && error.name === "AbortError"
+      error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)
         ? "通信がタイムアウトしました。"
+        : error instanceof UnsafeOutboundUrlError
+          ? error.message
+          : error instanceof OutboundResponseTooLargeError
+            ? `ページ容量が大きすぎるため取得できませんでした。${error.message}`
         : error instanceof Error
           ? `URL取得に失敗しました。${error.message}`
           : "URL取得中に不明なエラーが発生しました。";

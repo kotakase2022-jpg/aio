@@ -1,4 +1,4 @@
-import sanitizeHtml from "sanitize-html";
+import { sanitizeArticleHtml } from "@/lib/article-html";
 import { articleGenerationSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
 import { evaluateArticleQuality } from "@/lib/article-quality";
@@ -361,48 +361,6 @@ function compactFileInput(value: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function sanitizeArticleHtml(html: string) {
-  return sanitizeHtml(html, {
-    allowedTags: [
-      "h1",
-      "h2",
-      "h3",
-      "p",
-      "a",
-      "ul",
-      "ol",
-      "li",
-      "strong",
-      "em",
-      "blockquote",
-      "table",
-      "thead",
-      "tbody",
-      "tr",
-      "th",
-      "td",
-      "figure",
-      "figcaption",
-      "img",
-      "br",
-      "hr",
-      "section",
-      "div",
-    ],
-    allowedAttributes: {
-      a: ["href", "title", "target", "rel"],
-      img: ["src", "alt", "title"],
-      figure: ["data-image-slot"],
-      div: ["class"],
-      section: ["class"],
-    },
-    allowedSchemes: ["http", "https", "data"],
-    transformTags: {
-      a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer", target: "_blank" }),
-    },
-  });
 }
 
 function normalizeImagePrompts(result: ArticleGenerationResult, form: Record<string, unknown>) {

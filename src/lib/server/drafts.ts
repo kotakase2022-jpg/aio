@@ -26,13 +26,29 @@ export async function saveDraft(draft: ArticleDraft) {
       throw new ApiError("下書きの保存に失敗しました。", 500, error.message);
     }
 
-    await supabase.from("article_images").delete().eq("draft_id", draft.id);
     if (draft.images.length > 0) {
-      const { error: imageError } = await supabase.from("article_images").insert(
-        draftToImageRows(draft),
-      );
+      const imageRows = draftToImageRows(draft);
+      const { error: imageError } = await supabase.from("article_images").upsert(imageRows);
       if (imageError) {
         throw new ApiError("下書き画像の保存に失敗しました。", 500, imageError.message);
+      }
+
+      const retainedIds = draft.images.map((image) => image.id).join(",");
+      const { error: cleanupError } = await supabase
+        .from("article_images")
+        .delete()
+        .eq("draft_id", draft.id)
+        .not("id", "in", `(${retainedIds})`);
+      if (cleanupError) {
+        throw new ApiError("古い下書き画像の整理に失敗しました。", 500, cleanupError.message);
+      }
+    } else {
+      const { error: deleteError } = await supabase
+        .from("article_images")
+        .delete()
+        .eq("draft_id", draft.id);
+      if (deleteError) {
+        throw new ApiError("古い下書き画像の整理に失敗しました。", 500, deleteError.message);
       }
     }
 
@@ -155,6 +171,7 @@ function draftToRow(draft: ArticleDraft) {
 function draftToImageRows(draft: ArticleDraft) {
   return sanitizeForPostgres(
     draft.images.map((image) => ({
+      id: image.id,
       draft_id: draft.id,
       slot: image.slot,
       image_url: image.url,

@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe("WordPress post route", () => {
-  test("delegates approved draft posting with request origin and selected status", async () => {
+  test("delegates approved draft posting with server-derived origin and selected status", async () => {
     const { publishDraftToWordpress } = await import("@/lib/server/wordpress");
     const { getDraft } = await import("@/lib/server/drafts");
     const draft = createSampleDraft({ status: "approved" });
@@ -58,7 +58,7 @@ describe("WordPress post route", () => {
         draft: expect.objectContaining({ id: draft.id }),
         connectionId: "wp-connection-1",
         status: "publish",
-        origin: "https://app.example.com",
+        origin: "http://localhost",
       }),
     );
   });
@@ -179,7 +179,7 @@ describe("WordPress post route", () => {
         draft: expect.objectContaining({ id: draft.id }),
         connectionId: "wp-connection-1",
         status: "draft",
-        origin: "https://app.example.com",
+        origin: "http://localhost",
       }),
     );
   });

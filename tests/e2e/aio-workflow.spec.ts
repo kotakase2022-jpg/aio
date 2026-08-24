@@ -2636,6 +2636,29 @@ test("demo login rejects a wrong code and then preserves the requested return pa
   expect(errors()).toEqual([]);
 });
 
+test("legacy fixed authentication cookie cannot bypass the login screen", async ({
+  page,
+  context,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  await page.goto("/demo-login");
+  const origin = new URL(page.url()).origin;
+  await context.clearCookies();
+  await context.addCookies([
+    {
+      name: "aio_demo_auth",
+      value: "demo-access-granted",
+      url: origin,
+    },
+  ]);
+
+  await page.goto("/");
+
+  await expect(page).toHaveURL(/\/demo-login\?next=/);
+  await expect(page.getByTestId("demo-access-code")).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("stale generation job state is cleared with a Japanese recovery message", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/generation-jobs\/stale-job$/],

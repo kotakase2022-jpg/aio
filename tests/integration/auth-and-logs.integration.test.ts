@@ -16,6 +16,7 @@ afterEach(() => {
 describe("demo authentication and log routes", () => {
   test("demo auth rejects wrong code and sets secure cookie for the correct code", async () => {
     process.env.DEMO_ACCESS_CODE = "202607";
+    process.env.DEMO_AUTH_SECRET = "test-only-demo-session-secret-32-characters";
     const { POST, DELETE } = await import("@/app/api/demo-auth/route");
 
     const rejected = await POST(
@@ -43,7 +44,8 @@ describe("demo authentication and log routes", () => {
 
     expect(accepted.status).toBe(200);
     expect(acceptedJson).toMatchObject({ ok: true });
-    expect(setCookie).toContain("aio_demo_auth=demo-access-granted");
+    expect(setCookie).toMatch(/aio_demo_auth=v1\.\d{13}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
+    expect(setCookie).not.toContain("demo-access-granted");
     expect(setCookie).toContain("HttpOnly");
     expect(setCookie).toContain("SameSite=lax");
 
@@ -54,7 +56,7 @@ describe("demo authentication and log routes", () => {
   test("proxy redirects unauthenticated pages and returns Japanese API auth errors", async () => {
     const { proxy } = await import("@/proxy");
 
-    const pageResponse = proxy(
+    const pageResponse = await proxy(
       new NextRequest("http://localhost/?tab=preview"),
     );
     expect(pageResponse.status).toBe(307);
@@ -62,7 +64,7 @@ describe("demo authentication and log routes", () => {
       "http://localhost/demo-login?next=%2F%3Ftab%3Dpreview",
     );
 
-    const apiResponse = proxy(
+    const apiResponse = await proxy(
       new NextRequest("http://localhost/api/generate-article"),
     );
     const apiJson = await apiResponse.json();
@@ -71,6 +73,35 @@ describe("demo authentication and log routes", () => {
       ok: false,
       error: "認証が必要です。アクセスコードを入力してください。",
     });
+  });
+
+  test("proxy rejects the legacy fixed cookie and accepts only a valid signed session", async () => {
+    process.env.DEMO_AUTH_SECRET = "test-only-demo-session-secret-32-characters";
+    const { POST } = await import("@/app/api/demo-auth/route");
+    const { proxy } = await import("@/proxy");
+
+    const forged = await proxy(
+      new NextRequest("http://localhost/api/generation-logs", {
+        headers: { cookie: "aio_demo_auth=demo-access-granted" },
+      }),
+    );
+    expect(forged.status).toBe(401);
+
+    const login = await POST(
+      new Request("http://localhost/api/demo-auth", {
+        method: "POST",
+        body: JSON.stringify({ code: "202607" }),
+      }),
+    );
+    const setCookie = login.headers.get("set-cookie") ?? "";
+    const cookie = setCookie.split(";")[0];
+    const accepted = await proxy(
+      new NextRequest("http://localhost/api/generation-logs", {
+        headers: { cookie },
+      }),
+    );
+
+    expect(accepted.status).toBe(200);
   });
 
   test("generation logs route returns persisted summaries", async () => {

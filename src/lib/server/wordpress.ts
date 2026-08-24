@@ -5,7 +5,7 @@ import {
   randomBytes,
   randomUUID,
 } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ArticleDraft, WordpressConnection } from "@/types/aio";
@@ -18,10 +18,20 @@ import {
   callSupabaseGateway,
   isSupabaseGatewayConfigured,
 } from "@/lib/server/supabase-gateway";
+import {
+  assertSafeOutboundUrl,
+  safeFetch,
+  UnsafeOutboundUrlError,
+} from "@/lib/server/safe-http";
+import { inspectImageFile } from "@/lib/server/image-file";
 
 type StoredConnection = WordpressConnection & {
   encryptedApplicationPassword: string;
 };
+
+const MAX_WORDPRESS_MEDIA_BYTES = 10 * 1024 * 1024;
+const MAX_WORDPRESS_API_RESPONSE_BYTES = 1024 * 1024;
+const MAX_WORDPRESS_POST_RESPONSE_BYTES = 10 * 1024 * 1024;
 
 const dataDir = process.env.VERCEL
   ? path.join(os.tmpdir(), "aio-article-generator")
@@ -73,7 +83,10 @@ export async function saveWordpressConnection(input: {
     await writeConnections(store);
   }
 
-  return publicConnection(connection, connection.encryptedApplicationPassword);
+  return publicConnection(
+    connection,
+    createConnectionToken(connection, input.applicationPassword),
+  );
 }
 
 export async function publishDraftToWordpress({
@@ -130,25 +143,29 @@ export async function publishDraftToWordpress({
     );
   }
 
-  const response = await fetch(`${connection.siteUrl}/wp-json/wp/v2/posts`, {
-    method: "POST",
-    headers: {
-      Authorization: authHeader,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      title: draft.editedTitle,
-      slug: draft.editedSlug,
-      excerpt: draft.editedMetaDescription,
-      content: buildDraftArticleHtml(draft, {
-        imageUrlResolver: (url) => resolveAssetUrl(url, origin),
+  const response = await wordpressApiFetch(
+    `${connection.siteUrl}/wp-json/wp/v2/posts`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: draft.editedTitle,
+        slug: draft.editedSlug,
+        excerpt: draft.editedMetaDescription,
+        content: buildDraftArticleHtml(draft, {
+          imageUrlResolver: (url) => resolveAssetUrl(url, origin),
+        }),
+        status,
+        categories: categoryIds,
+        tags: tagIds,
+        featured_media: featuredMedia,
       }),
-      status,
-      categories: categoryIds,
-      tags: tagIds,
-      featured_media: featuredMedia,
-    }),
-  });
+    },
+    MAX_WORDPRESS_POST_RESPONSE_BYTES,
+  );
 
   const json = (await response.json().catch(() => ({}))) as {
     link?: string;
@@ -182,13 +199,34 @@ export async function publishDraftToWordpress({
 }
 
 function normalizeSiteUrl(value: string) {
-  const url = new URL(value.trim());
-  return url.origin;
+  try {
+    const url = assertSafeOutboundUrl(value.trim());
+    if (process.env.NODE_ENV === "production" && url.protocol !== "https:") {
+      throw new ApiError(
+        "本番環境ではHTTPSのWordPressサイトURLが必要です。",
+        400,
+        "Application Passwordを安全に送信するため、https://で始まるURLを入力してください。",
+      );
+    }
+    return url.origin;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    if (error instanceof UnsafeOutboundUrlError) {
+      throw new ApiError(
+        "安全上の理由により、このWordPressサイトURLは使用できません。",
+        400,
+        "公開されたhttpまたはhttpsのWordPressサイトURLを入力してください。",
+      );
+    }
+    throw error;
+  }
 }
 
 function getEncryptionKey() {
-  const raw = process.env.WORDPRESS_ENCRYPTION_KEY;
-  if (!raw && process.env.NODE_ENV === "production") {
+  const raw = process.env.WORDPRESS_ENCRYPTION_KEY?.replace(/^\uFEFF/, "").trim();
+  if ((!raw || raw.length < 32) && process.env.NODE_ENV === "production") {
     throw new ApiError(
       "本番環境ではWordPress認証情報の暗号化キーが必要です。",
       500,
@@ -298,14 +336,57 @@ function connectionFromToken(connection?: WordpressConnection): StoredConnection
     return null;
   }
 
-  return {
-    id: connection.id,
-    siteUrl: connection.siteUrl,
-    username: connection.username,
-    encryptedApplicationPassword: connection.connectionToken,
-    createdAt: connection.createdAt,
-    updatedAt: connection.updatedAt,
-  };
+  try {
+    const payload = JSON.parse(decryptSecret(connection.connectionToken)) as {
+      version?: unknown;
+      id?: unknown;
+      siteUrl?: unknown;
+      username?: unknown;
+      applicationPassword?: unknown;
+    };
+    if (
+      payload.version !== 1 ||
+      typeof payload.id !== "string" ||
+      typeof payload.siteUrl !== "string" ||
+      typeof payload.username !== "string" ||
+      typeof payload.applicationPassword !== "string" ||
+      payload.id !== connection.id ||
+      payload.siteUrl !== connection.siteUrl ||
+      payload.username !== connection.username
+    ) {
+      throw new Error("Connection token metadata mismatch");
+    }
+
+    return {
+      id: payload.id,
+      siteUrl: normalizeSiteUrl(payload.siteUrl),
+      username: payload.username,
+      encryptedApplicationPassword: encryptSecret(payload.applicationPassword),
+      createdAt: connection.createdAt,
+      updatedAt: connection.updatedAt,
+    };
+  } catch {
+    throw new ApiError(
+      "WordPress接続情報を確認できませんでした。",
+      400,
+      "接続情報が古いか変更されています。WordPress接続情報を保存し直してください。",
+    );
+  }
+}
+
+function createConnectionToken(
+  connection: StoredConnection,
+  applicationPassword: string,
+) {
+  return encryptSecret(
+    JSON.stringify({
+      version: 1,
+      id: connection.id,
+      siteUrl: connection.siteUrl,
+      username: connection.username,
+      applicationPassword,
+    }),
+  );
 }
 
 async function ensureTerms(
@@ -317,7 +398,7 @@ async function ensureTerms(
   const ids: number[] = [];
 
   for (const name of names.filter(Boolean)) {
-    const searchResponse = await fetch(
+    const searchResponse = await wordpressApiFetch(
       `${siteUrl}/wp-json/wp/v2/${type}?search=${encodeURIComponent(name)}&per_page=20`,
       { headers: { Authorization: authHeader } },
     );
@@ -344,7 +425,7 @@ async function ensureTerms(
       continue;
     }
 
-    const createResponse = await fetch(`${siteUrl}/wp-json/wp/v2/${type}`, {
+    const createResponse = await wordpressApiFetch(`${siteUrl}/wp-json/wp/v2/${type}`, {
       method: "POST",
       headers: { Authorization: authHeader, "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -418,15 +499,28 @@ async function uploadMedia(
   let buffer: Buffer;
   let contentType = "image/png";
 
-  if (resolvedUrl.startsWith("data:")) {
+  const localAsset = await readLocalUploadAsset(imageUrl);
+  if (localAsset) {
+    buffer = localAsset;
+    contentType = "";
+  } else if (resolvedUrl.startsWith("data:")) {
     const match = /^data:(.+);base64,(.+)$/.exec(resolvedUrl);
-    if (!match) {
+    if (!match || !/^[A-Za-z0-9+/\s]*={0,2}$/.test(match[2])) {
       throw new ApiError("アイキャッチ画像のデータURLが不正です。", 400);
     }
     contentType = match[1];
-    buffer = Buffer.from(match[2], "base64");
+    buffer = Buffer.from(match[2].replace(/\s+/g, ""), "base64");
   } else {
-    const imageResponse = await fetch(resolvedUrl);
+    const imageResponse = await safeFetch(
+      resolvedUrl,
+      {},
+      {
+        allowRedirects: true,
+        maxRedirects: 3,
+        maxResponseBytes: 10 * 1024 * 1024,
+        timeoutMs: 30_000,
+      },
+    );
     if (!imageResponse.ok) {
       throw new ApiError(
         "WordPress投稿用のアイキャッチ画像を取得できませんでした。",
@@ -438,15 +532,21 @@ async function uploadMedia(
     buffer = Buffer.from(await imageResponse.arrayBuffer());
   }
 
-  const extension = contentType.includes("jpeg") ? "jpg" : "png";
-  const response = await fetch(`${siteUrl}/wp-json/wp/v2/media`, {
+  if (buffer.length > MAX_WORDPRESS_MEDIA_BYTES) {
+    throw new ApiError("WordPress投稿用の画像は10MB以下にしてください。", 400);
+  }
+  const image = inspectImageFile(buffer, contentType);
+  contentType = image.contentType;
+
+  const extension = image.extension;
+  const response = await wordpressApiFetch(`${siteUrl}/wp-json/wp/v2/media`, {
     method: "POST",
     headers: {
       Authorization: authHeader,
       "Content-Type": contentType,
       "Content-Disposition": `attachment; filename="aio-featured-${Date.now()}.${extension}"`,
     },
-    body: new Blob([new Uint8Array(buffer)], { type: contentType }),
+    body: buffer,
   });
 
   const json = (await response.json().catch(() => ({}))) as {
@@ -467,13 +567,57 @@ async function uploadMedia(
   return mediaId;
 }
 
+async function readLocalUploadAsset(imageUrl: string) {
+  if (process.env.VERCEL || !imageUrl.startsWith("/uploads/")) {
+    return null;
+  }
+
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(new URL(imageUrl, "http://local.invalid").pathname);
+  } catch {
+    throw new ApiError("ローカル画像のパスが不正です。", 400);
+  }
+
+  const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
+  const candidatePath = path.resolve(process.cwd(), "public", `.${pathname}`);
+  try {
+    const [resolvedRoot, resolvedFile] = await Promise.all([
+      realpath(uploadsRoot),
+      realpath(candidatePath),
+    ]);
+    const relativePath = path.relative(resolvedRoot, resolvedFile);
+    if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      throw new Error("Local upload path escapes its root");
+    }
+
+    const metadata = await stat(resolvedFile);
+    if (!metadata.isFile()) {
+      throw new Error("Local upload path is not a file");
+    }
+    if (metadata.size > MAX_WORDPRESS_MEDIA_BYTES) {
+      throw new ApiError("WordPress投稿用の画像は10MB以下にしてください。", 400);
+    }
+    return await readFile(resolvedFile);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(
+      "WordPress投稿用のローカル画像を読み込めませんでした。",
+      400,
+      "画像をアップロードし直すか、画像なしで投稿してください。",
+    );
+  }
+}
+
 async function updateMediaAltText(
   siteUrl: string,
   authHeader: string,
   mediaId: number,
   altText: string,
 ) {
-  const response = await fetch(`${siteUrl}/wp-json/wp/v2/media/${mediaId}`, {
+  const response = await wordpressApiFetch(`${siteUrl}/wp-json/wp/v2/media/${mediaId}`, {
     method: "POST",
     headers: {
       Authorization: authHeader,
@@ -524,10 +668,29 @@ async function saveWordpressPostRecord(
     return;
   }
 
-  await supabase.from("wordpress_posts").insert({
+  const { error } = await supabase.from("wordpress_posts").insert({
     draft_id: draftId,
     connection_id: connectionId,
     post_url: postUrl,
     post_status: status,
+  });
+  if (error) {
+    throw new ApiError(
+      "WordPress投稿結果の保存に失敗しました。",
+      500,
+      `WordPressへの投稿自体は完了しています。重複投稿を避けるため、投稿URLを確認してください。${error.message ? ` (${error.message})` : ""}`,
+    );
+  }
+}
+
+function wordpressApiFetch(
+  url: string,
+  init: NonNullable<Parameters<typeof safeFetch>[1]> = {},
+  maxResponseBytes = MAX_WORDPRESS_API_RESPONSE_BYTES,
+) {
+  return safeFetch(url, init, {
+    allowRedirects: false,
+    maxResponseBytes,
+    timeoutMs: 30_000,
   });
 }
