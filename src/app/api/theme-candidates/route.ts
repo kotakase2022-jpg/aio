@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { primaryInformationLabels } from "@/lib/primary-information";
 import { themeCandidateSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
 import { errorJson, okJson } from "@/lib/server/http";
@@ -23,6 +24,7 @@ const inputSchema = z.object({
   competitorFiles: z.array(fileSchema).optional(),
   competitorResearch: z.record(z.string(), z.unknown()).optional().nullable(),
   currentTheme: z.string().optional(),
+  primaryInfoTypes: z.array(z.string()).optional(),
   primaryInfo: z.string().optional(),
 });
 
@@ -36,6 +38,7 @@ export async function POST(request: Request) {
       instructions: [
         "You are a Japanese BtoB AIO/SEO content strategist.",
         "Suggest article theme and keyword candidates from the provided reference material, competitor material, uploaded file extracts, primary first-party information, and optional existing competitor research.",
+        "Treat payload.primaryInfoTypes as the declared kind of first-party evidence and use it to choose a concrete editorial angle.",
         "When primaryInfo is provided, use it as a high-priority source of original angles, field observations, caveats, reader pain points, and differentiation ideas. Do not paste it verbatim; turn it into candidate themes and search-intent hypotheses.",
         "Use web_search only when URL context or current competitor context is needed.",
         "Return only structured JSON matching the schema.",
@@ -69,6 +72,7 @@ function compactPayload(payload: z.infer<typeof inputSchema>) {
     competitorFiles: compactFiles(payload.competitorFiles),
     competitorResearch: payload.competitorResearch,
     currentTheme: payload.currentTheme ? truncateText(payload.currentTheme, 800) : "",
+    primaryInfoTypes: primaryInformationLabels(payload.primaryInfoTypes ?? []),
     primaryInfo: compactOptionalText(payload.primaryInfo, 1200),
   };
 }

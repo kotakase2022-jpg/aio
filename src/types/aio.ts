@@ -166,6 +166,7 @@ export type ArticleFormPayload = {
   referenceFiles?: AttachedFileInput[];
   competitorFiles?: AttachedFileInput[];
   theme: string;
+  primaryInfoTypes?: import("@/lib/primary-information").PrimaryInformationType[];
   primaryInfo?: string;
   closingText: string;
   author: AuthorInput;
