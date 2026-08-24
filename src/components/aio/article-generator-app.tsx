@@ -1406,7 +1406,6 @@ export function ArticleGeneratorApp() {
                 onRemove={(id) => removeAttachmentFile(id, "reference")}
                 testId="reference-file-input"
               />
-              <FetchFailures results={fetchedReferences} />
             </CardContent>
           </Card>
           ) : null}
@@ -1494,7 +1493,6 @@ export function ArticleGeneratorApp() {
                   {competitorJsonError}
                 </p>
               ) : null}
-              <FetchFailures results={fetchedCompetitors} />
             </CardContent>
           </Card>
           ) : null}
@@ -1951,6 +1949,15 @@ export function ArticleGeneratorApp() {
               <div>{activeError}</div>
             </div>
           ) : null}
+
+          <FetchResultAlerts
+            referenceResults={fetchedReferences}
+            competitorResults={fetchedCompetitors}
+            onOpenStep={(step) => {
+              setActiveInputStep(step);
+              setInputWizardMessage("");
+            }}
+          />
 
           <GenerationLogsPanel
             logs={generationLogs}
@@ -2560,6 +2567,65 @@ function FetchFailures({ results }: { results: FetchResult[] }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function FetchResultAlerts({
+  referenceResults,
+  competitorResults,
+  onOpenStep,
+}: {
+  referenceResults: FetchResult[];
+  competitorResults: FetchResult[];
+  onOpenStep: (step: "references" | "competitors") => void;
+}) {
+  const referenceNotices = referenceResults.filter((result) => result.reason);
+  const competitorNotices = competitorResults.filter((result) => result.reason);
+  if (referenceNotices.length === 0 && competitorNotices.length === 0) return null;
+
+  return (
+    <Card data-testid="fetch-result-alerts" className="border-amber-200">
+      <CardHeader>
+        <CardTitle>URL取得結果</CardTitle>
+        <CardDescription>
+          取得できなかったURLは、該当入力へ戻って手動テキストで補えます。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {referenceNotices.length > 0 ? (
+          <section data-testid="reference-fetch-results" className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-slate-900">参照情報</h3>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => onOpenStep("references")}
+              >
+                参照情報を修正
+              </Button>
+            </div>
+            <FetchFailures results={referenceNotices} />
+          </section>
+        ) : null}
+        {competitorNotices.length > 0 ? (
+          <section data-testid="competitor-fetch-results" className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-slate-900">競合情報</h3>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => onOpenStep("competitors")}
+              >
+                競合情報を修正
+              </Button>
+            </div>
+            <FetchFailures results={competitorNotices} />
+          </section>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 

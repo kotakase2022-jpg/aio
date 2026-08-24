@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 4
 - Loop number inferred from: The previous handoff remained in Loop 3 for reliability and generated-content quality. This is a new user-requested PC input-flow feature, so Codex starts Loop 4.
-- Phase: Development / Verification / Handoff
-- Last updated: 2026-08-24 19:32 +09:00
+- Phase: Review Fix / Verification / Handoff
+- Last updated: 2026-08-24 19:44 +09:00
 
 ## 1. Current Goal
 
@@ -22,10 +22,10 @@ Current objective:
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/sequential-input-wizard`
-- Latest commit: `b92f6a7` (feature changes are not committed yet at this handoff checkpoint)
-- Last known good commit: `b92f6a7`
-- PR: Not created yet
-- CodeRabbit OSS review status: Not run; PR creation is the next release step
+- Latest commit: `9e36c86` (the fetch-result visibility review fix is not committed yet at this checkpoint)
+- Last known good commit: `9e36c86`
+- PR: https://github.com/kotakase2022-jpg/aio/pull/3
+- CodeRabbit OSS review status: Check passed but detailed review was rate-limited; no CodeRabbit finding was produced
 
 ## 3. What Was Done
 
@@ -47,6 +47,10 @@ Current objective:
 - Added and updated unit, integration, fixture, and Playwright coverage for the wizard, validation, request payload, and AI prompt contracts.
 - Ran the complete local quality gate successfully.
 - Verified the UI at a 1440 x 1000 PC viewport with isolated browser automation. No page error, console error, framework overlay, overlap, or blank-content issue was observed.
+- Reviewed one optional Cursor Bugbot finding and confirmed it was valid: URL extraction details disappeared when the user moved away from the reference or competitor wizard card.
+- Moved URL extraction notices into a persistent right-column panel that shows the URL and Japanese reason from every wizard step, with buttons that return to the relevant input.
+- Updated both URL failure E2E scenarios to generate from the final wizard step, verify the persistent details, and verify the correction navigation.
+- Re-ran the full quality gate after the review fix; it remained green.
 
 ## 4. Files Changed
 
@@ -72,15 +76,16 @@ Main files changed:
 
 ## 5. Current Status
 
-- Implementation is complete locally.
+- Implementation and the review fix are complete locally.
 - Full deterministic quality validation is green.
-- The feature is not committed, reviewed, merged, or deployed yet.
+- PR #3 is open. The initial feature commit passed hosted GitHub Actions; the review fix still needs commit, push, and hosted revalidation.
+- Production deployment and production browser smoke verification are pending.
 - Existing untracked `output/` files are generated usage-manual artifacts. They are intentionally excluded from this feature commit and must not be deleted.
 
 ## 6. Known Issues
 
-- CodeRabbit OSS and hosted GitHub Actions have not run because the pull request is not created yet.
-- Production deployment and production browser smoke verification remain pending.
+- CodeRabbit could not provide a detailed review because the free-plan review limit was reached. Its status check passed with a rate-limit notice.
+- Hosted GitHub Actions must re-run after the local review fix is pushed.
 - The browser automation CLI accessibility command did not return usable output. Existing Playwright interaction/label checks passed, but this pass does not claim a standalone accessibility audit.
 - The local visual session saw the generation-log request fail against the current live local provider configuration; this did not crash the page and is outside the wizard change. The mocked E2E error paths passed. Recheck production logs after deployment.
 - OpenAI, WordPress, and Supabase live mutation tests were not run for this UI change. The full suite uses isolated provider mocks and does not change production data.
@@ -88,18 +93,18 @@ Main files changed:
 
 ## 7. CodeRabbit Review
 
-- Review status: Not run; PR pending.
+- Review status: Status check passed with a review-limit warning; detailed review unavailable for this PR.
 - Critical findings: None known.
 - Resolved findings: None.
-- Deferred findings: None.
+- Deferred findings: Detailed line-by-line CodeRabbit review was not available due to rate limiting.
 - False positives / not applicable: None.
 
 ## 8. Optional Bugbot Findings
 
-- Status: Not run.
-- Findings: None.
-- Actions taken: None.
-- Reason: Cursor Bugbot is optional/backup only; no CodeRabbit ambiguity or new high-risk credential/database behavior currently requires a second review.
+- Status: Run automatically by the repository integration.
+- Findings: One medium finding: reference/competitor URL extraction failures were hidden after moving to another wizard step.
+- Actions taken: Accepted and fixed with a persistent right-column result panel, correction buttons, and two regression E2E scenarios.
+- Reason: The optional review supplied useful backup coverage while CodeRabbit was rate-limited.
 
 ## 9. Verification Results
 
@@ -113,6 +118,8 @@ npx.cmd playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --g
 npm.cmd run test:e2e
 npm.cmd run lint
 git diff --check
+npm.cmd run quality
+npx.cmd playwright test tests/e2e/aio-workflow.spec.ts --project=chromium-pc --grep "URL fetch failure"
 npm.cmd run quality
 ```
 
@@ -130,12 +137,15 @@ Results:
 - Next.js 16.2.9 production build: passed.
 - `npm.cmd run quality`: passed end to end.
 - PC visual smoke at 1440 x 1000: passed for the reference and primary-information steps.
+- Hosted GitHub Actions for `9e36c86`: passed in 5m43s, including typecheck, lint, integrity, unit/integration, contract, coverage, 49 Chromium PC E2E scenarios, production build, and artifact upload.
+- Focused URL failure E2E after the review fix: passed, 2 scenarios.
+- Full quality gate after the review fix: passed again with 45 files / 356 unit/integration tests, 3 files / 13 contract tests, 49 Chromium PC E2E scenarios, the same coverage thresholds, and a successful production build.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Review the pull request and CodeRabbit OSS output after Codex creates it.
+1. Review PR #3, including the accepted optional Bugbot finding and its persistent URL-result panel fix.
 2. Verify that rendering only one card at a time does not hide any prior editing path needed by existing users.
 3. Review client/server parity for reference, primary-information, and visual-tone requirements.
 4. Confirm backward compatibility for old saved drafts that have no `primaryInfoTypes` field.

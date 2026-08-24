@@ -1714,10 +1714,17 @@ test("reference URL fetch failure is visible while manual fallback still generat
   await page
     .getByTestId("reference-text-0")
     .fill("Manual fallback reference text for blocked URL.");
+  await openInputStep(page, "word-count");
   await page.getByTestId("article-primary-button").click();
 
-  await expect(page.locator("#references").getByText(failedUrl, { exact: true })).toBeVisible();
-  await expect(page.getByText("十分な本文を抽出できませんでした。")).toBeVisible();
+  await expect(page.getByTestId("input-wizard-step-word-count")).toBeVisible();
+  const referenceFetchResults = page.getByTestId("reference-fetch-results");
+  await expect(referenceFetchResults.getByText(failedUrl, { exact: true })).toBeVisible();
+  await expect(
+    referenceFetchResults.getByText("十分な本文を抽出できませんでした。"),
+  ).toBeVisible();
+  await referenceFetchResults.getByRole("button", { name: "参照情報を修正" }).click();
+  await expect(page.getByTestId("input-wizard-step-references")).toBeVisible();
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
   ).toBeVisible();
@@ -1784,10 +1791,17 @@ test("competitor URL fetch failure is visible while manual competitor notes stil
   await page
     .getByTestId("competitor-text-0")
     .fill("Manual competitor note about pricing-first messaging and weak approval workflow.");
+  await openInputStep(page, "word-count");
   await page.getByTestId("article-primary-button").click();
 
-  await expect(page.locator("#competitors").getByText(failedUrl, { exact: true })).toBeVisible();
-  await expect(page.getByText("十分な本文を抽出できませんでした。")).toBeVisible();
+  await expect(page.getByTestId("input-wizard-step-word-count")).toBeVisible();
+  const competitorFetchResults = page.getByTestId("competitor-fetch-results");
+  await expect(competitorFetchResults.getByText(failedUrl, { exact: true })).toBeVisible();
+  await expect(
+    competitorFetchResults.getByText("十分な本文を抽出できませんでした。"),
+  ).toBeVisible();
+  await competitorFetchResults.getByRole("button", { name: "競合情報を修正" }).click();
+  await expect(page.getByTestId("input-wizard-step-competitors")).toBeVisible();
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
   ).toBeVisible();
