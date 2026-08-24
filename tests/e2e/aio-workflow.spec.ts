@@ -807,6 +807,7 @@ test("target word count quality check catches short generated drafts", async ({ 
     .getByTestId("reference-text-0")
     .fill("Reference text for checking whether generated article length matches the selected word count.");
   await openInputStep(page, "word-count");
+  await expect(page.getByTestId("word-count-select")).toHaveAccessibleName("記事の文字数");
   await page.getByTestId("word-count-select").selectOption("6000");
   await page.getByTestId("article-primary-button").click();
 
@@ -2074,6 +2075,9 @@ test("approved drafts can be published to WordPress with Japanese publish status
     "WordPress接続情報を保存しました。",
   );
 
+  await expect(page.getByTestId("wordpress-status-select")).toHaveAccessibleName(
+    "WordPress投稿ステータス",
+  );
   await page.getByTestId("wordpress-status-select").selectOption("publish");
   await page.getByTestId("wordpress-post-button").click();
 
