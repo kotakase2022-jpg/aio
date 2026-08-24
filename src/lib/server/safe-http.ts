@@ -89,7 +89,12 @@ export const publicDnsLookup: LookupFunction = (hostname, options, callback) => 
         return;
       }
 
-      const requestedFamily = options.family === 4 || options.family === 6 ? options.family : 0;
+      const requestedFamily =
+        options.family === 4 || options.family === "IPv4"
+          ? 4
+          : options.family === 6 || options.family === "IPv6"
+            ? 6
+            : 0;
       const eligibleAddresses = requestedFamily
         ? addresses.filter((item) => item.family === requestedFamily)
         : addresses;
