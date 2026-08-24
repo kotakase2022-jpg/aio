@@ -2,6 +2,7 @@ import { z } from "zod";
 import { parseArticleDraft } from "@/lib/article-draft-schema";
 import { sanitizeArticleHtml } from "@/lib/article-html";
 import { saveDraft } from "@/lib/server/drafts";
+import { syncGenerationJobDraft } from "@/lib/server/generation-jobs";
 import { errorJson, okJson } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -18,6 +19,7 @@ export async function POST(request: Request) {
       updatedAt: new Date().toISOString(),
     };
     const result = await saveDraft(cleanDraft);
+    await syncGenerationJobDraft(result.draft);
     return okJson(result);
   } catch (error) {
     return errorJson(error);
