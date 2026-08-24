@@ -81,7 +81,7 @@ export type SafeFetch = (
   options?: SafeFetchOptions,
 ) => Promise<SafeResponse>;
 
-const publicLookup: LookupFunction = (hostname, _options, callback) => {
+export const publicDnsLookup: LookupFunction = (hostname, options, callback) => {
   dnsLookup(hostname, { all: true, verbatim: true })
     .then((addresses) => {
       if (addresses.length === 0 || addresses.some((item) => !isPublicIpAddress(item.address))) {
@@ -89,7 +89,26 @@ const publicLookup: LookupFunction = (hostname, _options, callback) => {
         return;
       }
 
-      const selected = addresses[0];
+      const requestedFamily =
+        options.family === 4 || options.family === "IPv4"
+          ? 4
+          : options.family === 6 || options.family === "IPv6"
+            ? 6
+            : 0;
+      const eligibleAddresses = requestedFamily
+        ? addresses.filter((item) => item.family === requestedFamily)
+        : addresses;
+      if (eligibleAddresses.length === 0) {
+        callback(new Error(`No DNS address matched the requested family for ${hostname}`), "");
+        return;
+      }
+
+      if (options.all) {
+        callback(null, eligibleAddresses);
+        return;
+      }
+
+      const selected = eligibleAddresses[0];
       callback(null, selected.address, selected.family);
     })
     .catch((error: unknown) => {
@@ -98,7 +117,7 @@ const publicLookup: LookupFunction = (hostname, _options, callback) => {
 };
 
 const publicNetworkAgent = new Agent({
-  connect: { lookup: publicLookup },
+  connect: { lookup: publicDnsLookup },
 });
 
 export function assertSafeOutboundUrl(value: string | URL) {

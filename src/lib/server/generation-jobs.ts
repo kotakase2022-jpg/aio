@@ -11,6 +11,7 @@ import {
 } from "@/lib/server/supabase-gateway";
 import { truncateText } from "@/lib/utils";
 import type {
+  ArticleDraft,
   ArticleFormPayload,
   DraftStatus,
   GenerationJob,
@@ -229,6 +230,20 @@ export async function listGenerationJobs(limit = 30) {
 export async function listGenerationLogs(limit = 20) {
   const jobs = await listGenerationJobs(limit);
   return jobs.map(jobToLogSummary);
+}
+
+export async function syncGenerationJobDraft(draft: ArticleDraft) {
+  const jobs = await listGenerationJobs(100);
+  const job = jobs.find((item) => item.draftId === draft.id || item.draft?.id === draft.id);
+  if (!job) {
+    return null;
+  }
+
+  return updateGenerationJob(job.id, (current) => ({
+    ...current,
+    draft,
+    draftId: draft.id,
+  }));
 }
 
 export async function markGenerationJobWordpressPost({

@@ -155,4 +155,58 @@ describe("draft persistence route handlers", () => {
     });
     expect(logs[0].inputSummary).toContain("AIO article generation");
   });
+
+  test("save and approve routes keep generation logs and reopened output in sync", async () => {
+    const { saveGenerationJob, getGenerationJob, listGenerationLogs } = await import(
+      "@/lib/server/generation-jobs"
+    );
+    const { POST: savePost } = await import("@/app/api/save-draft/route");
+    const { POST: approvePost } = await import("@/app/api/approve-draft/route");
+    const job = createCompletedGenerationJob();
+    const editedDraft = {
+      ...job.draft!,
+      editedTitle: "Final human-edited production title",
+      editedBodyHtml: "<h2>Final section</h2><p>Final persisted body.</p>",
+      status: "draft" as const,
+    };
+    await saveGenerationJob(job);
+
+    const saveResponse = await savePost(
+      new Request("http://localhost/api/save-draft", {
+        method: "POST",
+        body: JSON.stringify({ draft: editedDraft }),
+      }),
+    );
+    expect(saveResponse.status).toBe(200);
+    await expect(listGenerationLogs(10)).resolves.toEqual([
+      expect.objectContaining({
+        id: job.id,
+        outputTitle: "Final human-edited production title",
+        draftStatus: "draft",
+      }),
+    ]);
+
+    const approveResponse = await approvePost(
+      new Request("http://localhost/api/approve-draft", {
+        method: "POST",
+        body: JSON.stringify({ draftId: editedDraft.id, draft: editedDraft }),
+      }),
+    );
+    expect(approveResponse.status).toBe(200);
+
+    const reopenedJob = await getGenerationJob(job.id);
+    expect(reopenedJob?.draft).toMatchObject({
+      id: editedDraft.id,
+      editedTitle: "Final human-edited production title",
+      editedBodyHtml: "<h2>Final section</h2><p>Final persisted body.</p>",
+      status: "approved",
+    });
+    await expect(listGenerationLogs(10)).resolves.toEqual([
+      expect.objectContaining({
+        id: job.id,
+        outputTitle: "Final human-edited production title",
+        draftStatus: "approved",
+      }),
+    ]);
+  });
 });

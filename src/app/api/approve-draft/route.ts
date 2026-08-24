@@ -2,6 +2,7 @@ import { z } from "zod";
 import { parseArticleDraft } from "@/lib/article-draft-schema";
 import { sanitizeArticleHtml } from "@/lib/article-html";
 import { approveDraft, saveDraft } from "@/lib/server/drafts";
+import { syncGenerationJobDraft } from "@/lib/server/generation-jobs";
 import { ApiError, errorJson, okJson } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
         status: "approved",
         updatedAt: new Date().toISOString(),
       });
+      await syncGenerationJobDraft(result.draft);
       return okJson(result);
     }
 
@@ -37,6 +39,7 @@ export async function POST(request: Request) {
       );
     }
     const result = await approveDraft(body.draftId);
+    await syncGenerationJobDraft(result.draft);
     return okJson(result);
   } catch (error) {
     return errorJson(error);
