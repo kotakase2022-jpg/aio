@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/server/openai", () => ({
   generateImageBase64: vi.fn(async (prompt: string) => {
@@ -15,6 +15,10 @@ vi.mock("@/lib/server/storage", () => ({
 }));
 
 describe("image regeneration route", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   test("returns a regenerated article image with the requested slot and prompt", async () => {
     const { POST } = await import("@/app/api/generate-image/route");
     const { storeAsset } = await import("@/lib/server/storage");
@@ -48,5 +52,33 @@ describe("image regeneration route", () => {
         folder: "generated",
       }),
     );
+  });
+
+  test("does not store a generated image after the client request is aborted", async () => {
+    const { POST } = await import("@/app/api/generate-image/route");
+    const { generateImageBase64 } = await import("@/lib/server/openai");
+    const { storeAsset } = await import("@/lib/server/storage");
+    const controller = new AbortController();
+    vi.mocked(generateImageBase64).mockImplementationOnce(async () => {
+      controller.abort();
+      return Buffer.from("aborted-image").toString("base64");
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/generate-image", {
+        method: "POST",
+        signal: controller.signal,
+        body: JSON.stringify({
+          prompt: "AIO workflow image request that is aborted before durable storage.",
+          slot: "featured",
+          altText: "Aborted AIO image",
+        }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(499);
+    expect(json.error).toContain("画像生成が中断されました");
+    expect(storeAsset).not.toHaveBeenCalled();
   });
 });
