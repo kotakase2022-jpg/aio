@@ -21,6 +21,7 @@ beforeEach(async () => {
   process.chdir(tempDir);
   process.env.SUPABASE_STORAGE_BUCKET = "";
   process.env.VERCEL = "";
+  vi.clearAllMocks();
   vi.spyOn(Date, "now").mockReturnValue(1_789_000_000_000);
   vi.resetModules();
 });
@@ -135,5 +136,65 @@ describe("storeAsset", () => {
       status: 400,
       message: "画像の保存先が正しくありません。",
     });
+  });
+});
+
+describe("deleteStoredAssets", () => {
+  test("deletes only validated paths through Supabase Storage", async () => {
+    const remove = vi.fn(async () => ({ error: null }));
+    const from = vi.fn(() => ({ remove }));
+    const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+    const { isSupabaseGatewayConfigured } = await import("@/lib/server/supabase-gateway");
+    const { deleteStoredAssets } = await import("@/lib/server/storage");
+    vi.mocked(getSupabaseAdmin).mockReturnValue({
+      storage: { from },
+    } as unknown as ReturnType<typeof getSupabaseAdmin>);
+    vi.mocked(isSupabaseGatewayConfigured).mockReturnValue(false);
+
+    await deleteStoredAssets([
+      "generated/1789000000000-featured.png",
+      "article-inserts/1789000000001-inline.png",
+    ]);
+
+    expect(from).toHaveBeenCalledWith("article-assets");
+    expect(remove).toHaveBeenCalledWith([
+      "generated/1789000000000-featured.png",
+      "article-inserts/1789000000001-inline.png",
+    ]);
+  });
+
+  test("uses the private gateway when direct Supabase access is unavailable", async () => {
+    const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+    const { callSupabaseGateway, isSupabaseGatewayConfigured } = await import(
+      "@/lib/server/supabase-gateway"
+    );
+    const { deleteStoredAssets } = await import("@/lib/server/storage");
+    vi.mocked(getSupabaseAdmin).mockReturnValue(null);
+    vi.mocked(isSupabaseGatewayConfigured).mockReturnValue(true);
+    vi.mocked(callSupabaseGateway).mockResolvedValue({ ok: true });
+
+    await deleteStoredAssets(["generated/1789000000000-featured.png"]);
+
+    expect(callSupabaseGateway).toHaveBeenCalledWith("delete_assets", {
+      bucket: "article-assets",
+      objectPaths: ["generated/1789000000000-featured.png"],
+    });
+  });
+
+  test("rejects traversal paths before calling a storage provider", async () => {
+    const remove = vi.fn(async () => ({ error: null }));
+    const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+    const { deleteStoredAssets } = await import("@/lib/server/storage");
+    vi.mocked(getSupabaseAdmin).mockReturnValue({
+      storage: { from: vi.fn(() => ({ remove })) },
+    } as unknown as ReturnType<typeof getSupabaseAdmin>);
+
+    await expect(
+      deleteStoredAssets(["generated/../../private.txt"]),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "画像の保存先が正しくありません。",
+    });
+    expect(remove).not.toHaveBeenCalled();
   });
 });

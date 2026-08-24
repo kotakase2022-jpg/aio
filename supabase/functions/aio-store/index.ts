@@ -61,6 +61,8 @@ Deno.serve(async (request) => {
         return ok(await insertWordpressPost(payload));
       case "upload_asset":
         return ok(await uploadAsset(payload));
+      case "delete_assets":
+        return ok(await deleteAssets(payload));
       default:
         throw new HttpError("Unsupported gateway action.", 400);
     }
@@ -206,6 +208,23 @@ async function uploadAsset(payload: Payload) {
   return { url: data.publicUrl, path: objectPath };
 }
 
+async function deleteAssets(payload: Payload) {
+  const bucket = requireBucketName(payload.bucket, "bucket");
+  if (!Array.isArray(payload.objectPaths) || payload.objectPaths.length === 0) {
+    throw new HttpError("objectPaths is required.", 400);
+  }
+  if (payload.objectPaths.length > 20) {
+    throw new HttpError("Too many object paths.", 400);
+  }
+
+  const objectPaths = payload.objectPaths.map((value, index) =>
+    requireAssetObjectPath(value, `objectPaths[${index}]`),
+  );
+  const { error } = await supabase.storage.from(bucket).remove(objectPaths);
+  if (error) throw new HttpError(error.message, 500);
+  return { objectPaths };
+}
+
 async function assertGatewayToken(token: string) {
   if (!token) {
     throw new HttpError("Missing gateway token.", 401);
@@ -284,6 +303,21 @@ function requireBucketName(value: unknown, field: string) {
     throw new HttpError(`${field} is invalid.`, 400);
   }
   return bucket;
+}
+
+function requireAssetObjectPath(value: unknown, field: string) {
+  const objectPath = requireString(value, field);
+  const [folder, ...parts] = objectPath.split("/");
+  const allowedFolders = new Set(["uploads", "authors", "article-inserts", "generated"]);
+  if (
+    !allowedFolders.has(folder) ||
+    parts.length === 0 ||
+    parts.some((part) => !part || part === "." || part === "..") ||
+    !/^[a-zA-Z0-9._/-]+$/.test(objectPath)
+  ) {
+    throw new HttpError(`${field} is invalid.`, 400);
+  }
+  return objectPath;
 }
 
 function clampLimit(value: number, min: number, max: number) {
