@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 4
 - Loop number inferred from: The previous handoff remained in Loop 3 for reliability and generated-content quality. This is a new user-requested PC input-flow feature, so Codex starts Loop 4.
-- Phase: Post-deploy Visual Fix / Verification / Handoff
-- Last updated: 2026-08-24 19:57 +09:00
+- Phase: Production Deployment / Verified Handoff
+- Last updated: 2026-08-24 20:08 +09:00
 
 ## 1. Current Goal
 
@@ -21,10 +21,10 @@ Current objective:
 
 ## 2. Current Branch / Commit / PR
 
-- Branch: `codex/wizard-scroll-reset`
-- Latest commit: `ef585b1` (the wizard scroll-reset fix is not committed yet at this checkpoint)
-- Last known good commit: `ef585b1`
-- PR: https://github.com/kotakase2022-jpg/aio/pull/3 (merged); follow-up scroll-reset PR not created yet
+- Branch: `codex/post-deploy-wizard-handoff` (documentation-only handoff branch from `main`)
+- Latest implementation commit on `main`: `6f93a8a`
+- Last known good commit: `6f93a8a`
+- PRs: https://github.com/kotakase2022-jpg/aio/pull/3 and https://github.com/kotakase2022-jpg/aio/pull/4 (both merged)
 - CodeRabbit OSS review status: Check passed but detailed review was rate-limited; no CodeRabbit finding was produced
 
 ## 3. What Was Done
@@ -58,6 +58,11 @@ Current objective:
 - Added an input-panel ref and reset its internal scroll position to zero whenever the active wizard step changes.
 - Added a deterministic core E2E assertion that scrolls the primary-information panel to the bottom, advances, and verifies the visual-tone panel starts at scroll position zero.
 - Re-ran the full local quality gate after the scroll fix; it passed.
+- Pushed the scroll fix as PR #4. Hosted GitHub Actions passed in 5m26s, optional Bugbot passed with no findings, and CodeRabbit reported only its rate-limit notice.
+- Merged PR #4 to `main` as `6f93a8a`.
+- Deployed `6f93a8a` to Vercel production as `dpl_3JLYDZjQCruiGEuZwUKiq1nror16`.
+- Repeated the 1440 x 1000 production flow after deployment. The visual-tone title and description were fully visible after entering primary information, and the panel's measured `scrollTop` was `0`.
+- Confirmed no browser console errors, page errors, Next.js error overlay, or recent Vercel error-level runtime logs.
 
 ## 4. Files Changed
 
@@ -83,19 +88,16 @@ Main files changed:
 
 ## 5. Current Status
 
-- The requested feature and URL-result review fix are merged in `main` and deployed.
-- The production visual smoke found one scroll-position issue; its fix is complete locally on `codex/wizard-scroll-reset`.
+- The requested feature, the URL-result visibility review fix, and the production scroll-position fix are merged in `main` and deployed.
 - Full deterministic quality validation is green.
-- The scroll-reset fix still needs commit, PR, hosted CI, merge, production redeploy, and a final visual smoke.
-- Current production deployment before the scroll-reset follow-up: `dpl_1DoFxnfvLb5ABarWVjPQ5xyNoHFY`, Ready and aliased to `https://aio-article-generator.vercel.app`.
+- Current production deployment: `dpl_3JLYDZjQCruiGEuZwUKiq1nror16`, Ready and aliased to `https://aio-article-generator.vercel.app`.
+- Final production HTTP and PC-browser smoke checks passed.
 - Existing untracked `output/` files are generated usage-manual artifacts. They are intentionally excluded from this feature commit and must not be deleted.
 
 ## 6. Known Issues
 
 - CodeRabbit could not provide a detailed review because the free-plan review limit was reached. Its status check passed with a rate-limit notice.
-- Hosted GitHub Actions must run for the follow-up scroll-reset PR.
 - The browser automation CLI accessibility command did not return usable output. Existing Playwright interaction/label checks passed, but this pass does not claim a standalone accessibility audit.
-- The local visual session saw the generation-log request fail against the current live local provider configuration; this did not crash the page and is outside the wizard change. The mocked E2E error paths passed. Recheck production logs after deployment.
 - OpenAI, WordPress, and Supabase live mutation tests were not run for this UI change. The full suite uses isolated provider mocks and does not change production data.
 - `output/` remains untracked from the previous PDF-manual task.
 
@@ -109,9 +111,9 @@ Main files changed:
 
 ## 8. Optional Bugbot Findings
 
-- Status: Run automatically by the repository integration.
-- Findings: One medium finding: reference/competitor URL extraction failures were hidden after moving to another wizard step.
-- Actions taken: Accepted and fixed with a persistent right-column result panel, correction buttons, and two regression E2E scenarios.
+- Status: Run automatically on PRs #3 and #4.
+- Findings: PR #3 had one medium finding: reference/competitor URL extraction failures were hidden after moving to another wizard step. PR #4 passed with no findings.
+- Actions taken: The PR #3 finding was accepted and fixed with a persistent right-column result panel, correction buttons, and two regression E2E scenarios.
 - Reason: The optional review supplied useful backup coverage while CodeRabbit was rate-limited.
 
 ## 9. Verification Results
@@ -156,12 +158,18 @@ Results:
 - Production PC browser smoke: login, single-card rendering, primary choices, required feedback, free text, and step transition worked; the retained scroll position issue was found visually.
 - Focused core E2E after scroll reset: passed, 1 scenario with explicit `scrollTop === 0` verification after changing steps.
 - Full quality gate after scroll reset: passed with 45 files / 356 unit/integration tests, 3 files / 13 contract tests, 49 Chromium PC E2E scenarios, coverage thresholds, and production build.
+- Hosted GitHub Actions for `977b138`: passed in 5m26s; optional Bugbot passed with no findings; PR #4 merged as `6f93a8a`.
+- Final Vercel deployment `dpl_3JLYDZjQCruiGEuZwUKiq1nror16`: Ready, production target, canonical alias applied.
+- Final production HTTP smoke: `307` to `/demo-login?next=%2F`, followed by `200`.
+- Final production PC browser smoke at 1440 x 1000: passed; login, required primary-information interaction, visual-tone transition, complete heading visibility, and `scrollTop === 0` were confirmed.
+- Browser diagnostics: no console errors, no page errors, nonblank body, and no Next.js error overlay.
+- Vercel error-log scan for the final deployment: no error-level logs found in the checked 15-minute window.
 
 ## 10. Next Recommended Action
 
 Next Claude Code should:
 
-1. Review the follow-up scroll-reset PR after Codex creates it.
+1. Review merged PRs #3 and #4, focusing on the one-card wizard, required primary evidence, persistent fetch-result panel, and scroll reset.
 2. Verify that rendering only one card at a time does not hide any prior editing path needed by existing users.
 3. Review client/server parity for reference, primary-information, and visual-tone requirements.
 4. Confirm backward compatibility for old saved drafts that have no `primaryInfoTypes` field.
@@ -193,4 +201,4 @@ Next Claude Code should:
 - Use `npm.cmd` and `npx.cmd` in Windows PowerShell.
 - CodeRabbit OSS is the standard PR reviewer; Cursor Bugbot is optional.
 - The production URL is `https://aio-article-generator.vercel.app`.
-- The feature should go through PR review and green hosted checks before production deployment.
+- The feature is deployed at `https://aio-article-generator.vercel.app` after green hosted checks.
