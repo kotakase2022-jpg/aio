@@ -45,10 +45,14 @@ export async function verifyDemoSessionToken(token: string | undefined, now = Da
   const payload = `${version}.${expiresAtText}.${nonce}`;
   const key = await importSigningKey();
   try {
+    const signatureBytes = decodeBase64Url(signature);
+    if (encodeBase64Url(signatureBytes) !== signature) {
+      return false;
+    }
     return await crypto.subtle.verify(
       "HMAC",
       key,
-      decodeBase64Url(signature),
+      signatureBytes,
       new TextEncoder().encode(payload),
     );
   } catch {

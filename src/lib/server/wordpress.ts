@@ -5,7 +5,7 @@ import {
   randomBytes,
   randomUUID,
 } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ArticleDraft, WordpressConnection } from "@/types/aio";
@@ -30,6 +30,8 @@ type StoredConnection = WordpressConnection & {
 };
 
 const MAX_WORDPRESS_MEDIA_BYTES = 10 * 1024 * 1024;
+const MAX_WORDPRESS_API_RESPONSE_BYTES = 1024 * 1024;
+const MAX_WORDPRESS_POST_RESPONSE_BYTES = 10 * 1024 * 1024;
 
 const dataDir = process.env.VERCEL
   ? path.join(os.tmpdir(), "aio-article-generator")
@@ -141,25 +143,29 @@ export async function publishDraftToWordpress({
     );
   }
 
-  const response = await wordpressApiFetch(`${connection.siteUrl}/wp-json/wp/v2/posts`, {
-    method: "POST",
-    headers: {
-      Authorization: authHeader,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      title: draft.editedTitle,
-      slug: draft.editedSlug,
-      excerpt: draft.editedMetaDescription,
-      content: buildDraftArticleHtml(draft, {
-        imageUrlResolver: (url) => resolveAssetUrl(url, origin),
+  const response = await wordpressApiFetch(
+    `${connection.siteUrl}/wp-json/wp/v2/posts`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: draft.editedTitle,
+        slug: draft.editedSlug,
+        excerpt: draft.editedMetaDescription,
+        content: buildDraftArticleHtml(draft, {
+          imageUrlResolver: (url) => resolveAssetUrl(url, origin),
+        }),
+        status,
+        categories: categoryIds,
+        tags: tagIds,
+        featured_media: featuredMedia,
       }),
-      status,
-      categories: categoryIds,
-      tags: tagIds,
-      featured_media: featuredMedia,
-    }),
-  });
+    },
+    MAX_WORDPRESS_POST_RESPONSE_BYTES,
+  );
 
   const json = (await response.json().catch(() => ({}))) as {
     link?: string;
@@ -493,7 +499,11 @@ async function uploadMedia(
   let buffer: Buffer;
   let contentType = "image/png";
 
-  if (resolvedUrl.startsWith("data:")) {
+  const localAsset = await readLocalUploadAsset(imageUrl);
+  if (localAsset) {
+    buffer = localAsset;
+    contentType = "";
+  } else if (resolvedUrl.startsWith("data:")) {
     const match = /^data:(.+);base64,(.+)$/.exec(resolvedUrl);
     if (!match || !/^[A-Za-z0-9+/\s]*={0,2}$/.test(match[2])) {
       throw new ApiError("アイキャッチ画像のデータURLが不正です。", 400);
@@ -555,6 +565,50 @@ async function uploadMedia(
   }
 
   return mediaId;
+}
+
+async function readLocalUploadAsset(imageUrl: string) {
+  if (process.env.VERCEL || !imageUrl.startsWith("/uploads/")) {
+    return null;
+  }
+
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(new URL(imageUrl, "http://local.invalid").pathname);
+  } catch {
+    throw new ApiError("ローカル画像のパスが不正です。", 400);
+  }
+
+  const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
+  const candidatePath = path.resolve(process.cwd(), "public", `.${pathname}`);
+  try {
+    const [resolvedRoot, resolvedFile] = await Promise.all([
+      realpath(uploadsRoot),
+      realpath(candidatePath),
+    ]);
+    const relativePath = path.relative(resolvedRoot, resolvedFile);
+    if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      throw new Error("Local upload path escapes its root");
+    }
+
+    const metadata = await stat(resolvedFile);
+    if (!metadata.isFile()) {
+      throw new Error("Local upload path is not a file");
+    }
+    if (metadata.size > MAX_WORDPRESS_MEDIA_BYTES) {
+      throw new ApiError("WordPress投稿用の画像は10MB以下にしてください。", 400);
+    }
+    return await readFile(resolvedFile);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(
+      "WordPress投稿用のローカル画像を読み込めませんでした。",
+      400,
+      "画像をアップロードし直すか、画像なしで投稿してください。",
+    );
+  }
 }
 
 async function updateMediaAltText(
@@ -632,10 +686,11 @@ async function saveWordpressPostRecord(
 function wordpressApiFetch(
   url: string,
   init: NonNullable<Parameters<typeof safeFetch>[1]> = {},
+  maxResponseBytes = MAX_WORDPRESS_API_RESPONSE_BYTES,
 ) {
   return safeFetch(url, init, {
     allowRedirects: false,
-    maxResponseBytes: 1024 * 1024,
+    maxResponseBytes,
     timeoutMs: 30_000,
   });
 }

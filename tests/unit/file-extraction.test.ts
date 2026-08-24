@@ -317,4 +317,39 @@ describe("extractAttachmentText", () => {
       message: "Officeファイルの展開後サイズが大きすぎます。",
     });
   });
+
+  test("enforces the actual streamed Office XML size when zip headers under-report it", async () => {
+    const zip = new JSZip();
+    zip.file(
+      "word/document.xml",
+      `<w:document><w:body><w:p><w:r><w:t>${"B".repeat(8 * 1024 * 1024 + 1)}</w:t></w:r></w:p></w:body></w:document>`,
+    );
+    const generated = Buffer.from(
+      await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" }),
+    );
+    const forged = underReportZipUncompressedSizes(generated, 128);
+
+    await expect(
+      extractAttachmentText({
+        buffer: forged,
+        filename: "forged-size.docx",
+      }),
+    ).rejects.toMatchObject({
+      status: 413,
+      message: "Officeファイルの展開後サイズが大きすぎます。",
+    });
+  });
 });
+
+function underReportZipUncompressedSizes(buffer: Buffer, declaredSize: number) {
+  const forged = Buffer.from(buffer);
+  for (let offset = 0; offset <= forged.length - 28; offset += 1) {
+    const signature = forged.readUInt32LE(offset);
+    if (signature === 0x04034b50) {
+      forged.writeUInt32LE(declaredSize, offset + 22);
+    } else if (signature === 0x02014b50) {
+      forged.writeUInt32LE(declaredSize, offset + 24);
+    }
+  }
+  return forged;
+}

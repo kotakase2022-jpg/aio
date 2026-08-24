@@ -565,23 +565,31 @@ async function extractXlsxText(buffer: Buffer) {
 }
 
 async function readOfficeXmlFiles(files: JSZip.JSZipObject[]) {
-  let totalBytes = 0;
+  let declaredTotalBytes = 0;
   for (const file of files) {
     const uncompressedBytes = readZipUncompressedSize(file);
     if (
       uncompressedBytes > MAX_OFFICE_XML_ENTRY_BYTES ||
-      totalBytes + uncompressedBytes > MAX_OFFICE_XML_TOTAL_BYTES
+      declaredTotalBytes + uncompressedBytes > MAX_OFFICE_XML_TOTAL_BYTES
     ) {
-      throw new ApiError(
-        "Officeファイルの展開後サイズが大きすぎます。",
-        413,
-        "文書内のテキスト量を減らしてから、もう一度添付してください。",
-      );
+      throw officeXmlSizeError();
     }
-    totalBytes += uncompressedBytes;
+    declaredTotalBytes += uncompressedBytes;
   }
 
-  return Promise.all(files.map((file) => file.async("text")));
+  const texts: string[] = [];
+  let actualTotalBytes = 0;
+  for (const file of files) {
+    const remainingTotalBytes = MAX_OFFICE_XML_TOTAL_BYTES - actualTotalBytes;
+    const result = await readOfficeXmlFile(
+      file,
+      Math.min(MAX_OFFICE_XML_ENTRY_BYTES, remainingTotalBytes),
+    );
+    actualTotalBytes += result.byteLength;
+    texts.push(result.text);
+  }
+
+  return texts;
 }
 
 function readZipUncompressedSize(file: JSZip.JSZipObject) {
@@ -592,6 +600,54 @@ function readZipUncompressedSize(file: JSZip.JSZipObject) {
   return typeof size === "number" && Number.isFinite(size) && size >= 0
     ? size
     : MAX_OFFICE_XML_ENTRY_BYTES + 1;
+}
+
+async function readOfficeXmlFile(file: JSZip.JSZipObject, maxBytes: number) {
+  const stream = file.nodeStream("nodebuffer") as NodeJS.ReadableStream & {
+    destroy: (error?: Error) => void;
+  };
+
+  return new Promise<{ text: string; byteLength: number }>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let byteLength = 0;
+    let settled = false;
+
+    stream.on("data", (chunk: Buffer | Uint8Array | string) => {
+      if (settled) {
+        return;
+      }
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      byteLength += buffer.byteLength;
+      if (byteLength > maxBytes) {
+        settled = true;
+        stream.pause();
+        stream.destroy();
+        reject(officeXmlSizeError());
+        return;
+      }
+      chunks.push(buffer);
+    });
+    stream.once("error", (error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    stream.once("end", () => {
+      if (!settled) {
+        settled = true;
+        resolve({ text: Buffer.concat(chunks, byteLength).toString("utf8"), byteLength });
+      }
+    });
+  });
+}
+
+function officeXmlSizeError() {
+  return new ApiError(
+    "Officeファイルの展開後サイズが大きすぎます。",
+    413,
+    "文書内のテキスト量を減らしてから、もう一度添付してください。",
+  );
 }
 
 function extractSharedStrings(xml: string) {
