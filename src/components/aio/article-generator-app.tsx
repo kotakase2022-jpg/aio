@@ -920,21 +920,35 @@ export function ArticleGeneratorApp() {
   async function regenerateSingleImage(image: ArticleImage, instruction = "") {
     if (!draft) return;
 
-    const result = await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-      prompt: buildImageRegenerationPrompt(image.prompt, instruction.trim(), draft.aiResult),
-      slot: image.slot,
-      altText: image.altText,
+    const result = await apiPost<{
+      draft: ArticleDraft;
+      images: ArticleImage[];
+      failures: Array<{ slot: ArticleImage["slot"]; error: string }>;
+      warnings: string[];
+    }>("/api/generate-image", {
+      draft: prepareDraftForSave(draft),
+      requests: [
+        {
+          prompt: buildImageRegenerationPrompt(
+            image.prompt,
+            instruction.trim(),
+            draft.aiResult,
+          ),
+          slot: image.slot,
+          altText: image.altText,
+          replaceImageId: image.id,
+        },
+      ],
     });
-    const nextImages = draft.images.map((item) =>
-      item.id === image.id ? result.image : item,
-    );
-    setDraft({
-      ...draft,
-      images: nextImages,
-      editedBodyHtml: replaceImageReferences(draft.editedBodyHtml, image, result.image),
-      updatedAt: new Date().toISOString(),
-    });
-    return result.image;
+    const nextImage = result.images[0];
+    if (!nextImage) {
+      throw new Error(result.failures[0]?.error || "画像再作成に失敗しました。");
+    }
+    setDraft(result.draft);
+    if (result.warnings.length > 0) {
+      setActiveError(result.warnings.join(" / "));
+    }
+    return nextImage;
   }
 
   function openSingleImageRegeneration(image: ArticleImage) {
@@ -982,99 +996,57 @@ export function ArticleGeneratorApp() {
     setImageRegenerationProgress(10);
     setActiveError("");
     try {
-      let nextImages = draft.images;
-      let nextBodyHtml = draft.editedBodyHtml;
       const rewriteInstruction = instruction.trim();
-      const regenerationFailures: string[] = [];
-      const regenerationTasks = [
+      const requests = [
         ...generatedImages.map((image) => ({
           slot: image.slot,
-          run: async () => ({
-            type: "replace" as const,
-            image,
-            nextImage: (
-              await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-                prompt: buildImageRegenerationPrompt(
-                  image.prompt,
-                  rewriteInstruction,
-                  draft.aiResult,
-                ),
-                slot: image.slot,
-                altText: image.altText,
-              })
-            ).image,
-          }),
+          prompt: buildImageRegenerationPrompt(
+            image.prompt,
+            rewriteInstruction,
+            draft.aiResult,
+          ),
+          altText: image.altText,
+          replaceImageId: image.id,
         })),
         ...missingImagePrompts.map((prompt) => ({
           slot: prompt.slot,
-          run: async () => ({
-            type: "recover" as const,
-            nextImage: (
-              await apiPost<{ image: ArticleImage }>("/api/generate-image", {
-                prompt: buildImageRegenerationPrompt(
-                  prompt.prompt,
-                  rewriteInstruction,
-                  draft.aiResult,
-                ),
-                slot: prompt.slot,
-                altText: prompt.alt_text,
-              })
-            ).image,
-          }),
+          prompt: buildImageRegenerationPrompt(
+            prompt.prompt,
+            rewriteInstruction,
+            draft.aiResult,
+          ),
+          altText: prompt.alt_text,
         })),
       ];
-
-      const recoveredImages: ArticleImage[] = [];
-      const regenerationResults = await Promise.allSettled(
-        regenerationTasks.map((task) => task.run()),
-      );
-
-      regenerationResults.forEach((outcome, index) => {
-        const task = regenerationTasks[index];
-        if (outcome.status === "rejected") {
-          regenerationFailures.push(`${task.slot}: ${readError(outcome.reason)}`);
-          return;
-        }
-
-        const value = outcome.value;
-        if (value.type === "replace") {
-          nextImages = nextImages.map((item) =>
-            item.id === value.image.id ? value.nextImage : item,
-          );
-          nextBodyHtml = replaceImageReferences(
-            nextBodyHtml,
-            value.image,
-            value.nextImage,
-          );
-          return;
-        }
-
-        recoveredImages.push(value.nextImage);
-        nextImages = [...nextImages, value.nextImage];
+      const result = await apiPost<{
+        draft: ArticleDraft;
+        images: ArticleImage[];
+        failures: Array<{ slot: ArticleImage["slot"]; error: string }>;
+        warnings: string[];
+      }>("/api/generate-image", {
+        draft: prepareDraftForSave(draft),
+        requests,
       });
+      const failedSlots = new Set(result.failures.map((failure) => failure.slot));
+      const displayDraft =
+        failedSlots.size === 0
+          ? result.draft
+          : {
+              ...result.draft,
+              images: result.draft.images.map((image) => {
+                if (!failedSlots.has(image.slot)) return image;
+                return draft.images.find((previous) => previous.id === image.id) ?? image;
+              }),
+            };
+      setDraft(displayDraft);
 
-      if (recoveredImages.length) {
-        nextBodyHtml = injectImages(nextBodyHtml, recoveredImages);
-        nextImages = sortArticleImages(nextImages);
-      }
-
-      const hadSuccessfulRegeneration =
-        nextImages !== draft.images || nextBodyHtml !== draft.editedBodyHtml;
-      if (!hadSuccessfulRegeneration && regenerationFailures.length > 0) {
-        throw new Error(regenerationFailures.join(" / "));
-      }
-
-      setDraft({
-        ...draft,
-        images: nextImages,
-        editedBodyHtml: nextBodyHtml,
-        updatedAt: new Date().toISOString(),
-      });
-      if (regenerationFailures.length > 0) {
+      const messages = [
+        ...result.failures.map((failure) => `${failure.slot}: ${failure.error}`),
+        ...result.warnings,
+      ];
+      if (messages.length > 0) {
         setActiveError(
-          `一部の画像再作成に失敗しました。成功した画像は反映済みです。${regenerationFailures.join(
-            " / ",
-          )}`,
+          `${result.failures.length > 0 ? "一部の画像再作成に失敗しました。成功した画像は反映・保存済みです。" : "画像は保存されましたが、補助処理で問題が発生しました。"}${messages.join(" / ")}`,
         );
       }
       setImageRegenerationProgress(100);
@@ -3591,40 +3563,6 @@ function formatDateTime(value: string) {
   return formatJaDateTime(value);
 }
 
-function injectImages(html: string, images: ArticleImage[]) {
-  let output = html;
-  const featured = images.find((image) => image.slot === "featured");
-  const inline = images.filter((image) => image.slot !== "featured");
-
-  if (featured) {
-    output = `${imageFigure(featured)}\n${output}`;
-  }
-
-  inline.forEach((image) => {
-    output += `\n${imageFigure(image)}`;
-  });
-
-  return output;
-}
-
-function sortArticleImages(images: ArticleImage[]) {
-  const slotOrder: Record<ArticleImage["slot"], number> = {
-    featured: 0,
-    "inline-1": 1,
-    "inline-2": 2,
-  };
-
-  return [...images].sort((first, second) => slotOrder[first.slot] - slotOrder[second.slot]);
-}
-
-function imageFigure(image: ArticleImage) {
-  return `<figure data-image-slot="${image.slot}" data-image-id="${image.id}"><img src="${imageSrcForHtml(
-    image,
-  )}" alt="${escapeHtml(
-    image.altText,
-  )}" /><figcaption>${escapeHtml(image.altText)}</figcaption></figure>`;
-}
-
 function buildImageRegenerationPrompt(
   basePrompt: string,
   instruction: string,
@@ -3644,14 +3582,6 @@ function buildImageRegenerationPrompt(
     "Keep the regenerated image article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
     "Avoid readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, distorted hands, unnecessary people, clip-art, cheap stock-photo look, and dark blurry AI-art backgrounds.",
   ].join("\n");
-}
-
-function imageSrcForHtml(image: ArticleImage) {
-  if (isDataUrl(image.url)) {
-    return `aio-image:${image.id}`;
-  }
-
-  return escapeHtml(image.url);
 }
 
 function renderArticleHtml(draft: ArticleDraft) {
@@ -3947,16 +3877,6 @@ function safeDownloadName(value: string) {
       .replace(/^-|-$/g, "")
       .slice(0, 80) || "aio-article"
   );
-}
-
-function replaceImageReferences(
-  html: string,
-  previousImage: ArticleImage,
-  nextImage: ArticleImage,
-) {
-  return html
-    .replaceAll(previousImage.url, imageSrcForHtml(nextImage))
-    .replaceAll(`aio-image:${previousImage.id}`, `aio-image:${nextImage.id}`);
 }
 
 function prepareDraftForSave(draft: ArticleDraft): ArticleDraft {

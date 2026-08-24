@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import {
@@ -82,6 +82,52 @@ export async function storeAsset({
   }
 }
 
+export async function deleteStoredAssets(objectPaths: string[]) {
+  if (objectPaths.length === 0) return;
+  if (objectPaths.length > 20) {
+    throw new ApiError("削除する画像が多すぎます。", 400);
+  }
+
+  const supabase = getSupabaseAdmin();
+  const bucket = getStorageBucket();
+  const durablePaths = objectPaths.filter((objectPath) => !path.isAbsolute(objectPath));
+
+  if (durablePaths.length > 0) {
+    durablePaths.forEach(assertAllowedAssetPath);
+
+    if (supabase) {
+      const { error } = await supabase.storage.from(bucket).remove(durablePaths);
+      if (error) {
+        throw new ApiError("古い画像の削除に失敗しました。", 500, error.message);
+      }
+    } else if (isSupabaseGatewayConfigured()) {
+      await callSupabaseGateway("delete_assets", {
+        bucket,
+        objectPaths: durablePaths,
+      });
+    } else if (process.env.VERCEL) {
+      throw new ApiError(
+        "古い画像の削除に失敗しました。",
+        503,
+        "Supabase Storageが利用できません。",
+      );
+    }
+  }
+
+  const localPaths = objectPaths.filter((objectPath) => path.isAbsolute(objectPath));
+  for (const localPath of localPaths) {
+    const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
+    const resolvedPath = path.resolve(localPath);
+    if (!resolvedPath.startsWith(`${uploadsRoot}${path.sep}`)) {
+      throw new ApiError("画像の保存先が正しくありません。", 400);
+    }
+
+    await unlink(resolvedPath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+  }
+}
+
 function getStorageBucket() {
   const bucket = cleanEnvValue(process.env.SUPABASE_STORAGE_BUCKET) || DEFAULT_BUCKET;
   return isValidBucketName(bucket) ? bucket : DEFAULT_BUCKET;
@@ -93,4 +139,16 @@ function cleanEnvValue(value?: string) {
 
 function isValidBucketName(value: string) {
   return /^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$/.test(value);
+}
+
+function assertAllowedAssetPath(objectPath: string) {
+  const [folder, ...parts] = objectPath.split("/");
+  if (
+    !ALLOWED_ASSET_FOLDERS.has(folder) ||
+    parts.length === 0 ||
+    parts.some((part) => !part || part === "." || part === "..") ||
+    !/^[a-zA-Z0-9._/-]+$/.test(objectPath)
+  ) {
+    throw new ApiError("画像の保存先が正しくありません。", 400);
+  }
 }

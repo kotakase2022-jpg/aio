@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import extractFileSuccess from "../fixtures/api/extract-file-success.json";
 import themeCandidates from "../fixtures/api/theme-candidates.json";
 import { createCompletedGenerationJob } from "../fixtures/article";
+import type { ArticleDraft, ArticleImage } from "../../src/types/aio";
 
 const competitorResearchFixture = {
   summary: "Generic automation LPs emphasize fast publishing and broad efficiency.",
@@ -3359,13 +3360,23 @@ async function mockCommonApiRoutes(
   });
 
   await page.route("**/api/generate-image", async (route) => {
-    calls.generateImage += 1;
-    calls.generateImageActive += 1;
+    const body = route.request().postDataJSON() as {
+      draft?: ArticleDraft;
+      requests?: Array<{
+        prompt?: string;
+        slot?: ArticleImage["slot"];
+        altText?: string;
+        replaceImageId?: string;
+      }>;
+    };
+    const requests = body.requests ?? [];
+    const firstCallIndex = calls.generateImage + 1;
+    calls.generateImage += requests.length;
+    calls.generateImageActive += requests.length;
     calls.generateImageMaxConcurrency = Math.max(
       calls.generateImageMaxConcurrency,
       calls.generateImageActive,
     );
-    const callIndex = calls.generateImage;
     if (
       options.generateImageDelayMs &&
       options.generateImageDelayMs > 0
@@ -3374,10 +3385,7 @@ async function mockCommonApiRoutes(
     }
 
     try {
-      if (
-        options.generateImageShouldFail ||
-        options.generateImageFailOnCalls?.includes(callIndex)
-      ) {
+      if (options.generateImageShouldFail) {
         await route.fulfill({
           status: 500,
           json: { ok: false, error: "画像再作成に失敗しました。" },
@@ -3385,28 +3393,87 @@ async function mockCommonApiRoutes(
         return;
       }
 
-      const body = route.request().postDataJSON() as {
-        prompt?: string;
-        slot?: "featured" | "inline-1" | "inline-2";
-        altText?: string;
-      };
-      calls.generateImagePrompts.push(body.prompt ?? "");
+      const failures: Array<{ slot: ArticleImage["slot"]; error: string }> = [];
+      const images = requests.flatMap((request, index) => {
+        const callIndex = firstCallIndex + index;
+        calls.generateImagePrompts.push(request.prompt ?? "");
+        if (options.generateImageFailOnCalls?.includes(callIndex)) {
+          failures.push({
+            slot: request.slot ?? "featured",
+            error: "画像再作成に失敗しました。",
+          });
+          return [];
+        }
+
+        return [
+          {
+            id: `regenerated-${callIndex}`,
+            slot: request.slot ?? "featured",
+            url: `/mock-images/regenerated-${callIndex}.png`,
+            path: `generated/regenerated-${callIndex}.png`,
+            prompt: request.prompt ?? "",
+            altText: request.altText ?? "Regenerated image",
+            source: "generated" as const,
+            replaceImageId: request.replaceImageId,
+          },
+        ];
+      });
+
+      if (images.length === 0) {
+        await route.fulfill({
+          status: 500,
+          json: { ok: false, error: failures[0]?.error ?? "画像再作成に失敗しました。" },
+        });
+        return;
+      }
+
+      const draft = body.draft!;
+      let nextImages = [...draft.images];
+      const preparedImages = images.map(({ replaceImageId, ...articleImage }) => ({
+        replaceImageId,
+        articleImage,
+      }));
+      for (const { articleImage, replaceImageId } of preparedImages) {
+        if (replaceImageId) {
+          const previousImage = nextImages.find((current) => current.id === replaceImageId);
+          if (previousImage?.url) {
+            draft.editedBodyHtml = draft.editedBodyHtml.replaceAll(
+              previousImage.url,
+              articleImage.url,
+            );
+          }
+          draft.editedBodyHtml = draft.editedBodyHtml.replaceAll(
+            `aio-image:${replaceImageId}`,
+            articleImage.url,
+          );
+          nextImages = nextImages.map((current) =>
+            current.id === replaceImageId ? articleImage : current,
+          );
+        } else {
+          nextImages.push(articleImage);
+          const figure = `<figure><img src="${articleImage.url}" alt="${articleImage.altText}" /></figure>`;
+          draft.editedBodyHtml =
+            articleImage.slot === "featured"
+              ? `${figure}\n${draft.editedBodyHtml}`
+              : `${draft.editedBodyHtml}\n${figure}`;
+        }
+      }
       await route.fulfill({
         json: {
           ok: true,
-          image: {
-            id: `regenerated-${callIndex}`,
-            slot: body.slot ?? "featured",
-            url: `/mock-images/regenerated-${callIndex}.png`,
-            path: `generated/regenerated-${callIndex}.png`,
-            prompt: body.prompt,
-            altText: body.altText ?? "Regenerated image",
-            source: "generated",
+          draft: {
+            ...draft,
+            images: nextImages,
+            status: "draft",
+            updatedAt: new Date().toISOString(),
           },
+          images: preparedImages.map(({ articleImage }) => articleImage),
+          failures,
+          warnings: [],
         },
       });
     } finally {
-      calls.generateImageActive -= 1;
+      calls.generateImageActive -= requests.length;
     }
   });
 
