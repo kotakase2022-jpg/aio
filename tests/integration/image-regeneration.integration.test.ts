@@ -47,7 +47,7 @@ describe("image regeneration route", () => {
         },
       ],
     });
-    vi.mocked(getDraft).mockResolvedValueOnce(draft);
+    vi.mocked(getDraft).mockResolvedValue(draft);
 
     const response = await POST(
       new Request("http://localhost/api/generate-image", {
@@ -118,7 +118,7 @@ describe("image regeneration route", () => {
       controller.abort();
       return Buffer.from("aborted-image").toString("base64");
     });
-    vi.mocked(getDraft).mockResolvedValueOnce(createSampleDraft());
+    vi.mocked(getDraft).mockResolvedValue(createSampleDraft());
 
     const response = await POST(
       new Request("http://localhost/api/generate-image", {
@@ -194,7 +194,7 @@ describe("image regeneration route", () => {
         },
       ],
     };
-    vi.mocked(getDraft).mockResolvedValueOnce(persistedDraft);
+    vi.mocked(getDraft).mockResolvedValue(persistedDraft);
 
     const response = await POST(
       new Request("http://localhost/api/generate-image", {
@@ -217,6 +217,42 @@ describe("image regeneration route", () => {
     expect(deleteStoredAssets).not.toHaveBeenCalledWith([
       "generated/unrelated-user-image.png",
     ]);
+  });
+
+  test("rolls back generated assets instead of overwriting a concurrently saved draft", async () => {
+    const { POST } = await import("@/app/api/generate-image/route");
+    const { getDraft, saveDraft } = await import("@/lib/server/drafts");
+    const { deleteStoredAssets } = await import("@/lib/server/storage");
+    const initialDraft = createSampleDraft();
+    vi.mocked(getDraft)
+      .mockResolvedValueOnce(initialDraft)
+      .mockResolvedValueOnce({
+        ...initialDraft,
+        editedTitle: "Concurrent edit",
+        updatedAt: "2026-07-02T00:05:00.000Z",
+      });
+
+    const response = await POST(
+      new Request("http://localhost/api/generate-image", {
+        method: "POST",
+        body: JSON.stringify({
+          draft: initialDraft,
+          requests: [
+            {
+              prompt: "AIO concurrent image. Make the visual more concrete and premium.",
+              slot: "featured",
+              replaceImageId: "img-1",
+            },
+          ],
+        }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(json.error).toContain("画像生成中にドラフトが更新されました");
+    expect(saveDraft).not.toHaveBeenCalled();
+    expect(deleteStoredAssets).toHaveBeenCalledWith(["generated/new-featured.png"]);
   });
 
   test("rejects regeneration when the persisted draft does not exist", async () => {

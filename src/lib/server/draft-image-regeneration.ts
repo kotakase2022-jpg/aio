@@ -75,24 +75,26 @@ export async function regenerateDraftImages({
     );
   }
 
-  const nextDraft = attachImagesToDraft(draft, fulfilled);
   const newPaths = fulfilled.map(({ image }) => image.path).filter(isStoragePath);
+  const latestDraft = await getDraft(draft.id);
+  if (!sameDraftRevision(persistedDraft, latestDraft)) {
+    await cleanupNewImagesOrThrow(
+      newPaths,
+      new ApiError(
+        "画像生成中にドラフトが更新されました。最新の内容を開き直して、もう一度画像を再作成してください。",
+        409,
+      ),
+    );
+  }
+
+  const nextDraft = attachImagesToDraft(draft, fulfilled);
   let savedDraft: ArticleDraft;
 
   try {
     const saved = await saveDraft(nextDraft);
     savedDraft = saved.draft;
   } catch (error) {
-    try {
-      await deleteStoredAssets(newPaths);
-    } catch (cleanupError) {
-      throw new ApiError(
-        "画像の再作成後にドラフト保存と画像整理の両方に失敗しました。",
-        500,
-        `${readableError(error)} / cleanup: ${readableError(cleanupError)}`,
-      );
-    }
-    throw error;
+    return cleanupNewImagesOrThrow(newPaths, error);
   }
 
   const warnings: string[] = [];
@@ -238,6 +240,41 @@ function escapeHtml(value: string) {
 
 function isStoragePath(value: string | undefined): value is string {
   return Boolean(value && value !== "data-url-omitted");
+}
+
+function sameDraftRevision(first: ArticleDraft, second: ArticleDraft | null) {
+  if (!second || first.updatedAt !== second.updatedAt) return false;
+  return imageRevision(first.images) === imageRevision(second.images);
+}
+
+function imageRevision(images: ArticleImage[]) {
+  return JSON.stringify(
+    images
+      .map((image) => ({
+        id: image.id,
+        slot: image.slot,
+        url: image.url,
+        path: image.path ?? "",
+        source: image.source,
+      }))
+      .sort((first, second) => first.id.localeCompare(second.id)),
+  );
+}
+
+async function cleanupNewImagesOrThrow(
+  objectPaths: string[],
+  primaryError: unknown,
+): Promise<never> {
+  try {
+    await deleteStoredAssets(objectPaths);
+  } catch (cleanupError) {
+    throw new ApiError(
+      "画像の再作成後にドラフト更新と画像整理の両方に失敗しました。",
+      500,
+      `${readableError(primaryError)} / cleanup: ${readableError(cleanupError)}`,
+    );
+  }
+  throw primaryError;
 }
 
 function readableError(error: unknown) {
