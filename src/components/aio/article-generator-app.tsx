@@ -237,6 +237,13 @@ export function ArticleGeneratorApp() {
   const [inputWizardMessage, setInputWizardMessage] = useState("");
   const generationPollingRef = useRef<string | null>(null);
   const themeCandidateApplyTimerRef = useRef<number | null>(null);
+  const inputWizardPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (inputWizardPanelRef.current) {
+      inputWizardPanelRef.current.scrollTop = 0;
+    }
+  }, [activeInputStep]);
 
   const formPayload: ArticleFormPayload = useMemo(
     () => ({
@@ -1372,6 +1379,7 @@ export function ArticleGeneratorApp() {
             </Card>
 
             <div
+              ref={inputWizardPanelRef}
               role="dialog"
               aria-modal="false"
               aria-labelledby={`input-wizard-title-${activeInputStep}`}

@@ -131,8 +131,15 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     .getByTestId("primary-info-textarea")
     .fill("当社の支援現場では、一人親方の事務作業はLINEでのやり取りが多く帳票不在も多い。");
 
+  const primaryInformationPanel = page.getByTestId("input-wizard-step-primary-info");
+  await primaryInformationPanel.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  expect(await primaryInformationPanel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await page.getByTestId("input-wizard-next").click();
-  await expect(page.getByTestId("input-wizard-step-visual-tone")).toBeVisible();
+  const visualTonePanel = page.getByTestId("input-wizard-step-visual-tone");
+  await expect(visualTonePanel).toBeVisible();
+  await expect.poll(() => visualTonePanel.evaluate((element) => element.scrollTop)).toBe(0);
   await page.getByTestId("input-wizard-next").click();
   await expect(page.getByTestId("input-wizard-step-word-count")).toBeVisible();
   await page.getByTestId("input-wizard-next").click();
