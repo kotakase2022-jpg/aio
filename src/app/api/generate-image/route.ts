@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       prompt: body.prompt,
       slot: body.slot,
       altText: body.altText,
+      signal: request.signal,
     });
 
     return okJson({ image });

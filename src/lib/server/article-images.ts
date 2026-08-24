@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { truncatePromptLine } from "@/lib/prompt-text";
+import { ApiError } from "@/lib/server/http";
 import { generateImageBase64 } from "@/lib/server/openai";
 import { storeAsset } from "@/lib/server/storage";
 import type {
@@ -20,13 +21,17 @@ export async function createGeneratedArticleImage({
   prompt,
   slot,
   altText,
+  signal,
 }: {
   prompt: string;
   slot: "featured" | "inline-1" | "inline-2";
   altText?: string;
+  signal?: AbortSignal;
 }) {
+  throwIfImageRequestAborted(signal);
   const finalPrompt = buildProductionImagePrompt(prompt, slot);
   const imageBase64 = await generateImageBase64(finalPrompt);
+  throwIfImageRequestAborted(signal);
   const stored = await storeAsset({
     buffer: Buffer.from(imageBase64, "base64"),
     contentType: "image/png",
@@ -43,6 +48,15 @@ export async function createGeneratedArticleImage({
     altText: altText ?? "",
     source: "generated",
   } satisfies ArticleImage;
+}
+
+function throwIfImageRequestAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw new ApiError(
+      "画像生成が中断されました。通信状態を確認して、もう一度実行してください。",
+      499,
+    );
+  }
 }
 
 export async function createArticleImagesForDraft(
