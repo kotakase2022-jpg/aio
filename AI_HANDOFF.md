@@ -7,7 +7,7 @@
 - Loop: 5
 - Loop number inferred from: The previous handoff recorded Loop 4 as a completed production deployment. This strict end-to-end audit found and fixed new production reliability issues, so this is the next loop.
 - Phase: Verified Production Handoff
-- Last updated: 2026-08-25 03:00 +09:00
+- Last updated: 2026-08-25 03:11 +09:00
 
 ## 1. Current Goal
 
@@ -19,10 +19,11 @@ Current objective:
 
 ## 2. Current Branch / Commit / PR
 
-- Branch: `codex/loop5-production-verification-handoff` (documentation-only handoff branch from `main`)
+- Branch: `codex/loop5-final-deployment-handoff` (documentation-only final-state correction from `main`)
 - Latest implementation commit on `main`: `820f403068f57b6a4ed73b366e641d30c3921e96`
 - Last known good implementation commit: `820f403068f57b6a4ed73b366e641d30c3921e96`
-- PRs completed in this audit: #6, #7, #8, #9, and #10
+- Latest deployed `main` documentation merge: `1aa881037954cbd59f9616794b17ea56d2e9e40e`
+- PRs completed in this audit: #6, #7, #8, #9, #10, and documentation PR #11
 - Main implementation PR: https://github.com/kotakase2022-jpg/aio/pull/10
 - CodeRabbit OSS review status: Initial PR #10 review completed with low merge risk and no findings; the follow-up review was rate-limited
 
@@ -42,7 +43,7 @@ Current objective:
 - Added or updated unit, integration, and PC Playwright coverage for durable image attachment, rollback, stale-write prevention, multi-image responses, recovery UI, and error handling.
 - Merged PR #10 to `main` as `820f403` after green hosted CI.
 - Deployed Supabase Edge Function `aio-store` version 4 with its existing custom gateway-token authentication and `verify_jwt: false`.
-- Deployed Vercel production deployment `dpl_7p6dzMrbkdZHGXZs3U3RGja1jpxD` and aliased it to `https://aio-article-generator.vercel.app`.
+- Deployed implementation verification build `dpl_7p6dzMrbkdZHGXZs3U3RGja1jpxD`, then deployed the final `main` documentation state as `dpl_BGzYzrYTujAFXABeyDwjnZF5VkC6`; both builds contain the same application code and the canonical alias points to the latter.
 - Ran four marked live image scenarios against production:
   - client disconnect completed in the backend and persisted a fully referenced image
   - concurrent draft save returned 409 and removed the generated asset
@@ -80,7 +81,7 @@ Primary implementation files in PRs #6-#10:
 - High bugs: 0 known.
 - `main` implementation commit `820f403` is deployed and production is Ready.
 - Production URL: `https://aio-article-generator.vercel.app`.
-- Vercel deployment: `dpl_7p6dzMrbkdZHGXZs3U3RGja1jpxD` / `https://aio-article-generator-qnzvxlqrn-sl2026.vercel.app`.
+- Current Vercel deployment: `dpl_BGzYzrYTujAFXABeyDwjnZF5VkC6` / `https://aio-article-generator-ff8mwpnok-sl2026.vercel.app`.
 - Supabase Edge Function: `aio-store` version 4, ACTIVE.
 - Full deterministic quality gate and full production PC smoke are green.
 - Existing untracked `output/` contains generated user-manual artifacts and was intentionally not modified.
@@ -116,15 +117,16 @@ Commands and checks completed:
 npm.cmd run quality
 gh pr checks 10
 npx.cmd vercel deploy --prod --yes
-npx.cmd vercel inspect dpl_7p6dzMrbkdZHGXZs3U3RGja1jpxD --scope sl2026
-npx.cmd vercel logs dpl_7p6dzMrbkdZHGXZs3U3RGja1jpxD --scope sl2026 --since 1h --level error
-npx.cmd vercel logs dpl_7p6dzMrbkdZHGXZs3U3RGja1jpxD --scope sl2026 --since 1h --level warning
+npx.cmd vercel inspect dpl_BGzYzrYTujAFXABeyDwjnZF5VkC6 --scope sl2026
+npx.cmd vercel logs dpl_BGzYzrYTujAFXABeyDwjnZF5VkC6 --scope sl2026 --since 30m --level error
+npx.cmd vercel logs dpl_BGzYzrYTujAFXABeyDwjnZF5VkC6 --scope sl2026 --since 30m --level warning
 npm.cmd run test:live:readiness:wordpress
 ```
 
 Results:
 
 - Hosted GitHub Actions for PR #10: passed in 5m53s.
+- Hosted GitHub Actions for documentation PR #11: passed in 5m46s; CodeRabbit passed with its rate-limit notice and optional Bugbot passed with no findings.
 - `typecheck`: passed.
 - `lint`: passed.
 - Test-integrity check: passed, 52 files.
@@ -138,7 +140,7 @@ Results:
 - Production PC smoke: passed all 24 checks; six screenshots were visually inspected at 1440 x 1000.
 - Browser diagnostics: console errors 0, page errors 0, request failures 0, unexpected HTTP failures 0.
 - Production cleanup: one job, one article draft, its image rows, and two Storage paths deleted and verified absent.
-- Vercel deployment: Ready; canonical alias applied; error logs 0; warning logs 0 in the checked window.
+- Final Vercel deployment `dpl_BGzYzrYTujAFXABeyDwjnZF5VkC6`: Ready; canonical alias applied; authentication regression passed; error logs 0; warning logs 0 in the checked window.
 - Supabase Edge Function v4 logs: tested calls returned HTTP 200.
 - WordPress live readiness: failed only because seven sandbox-only variables are absent; therefore live posting is `UNVERIFIED`, not PASS.
 
