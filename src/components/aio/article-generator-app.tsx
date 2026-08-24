@@ -1858,6 +1858,7 @@ export function ArticleGeneratorApp() {
             <CardContent className="space-y-3">
               <select
                 data-testid="word-count-select"
+                aria-label="記事の文字数"
                 value={wordCount}
                 onChange={(event) => setWordCount(Number(event.target.value) as WordCount)}
                 className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
@@ -2189,6 +2190,7 @@ export function ArticleGeneratorApp() {
                   <div className="flex items-center gap-3">
                     <select
                       data-testid="wordpress-status-select"
+                      aria-label="WordPress投稿ステータス"
                       value={wpForm.status}
                       onChange={(event) =>
                         updateWordpressForm({
