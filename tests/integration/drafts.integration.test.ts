@@ -73,6 +73,31 @@ describe("draft persistence route handlers", () => {
     expect(stored?.updatedAt).not.toBe(draft.updatedAt);
   });
 
+  test("approve-draft sanitizes an edited draft supplied inline", async () => {
+    const { POST: approvePost } = await import("@/app/api/approve-draft/route");
+    const { getDraft } = await import("@/lib/server/drafts");
+    const draft = createSampleDraft({
+      id: "draft-inline-approve",
+      status: "draft",
+      editedBodyHtml:
+        '<h2 onclick="alert(1)">Safe</h2><a href="javascript:alert(1)">bad</a><img src="data:image/png;base64,iVBORw0KGgo=" onerror="alert(1)"><script>alert(1)</script>',
+    });
+
+    const response = await approvePost(
+      new Request("http://localhost/api/approve-draft", {
+        method: "POST",
+        body: JSON.stringify({ draft }),
+      }),
+    );
+    const stored = await getDraft("draft-inline-approve");
+
+    expect(response.status).toBe(200);
+    expect(stored?.status).toBe("approved");
+    expect(stored?.editedBodyHtml).toContain("<h2>Safe</h2>");
+    expect(stored?.editedBodyHtml).toContain("data:image/png;base64,iVBORw0KGgo=");
+    expect(stored?.editedBodyHtml).not.toMatch(/onclick|onerror|javascript:|<script/i);
+  });
+
   test("approve-draft rejects invalid payloads as user-correctable input errors", async () => {
     const { POST: approvePost } = await import("@/app/api/approve-draft/route");
 

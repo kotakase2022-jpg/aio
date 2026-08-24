@@ -18,11 +18,22 @@ beforeEach(async () => {
   process.env.SUPABASE_GATEWAY_TOKEN = "";
   process.env.VERCEL = "";
   vi.resetModules();
+  // Contract servers bind to loopback by design. Only this test module bypasses the
+  // production SSRF guard; dedicated safe-http tests verify that production rejects it.
+  vi.doMock("@/lib/server/safe-http", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/lib/server/safe-http")>();
+    return {
+      ...actual,
+      assertSafeOutboundUrl: (value: string | URL) => new URL(value),
+      safeFetch: async (url: string | URL, init?: RequestInit) => fetch(url, init),
+    };
+  });
 });
 
 afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true });
   restoreProcessEnv(processEnvSnapshot);
+  vi.doUnmock("@/lib/server/safe-http");
 });
 
 describe("WordPress REST API contract", () => {
@@ -109,7 +120,7 @@ describe("WordPress REST API contract", () => {
           {
             id: "featured-contract",
             slot: "featured",
-            url: `data:image/png;base64,${Buffer.from("png").toString("base64")}`,
+            url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
             path: "generated/featured.png",
             prompt: "contract image",
             altText: "Contract featured image",
@@ -342,7 +353,7 @@ describe("WordPress REST API contract", () => {
           {
             id: "featured-media-failure",
             slot: "featured",
-            url: `data:image/png;base64,${Buffer.from("png").toString("base64")}`,
+            url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
             path: "generated/featured.png",
             prompt: "contract image",
             altText: "Contract featured image",
@@ -423,7 +434,7 @@ describe("WordPress REST API contract", () => {
           {
             id: "featured-alt-failure",
             slot: "featured",
-            url: `data:image/png;base64,${Buffer.from("png").toString("base64")}`,
+            url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
             path: "generated/featured.png",
             prompt: "contract image",
             altText: "Contract featured image",

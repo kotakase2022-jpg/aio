@@ -3,6 +3,22 @@ import { buildDraftArticleHtml } from "@/lib/draft-html";
 import { createSampleDraft } from "../fixtures/article";
 
 describe("draft HTML rendering", () => {
+  test("sanitizes edited HTML before preview and publication rendering", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml:
+          '<h2 onclick="alert(1)">Visible heading</h2><a href="javascript:alert(1)">Unsafe link</a><img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="><script>alert(1)</script>',
+        faqItems: [],
+        images: [],
+        author: {},
+      }),
+    );
+
+    expect(html).toContain("<h2>Visible heading</h2>");
+    expect(html).not.toContain("data:image/svg+xml");
+    expect(html).not.toMatch(/onclick|javascript:|<script/i);
+  });
+
   test("appends edited FAQ items when the body does not already contain them", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
@@ -883,7 +899,7 @@ describe("draft HTML rendering", () => {
       }),
     );
 
-    expect(html.match(/https:\/\/example\.com\/reference\?page=1&id=primary/g)).toHaveLength(1);
+    expect(html.match(/https:\/\/example\.com\/reference\?page=1&amp;id=primary/g)).toHaveLength(1);
     expect(html).not.toContain("utm_source");
     expect(html).not.toContain('class="aio-source-block"');
   });
@@ -997,7 +1013,7 @@ describe("draft HTML rendering", () => {
       }),
     );
 
-    expect(html.match(/https:\/\/example\.com\/reference\?page=1&id=primary/g)).toHaveLength(1);
+    expect(html.match(/https:\/\/example\.com\/reference\?page=1&amp;id=primary/g)).toHaveLength(1);
     expect(html).not.toContain("utm_source");
     expect(html).not.toContain("&quot;");
     expect(html).not.toContain('class="aio-source-block"');

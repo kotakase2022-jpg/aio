@@ -16,14 +16,15 @@ beforeEach(() => {
 });
 
 describe("draft persistence with Supabase", () => {
-  test("upserts draft rows and replaces related image rows", async () => {
+  test("upserts current image rows before removing stale rows", async () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { saveDraft } = await import("@/lib/server/drafts");
     const draft = createSampleDraft({ id: "draft-supabase-save" });
     const upsert = vi.fn(async () => ({ error: null }));
-    const deleteEq = vi.fn(async () => ({ error: null }));
-    const deleteImages = vi.fn(() => ({ eq: deleteEq }));
-    const insertImages = vi.fn(async () => ({ error: null }));
+    const cleanupNot = vi.fn(async () => ({ error: null }));
+    const cleanupEq = vi.fn(() => ({ not: cleanupNot }));
+    const deleteImages = vi.fn(() => ({ eq: cleanupEq }));
+    const upsertImages = vi.fn(async () => ({ error: null }));
     const from = vi.fn((table: string) => {
       if (table === "article_drafts") {
         return { upsert };
@@ -31,7 +32,7 @@ describe("draft persistence with Supabase", () => {
 
       return {
         delete: deleteImages,
-        insert: insertImages,
+        upsert: upsertImages,
       };
     });
 
@@ -52,9 +53,9 @@ describe("draft persistence with Supabase", () => {
         status: "draft",
       }),
     );
-    expect(deleteEq).toHaveBeenCalledWith("draft_id", "draft-supabase-save");
-    expect(insertImages).toHaveBeenCalledWith([
+    expect(upsertImages).toHaveBeenCalledWith([
       expect.objectContaining({
+        id: draft.images[0].id,
         draft_id: "draft-supabase-save",
         slot: "featured",
         image_url: transparentPixelDataUrl,
@@ -62,6 +63,8 @@ describe("draft persistence with Supabase", () => {
         source: "generated",
       }),
     ]);
+    expect(cleanupEq).toHaveBeenCalledWith("draft_id", "draft-supabase-save");
+    expect(cleanupNot).toHaveBeenCalledWith("id", "in", `(${draft.images[0].id})`);
   });
 
   test("returns Japanese errors when Supabase draft saving fails", async () => {
@@ -87,15 +90,13 @@ describe("draft persistence with Supabase", () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { saveDraft } = await import("@/lib/server/drafts");
     const draft = createSampleDraft({ id: "draft-supabase-image-failure" });
-    const deleteEq = vi.fn(async () => ({ error: null }));
     const from = vi.fn((table: string) => {
       if (table === "article_drafts") {
         return { upsert: vi.fn(async () => ({ error: null })) };
       }
 
       return {
-        delete: vi.fn(() => ({ eq: deleteEq })),
-        insert: vi.fn(async () => ({ error: { message: "image insert failed" } })),
+        upsert: vi.fn(async () => ({ error: { message: "image upsert failed" } })),
       };
     });
 
@@ -105,10 +106,33 @@ describe("draft persistence with Supabase", () => {
 
     await expect(saveDraft(draft)).rejects.toMatchObject({
       message: "下書き画像の保存に失敗しました。",
-      detail: "image insert failed",
+      detail: "image upsert failed",
       status: 500,
     });
-    expect(deleteEq).toHaveBeenCalledWith("draft_id", "draft-supabase-image-failure");
+  });
+
+  test("does not delete existing image rows when current image upsert fails", async () => {
+    const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+    const { saveDraft } = await import("@/lib/server/drafts");
+    const draft = createSampleDraft({ id: "draft-image-upsert-before-cleanup" });
+    const deleteImages = vi.fn();
+    const from = vi.fn((table: string) => {
+      if (table === "article_drafts") {
+        return { upsert: vi.fn(async () => ({ error: null })) };
+      }
+      return {
+        upsert: vi.fn(async () => ({ error: { message: "upsert failed" } })),
+        delete: deleteImages,
+      };
+    });
+    vi.mocked(getSupabaseAdmin).mockReturnValue({
+      from,
+    } as unknown as ReturnType<typeof getSupabaseAdmin>);
+
+    await expect(saveDraft(draft)).rejects.toMatchObject({
+      message: "下書き画像の保存に失敗しました。",
+    });
+    expect(deleteImages).not.toHaveBeenCalled();
   });
 
   test("hydrates drafts and image rows from Supabase without losing edited content", async () => {

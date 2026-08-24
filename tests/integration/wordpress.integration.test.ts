@@ -17,6 +17,13 @@ beforeEach(async () => {
   process.env.WORDPRESS_ENCRYPTION_KEY = "wordpress-test-key-32-characters";
   process.env.VERCEL = "";
   vi.resetModules();
+  vi.doMock("@/lib/server/safe-http", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/lib/server/safe-http")>();
+    return {
+      ...actual,
+      safeFetch: async (url: string | URL, init?: RequestInit) => fetch(url, init),
+    };
+  });
 });
 
 afterEach(async () => {
@@ -24,7 +31,9 @@ afterEach(async () => {
   restoreProcessEnv(processEnvSnapshot);
   vi.doUnmock("@/lib/server/supabase");
   vi.doUnmock("@/lib/server/supabase-gateway");
+  vi.doUnmock("@/lib/server/safe-http");
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("WordPress connection and posting", () => {
@@ -66,6 +75,77 @@ describe("WordPress connection and posting", () => {
     expect(rawStore).not.toContain("secret-app-password");
   });
 
+  test("saveWordpressConnection rejects private-network destinations", async () => {
+    const { saveWordpressConnection } = await import("@/lib/server/wordpress");
+
+    await expect(
+      saveWordpressConnection({
+        siteUrl: "http://127.0.0.1:8080",
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "安全上の理由により、このWordPressサイトURLは使用できません。",
+    });
+  });
+
+  test("saveWordpressConnection requires HTTPS in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const { saveWordpressConnection } = await import("@/lib/server/wordpress");
+
+    await expect(
+      saveWordpressConnection({
+        siteUrl: "http://wordpress.example.com",
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "本番環境ではHTTPSのWordPressサイトURLが必要です。",
+    });
+  });
+
+  test("fallback connection token cannot be replayed with altered destination metadata", async () => {
+    const { saveWordpressConnection, publishDraftToWordpress } = await import(
+      "@/lib/server/wordpress"
+    );
+    const connection = await saveWordpressConnection({
+      siteUrl: "https://wordpress.example.com",
+      username: "editor",
+      applicationPassword: "secret-app-password",
+    });
+    await rm(path.join(tempDir, "wordpress-connections.json"), { force: true });
+    const fetchMock = vi.fn(async () =>
+      Response.json({ link: "https://attacker.example/stolen" }, { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const draft = createSampleDraft({
+      status: "approved",
+      categories: [],
+      tags: [],
+      images: [],
+    });
+
+    await expect(
+      publishDraftToWordpress({
+        draft,
+        connectionId: "missing-connection",
+        connection: {
+          ...connection,
+          id: "missing-connection",
+          siteUrl: "https://attacker.example",
+        },
+        status: "draft",
+        origin: "http://localhost",
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "WordPress接続情報を確認できませんでした。",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test("saveWordpressConnection returns a Japanese error when Supabase saving fails", async () => {
     mockSupabaseClient({
       from: vi.fn(() => ({
@@ -86,6 +166,23 @@ describe("WordPress connection and posting", () => {
       status: 500,
       message: "WordPress接続情報の保存に失敗しました。",
       detail: "connection insert failed",
+    });
+  });
+
+  test("saveWordpressConnection rejects a weak production encryption key", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.WORDPRESS_ENCRYPTION_KEY = "short";
+    const { saveWordpressConnection } = await import("@/lib/server/wordpress");
+
+    await expect(
+      saveWordpressConnection({
+        siteUrl: "https://wordpress.example.com",
+        username: "editor",
+        applicationPassword: "secret-app-password",
+      }),
+    ).rejects.toMatchObject({
+      status: 500,
+      message: "本番環境ではWordPress認証情報の暗号化キーが必要です。",
     });
   });
 

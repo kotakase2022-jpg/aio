@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { extractAttachmentText } from "@/lib/server/file-extraction";
 import { ApiError, errorJson, okJson } from "@/lib/server/http";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-policy";
 import type { AttachedFileInput } from "@/types/aio";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
@@ -17,9 +16,9 @@ export async function POST(request: Request) {
       throw new ApiError("添付ファイルを選択してください。", 400);
     }
 
-    if (file.size > MAX_ATTACHMENT_BYTES) {
+    if (file.size > MAX_UPLOAD_BYTES) {
       throw new ApiError(
-        "添付ファイルは1件12MB以内にしてください。",
+        `添付ファイルは1件${MAX_UPLOAD_LABEL}以内にしてください。`,
         400,
       );
     }

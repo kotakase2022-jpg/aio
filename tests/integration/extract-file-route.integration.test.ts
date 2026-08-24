@@ -47,7 +47,7 @@ describe("extract-file-content route", () => {
     const formData = new FormData();
     formData.set(
       "file",
-      new File([new Uint8Array(12 * 1024 * 1024 + 1)], "large.txt", { type: "text/plain" }),
+      new File([new Uint8Array(4 * 1024 * 1024 + 1)], "large.txt", { type: "text/plain" }),
     );
     const oversized = await POST(
       new Request("http://localhost/api/extract-file-content", {
@@ -58,7 +58,7 @@ describe("extract-file-content route", () => {
     expect(oversized.status).toBe(400);
     await expect(oversized.json()).resolves.toMatchObject({
       ok: false,
-      error: "添付ファイルは1件12MB以内にしてください。",
+      error: "添付ファイルは1件4MB以内にしてください。",
     });
   });
 
@@ -93,6 +93,30 @@ describe("extract-file-content route", () => {
     await expect(empty.json()).resolves.toMatchObject({
       ok: false,
       error: "空のファイルです。",
+    });
+  });
+
+  test("returns a user-correctable error for a malformed Office file", async () => {
+    const { POST } = await import("@/app/api/extract-file-content/route");
+    const formData = new FormData();
+    formData.set(
+      "file",
+      new File(["not a zip archive"], "broken.docx", {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/extract-file-content", {
+        method: "POST",
+        body: formData,
+      }),
+    );
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: "ファイルを解析できませんでした。",
     });
   });
 

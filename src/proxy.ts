@@ -1,11 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  DEMO_AUTH_COOKIE_NAME,
+  verifyDemoSessionToken,
+} from "@/lib/demo-session";
 
-const AUTH_COOKIE_NAME = "aio_demo_auth";
-const AUTH_COOKIE_VALUE = "demo-access-granted";
-
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const isAuthenticated = request.cookies.get(AUTH_COOKIE_NAME)?.value === AUTH_COOKIE_VALUE;
+  const isAuthenticated = await verifyDemoSessionToken(
+    request.cookies.get(DEMO_AUTH_COOKIE_NAME)?.value,
+  ).catch(() => false);
   const isLoginRoute = pathname === "/demo-login";
   const isAuthApi = pathname.startsWith("/api/demo-auth");
 

@@ -18,6 +18,10 @@ export const SUPPORTED_ATTACHMENT_EXTENSIONS = [
 const MAX_EXTRACTED_CHARS = 24_000;
 const MIN_USEFUL_TEXT_CHARS = 20;
 const PDF_PARSE_TIMEOUT_MS = 30_000;
+const MAX_PDF_PAGES = 300;
+const MAX_PDF_FALLBACK_BYTES = 8 * 1024 * 1024;
+const MAX_OFFICE_XML_ENTRY_BYTES = 8 * 1024 * 1024;
+const MAX_OFFICE_XML_TOTAL_BYTES = 16 * 1024 * 1024;
 
 export async function extractAttachmentText({
   buffer,
@@ -43,18 +47,29 @@ export async function extractAttachmentText({
   }
 
   let text = "";
-  if (extension === ".pdf") {
-    text = await extractPdfText(buffer);
-  } else if (extension === ".txt") {
-    text = decodeText(buffer);
-  } else if (extension === ".html" || extension === ".htm") {
-    text = extractHtmlText(decodeText(buffer));
-  } else if (extension === ".docx") {
-    text = await extractDocxText(buffer);
-  } else if (extension === ".pptx") {
-    text = await extractPptxText(buffer);
-  } else if (extension === ".xlsx") {
-    text = await extractXlsxText(buffer);
+  try {
+    if (extension === ".pdf") {
+      text = await extractPdfText(buffer);
+    } else if (extension === ".txt") {
+      text = decodeText(buffer);
+    } else if (extension === ".html" || extension === ".htm") {
+      text = extractHtmlText(decodeText(buffer));
+    } else if (extension === ".docx") {
+      text = await extractDocxText(buffer);
+    } else if (extension === ".pptx") {
+      text = await extractPptxText(buffer);
+    } else if (extension === ".xlsx") {
+      text = await extractXlsxText(buffer);
+    }
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(
+      "ファイルを解析できませんでした。",
+      422,
+      "ファイルが破損していないか、拡張子と実際の形式が一致しているか確認してください。",
+    );
   }
 
   const cleaned = cleanText(text);
@@ -89,12 +104,21 @@ async function extractPdfTextWithPdfJs(buffer: Buffer) {
     data: new Uint8Array(buffer),
     disableWorker: true,
     disableFontFace: true,
+    enableScripting: false,
+    isEvalSupported: false,
     verbosity: pdfjs.VerbosityLevel.ERRORS,
   } as Parameters<typeof pdfjs.getDocument>[0] & { disableWorker: boolean });
   const document = await loadingTask.promise;
   const parts: string[] = [];
 
   try {
+    if (document.numPages > MAX_PDF_PAGES) {
+      throw new ApiError(
+        "PDFのページ数が上限を超えています。",
+        413,
+        `${MAX_PDF_PAGES}ページ以内のPDFを添付してください。`,
+      );
+    }
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
       const content = await page.getTextContent();
@@ -105,6 +129,9 @@ async function extractPdfTextWithPdfJs(buffer: Buffer) {
 
       if (pageText) {
         parts.push(pageText);
+        if (parts.reduce((total, part) => total + part.length, 0) >= MAX_EXTRACTED_CHARS) {
+          break;
+        }
       }
     }
   } finally {
@@ -432,15 +459,20 @@ function extractPdfStreams(buffer: Buffer) {
 
     if (/\/FlateDecode\b/.test(dictionary)) {
       try {
-        streams.push(inflateSync(raw));
+        streams.push(inflateSync(raw, { maxOutputLength: MAX_PDF_FALLBACK_BYTES }));
       } catch {
-        streams.push(raw);
+        if (raw.length <= MAX_PDF_FALLBACK_BYTES) {
+          streams.push(raw);
+        }
       }
     } else {
       streams.push(raw);
     }
 
     cursor = endIndex + "endstream".length;
+    if (streams.reduce((total, stream) => total + stream.length, 0) > MAX_PDF_FALLBACK_BYTES) {
+      throw new ApiError("PDFの展開後サイズが大きすぎます。", 413);
+    }
   }
 
   return streams;
@@ -502,7 +534,7 @@ async function extractDocxText(buffer: Buffer) {
   const files = Object.values(zip.files)
     .filter((file) => /^word\/(document|header\d*|footer\d*)\.xml$/i.test(file.name))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const texts = await Promise.all(files.map((file) => file.async("text")));
+  const texts = await readOfficeXmlFiles(files);
   return texts.map((xml) => extractXmlParagraphText(xml, ["w:p"], ["w:t"])).join("\n\n");
 }
 
@@ -511,23 +543,55 @@ async function extractPptxText(buffer: Buffer) {
   const files = Object.values(zip.files)
     .filter((file) => /^ppt\/slides\/slide\d+\.xml$/i.test(file.name))
     .sort((a, b) => naturalCompare(a.name, b.name));
-  const texts = await Promise.all(files.map((file) => file.async("text")));
+  const texts = await readOfficeXmlFiles(files);
   return texts.map((xml) => extractXmlParagraphText(xml, ["a:p"], ["a:t"])).join("\n\n");
 }
 
 async function extractXlsxText(buffer: Buffer) {
   const zip = await JSZip.loadAsync(buffer);
-  const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("text");
-  const sharedStrings = sharedXml ? extractSharedStrings(sharedXml) : [];
+  const sharedFile = zip.file("xl/sharedStrings.xml");
   const sheetFiles = Object.values(zip.files)
     .filter((file) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(file.name))
     .sort((a, b) => naturalCompare(a.name, b.name));
-  const sheets = await Promise.all(sheetFiles.map((file) => file.async("text")));
+  const texts = await readOfficeXmlFiles(sharedFile ? [sharedFile, ...sheetFiles] : sheetFiles);
+  const sharedXml = sharedFile ? texts[0] : undefined;
+  const sheets = sharedFile ? texts.slice(1) : texts;
+  const sharedStrings = sharedXml ? extractSharedStrings(sharedXml) : [];
 
   return sheets
     .map((xml) => extractWorksheetText(xml, sharedStrings))
     .filter(Boolean)
     .join("\n\n");
+}
+
+async function readOfficeXmlFiles(files: JSZip.JSZipObject[]) {
+  let totalBytes = 0;
+  for (const file of files) {
+    const uncompressedBytes = readZipUncompressedSize(file);
+    if (
+      uncompressedBytes > MAX_OFFICE_XML_ENTRY_BYTES ||
+      totalBytes + uncompressedBytes > MAX_OFFICE_XML_TOTAL_BYTES
+    ) {
+      throw new ApiError(
+        "Officeファイルの展開後サイズが大きすぎます。",
+        413,
+        "文書内のテキスト量を減らしてから、もう一度添付してください。",
+      );
+    }
+    totalBytes += uncompressedBytes;
+  }
+
+  return Promise.all(files.map((file) => file.async("text")));
+}
+
+function readZipUncompressedSize(file: JSZip.JSZipObject) {
+  const internal = file as JSZip.JSZipObject & {
+    _data?: { uncompressedSize?: unknown };
+  };
+  const size = internal._data?.uncompressedSize;
+  return typeof size === "number" && Number.isFinite(size) && size >= 0
+    ? size
+    : MAX_OFFICE_XML_ENTRY_BYTES + 1;
 }
 
 function extractSharedStrings(xml: string) {

@@ -5,8 +5,10 @@ import {
   callSupabaseGateway,
   isSupabaseGatewayConfigured,
 } from "@/lib/server/supabase-gateway";
+import { ApiError } from "@/lib/server/http";
 
 const DEFAULT_BUCKET = "article-assets";
+const ALLOWED_ASSET_FOLDERS = new Set(["uploads", "authors", "article-inserts", "generated"]);
 
 export async function storeAsset({
   buffer,
@@ -19,11 +21,16 @@ export async function storeAsset({
   filename: string;
   folder?: string;
 }) {
+  if (!ALLOWED_ASSET_FOLDERS.has(folder)) {
+    throw new ApiError("画像の保存先が正しくありません。", 400);
+  }
+
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "-");
   const objectPath = `${folder}/${Date.now()}-${safeName}`;
   const supabase = getSupabaseAdmin();
   const bucket = getStorageBucket();
 
+  let durableStorageError = "";
   if (supabase) {
     const { error } = await supabase.storage
       .from(bucket)
@@ -33,6 +40,7 @@ export async function storeAsset({
       const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
       return { url: data.publicUrl, path: objectPath, mode: "supabase" as const };
     }
+    durableStorageError = error.message;
   }
 
   if (isSupabaseGatewayConfigured()) {
@@ -44,6 +52,15 @@ export async function storeAsset({
     });
 
     return { url: stored.url, path: stored.path, mode: "supabase-gateway" as const };
+  }
+
+  if (process.env.VERCEL) {
+    throw new ApiError(
+      "画像の永続保存に失敗しました。",
+      503,
+      durableStorageError ||
+        "Supabase Storageが利用できません。環境変数とarticle-assetsバケットを確認してください。",
+    );
   }
 
   try {

@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { parseArticleDraft } from "@/lib/article-draft-schema";
+import { sanitizeArticleHtml } from "@/lib/article-html";
 import { approveDraft, saveDraft } from "@/lib/server/drafts";
 import { ApiError, errorJson, okJson } from "@/lib/server/http";
-import type { ArticleDraft } from "@/types/aio";
 
 export const runtime = "nodejs";
 
@@ -18,9 +19,10 @@ export async function POST(request: Request) {
   try {
     const body = schema.parse(await request.json());
     if (body.draft) {
-      const draft = body.draft as ArticleDraft;
+      const draft = parseArticleDraft(body.draft);
       const result = await saveDraft({
         ...draft,
+        editedBodyHtml: sanitizeArticleHtml(draft.editedBodyHtml),
         status: "approved",
         updatedAt: new Date().toISOString(),
       });

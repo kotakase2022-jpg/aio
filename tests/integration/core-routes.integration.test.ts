@@ -131,7 +131,16 @@ describe("core API route handlers", () => {
     formData.append("folder", "article-inserts");
     formData.append(
       "file",
-      new File([Buffer.from("png")], "image.png", { type: "image/png" }),
+      new File(
+        [
+          Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+            "base64",
+          ),
+        ],
+        "image.png",
+        { type: "image/png" },
+      ),
     );
 
     const response = await POST(
@@ -172,6 +181,44 @@ describe("core API route handlers", () => {
     const invalidJson = await invalidResponse.json();
     expect(invalidResponse.status).toBe(400);
     expect(invalidJson.error).toBe("画像ファイルのみアップロードできます。");
+
+    const spoofedFormData = new FormData();
+    spoofedFormData.append(
+      "file",
+      new File(["<svg><script>alert(1)</script></svg>"], "spoofed.png", {
+        type: "image/png",
+      }),
+    );
+    const spoofedResponse = await POST(
+      new Request("http://localhost/api/upload-image", {
+        method: "POST",
+        body: spoofedFormData,
+      }),
+    );
+    const spoofedJson = await spoofedResponse.json();
+    expect(spoofedResponse.status).toBe(400);
+    expect(spoofedJson.error).toBe("画像ファイルの内容を確認できませんでした。");
+
+    const traversalFormData = new FormData();
+    traversalFormData.append("folder", "../../src");
+    traversalFormData.append(
+      "file",
+      new File(
+        [Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64")],
+        "image.png",
+        { type: "image/png" },
+      ),
+    );
+    const traversalResponse = await POST(
+      new Request("http://localhost/api/upload-image", {
+        method: "POST",
+        body: traversalFormData,
+      }),
+    );
+    expect(traversalResponse.status).toBe(400);
+    await expect(traversalResponse.json()).resolves.toMatchObject({
+      error: "画像の保存先が正しくありません。",
+    });
   });
 
   test("upload image route returns Japanese validation errors for missing and oversized files", async () => {
@@ -190,7 +237,7 @@ describe("core API route handlers", () => {
     const oversizedFormData = new FormData();
     oversizedFormData.append(
       "file",
-      new File([new Uint8Array(8 * 1024 * 1024 + 1)], "large.png", {
+      new File([new Uint8Array(4 * 1024 * 1024 + 1)], "large.png", {
         type: "image/png",
       }),
     );
@@ -202,7 +249,7 @@ describe("core API route handlers", () => {
     );
     const oversizedJson = await oversizedResponse.json();
     expect(oversizedResponse.status).toBe(400);
-    expect(oversizedJson.error).toBe("画像は8MB以下にしてください。");
+    expect(oversizedJson.error).toBe("画像は4MB以下にしてください。");
   });
 
   test("generation jobs route creates a job and schedules background work", async () => {

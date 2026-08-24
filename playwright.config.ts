@@ -32,6 +32,7 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       DEMO_ACCESS_CODE: "202607",
+      DEMO_AUTH_SECRET: "test-only-e2e-demo-session-secret-32-characters",
       NEXT_PUBLIC_SUPABASE_URL: "",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
       SUPABASE_SERVICE_ROLE_KEY: "",

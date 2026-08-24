@@ -60,6 +60,12 @@ import {
 import { qualityCheckEditGuidance } from "@/lib/quality-edit-guidance";
 import { qualityRegenerationAction } from "@/lib/quality-regeneration-action";
 import { evaluateTitleQuality } from "@/lib/title-quality";
+import {
+  ARTICLE_ATTACHMENT_ACCEPT,
+  ARTICLE_IMAGE_ACCEPT,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_LABEL,
+} from "@/lib/upload-policy";
 import { cn, joinCsv, splitCsv } from "@/lib/utils";
 import type {
   AttachedFileInput,
@@ -1363,7 +1369,7 @@ export function ArticleGeneratorApp() {
                       className={cn(
                         "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                         activeInputStep === step.id
-                          ? "bg-sky-600 text-white"
+                          ? "bg-sky-700 text-white"
                           : "bg-slate-100 text-slate-600",
                       )}
                     >
@@ -1371,7 +1377,7 @@ export function ArticleGeneratorApp() {
                     </span>
                     <span className="min-w-0 flex-1 leading-5">{step.label}</span>
                     {step.required ? (
-                      <span className="text-[11px] font-semibold text-rose-600">必須</span>
+                      <span className="text-[11px] font-semibold text-rose-700">必須</span>
                     ) : null}
                   </button>
                 ))}
@@ -2379,7 +2385,7 @@ function AttachmentUploadPanel({
         <div>
           <div className="text-sm font-medium text-slate-700">{title}</div>
           <p className="mt-1 text-xs text-slate-500">
-            PDF/TXT/PPTX/XLSX/DOCX/HTMLを複数添付できます。
+            PDF/TXT/PPTX/XLSX/DOCX/HTMLを複数添付できます（1件{MAX_UPLOAD_LABEL}まで）。
           </p>
         </div>
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
@@ -2389,7 +2395,7 @@ function AttachmentUploadPanel({
             data-testid={testId}
             type="file"
             multiple
-            accept=".pdf,.txt,.pptx,.xlsx,.docx,.html,.htm,text/plain,application/pdf,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept={ARTICLE_ATTACHMENT_ACCEPT}
             className="hidden"
             disabled={uploading}
             onChange={(event) => {
@@ -2524,13 +2530,14 @@ function UploadRow({
       <div className="flex items-center justify-between gap-4">
         <div>
           <div className="text-sm font-medium text-slate-700">{label}</div>
+          <p className="mt-1 text-xs text-slate-500">PNG/JPEG/WebP/GIF・{MAX_UPLOAD_LABEL}まで</p>
           <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
             <Upload className="size-4" />
             アップロード
             <input
               data-testid={testId}
               type="file"
-              accept="image/*"
+              accept={ARTICLE_IMAGE_ACCEPT}
               className="hidden"
               onChange={(event) => {
                 onFile(event.target.files?.[0] ?? null);
@@ -4120,6 +4127,9 @@ function formatBytes(bytes: number) {
 }
 
 async function extractAttachment(file: File) {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`添付ファイルは1件${MAX_UPLOAD_LABEL}以内にしてください。`);
+  }
   const formData = new FormData();
   formData.append("file", file);
   const response = await fetch("/api/extract-file-content", { method: "POST", body: formData });
@@ -4133,6 +4143,9 @@ async function extractAttachment(file: File) {
 }
 
 async function uploadImage(file: File, folder: string) {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`画像は${MAX_UPLOAD_LABEL}以下にしてください。`);
+  }
   const formData = new FormData();
   formData.append("file", file);
   formData.append("folder", folder);

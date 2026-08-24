@@ -296,4 +296,25 @@ describe("extractAttachmentText", () => {
       }),
     ).rejects.toBeInstanceOf(ApiError);
   });
+
+  test("rejects highly compressed Office XML before expanding it", async () => {
+    const zip = new JSZip();
+    zip.file(
+      "word/document.xml",
+      `<w:document><w:body><w:p><w:r><w:t>${"A".repeat(8 * 1024 * 1024 + 1)}</w:t></w:r></w:p></w:body></w:document>`,
+    );
+    const buffer = Buffer.from(
+      await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" }),
+    );
+
+    await expect(
+      extractAttachmentText({
+        buffer,
+        filename: "compressed.docx",
+      }),
+    ).rejects.toMatchObject({
+      status: 413,
+      message: "Officeファイルの展開後サイズが大きすぎます。",
+    });
+  });
 });
