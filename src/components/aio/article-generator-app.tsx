@@ -642,7 +642,7 @@ export function ArticleGeneratorApp() {
     setFetchedReferences(job.fetchedReferences ?? []);
     setFetchedCompetitors(job.fetchedCompetitors ?? []);
     if (restoreInputs) {
-      restoreFormFromGenerationJob(job);
+      restoreFormFromGenerationJob(job, replaceDraft);
     }
 
     const hydratedDraft = hydrateDraftFromGenerationJob(job);
@@ -651,9 +651,10 @@ export function ArticleGeneratorApp() {
     }
   }
 
-  function restoreFormFromGenerationJob(job: GenerationJob) {
+  function restoreFormFromGenerationJob(job: GenerationJob, guideLegacyCategory = false) {
     const input = job.inputPayload;
     const restoredResearch = job.draft?.competitorResearch ?? job.competitorResearch ?? null;
+    const restoredPrimaryInfoTypes = primaryInformationTypesForRestore(input.primaryInfoTypes);
 
     formRestoreVersionRef.current += 1;
     competitorResearchRequestRef.current += 1;
@@ -677,9 +678,7 @@ export function ArticleGeneratorApp() {
     setReferenceFiles(input.referenceFiles ?? []);
     setCompetitorFiles(input.competitorFiles ?? []);
     setTheme(input.theme ?? "");
-    setPrimaryInfoTypes(
-      primaryInformationTypesForRestore(input.primaryInfoTypes, input.primaryInfo),
-    );
+    setPrimaryInfoTypes(restoredPrimaryInfoTypes);
     setPrimaryInfo(input.primaryInfo ?? "");
     setClosingText(input.closingText ?? "");
     setAuthor(input.author ?? {});
@@ -694,6 +693,14 @@ export function ArticleGeneratorApp() {
     setCompetitorResearch(restoredResearch);
     setCompetitorJson(restoredResearch ? JSON.stringify(restoredResearch, null, 2) : "");
     setCompetitorJsonError("");
+    if (guideLegacyCategory && input.primaryInfo?.trim() && restoredPrimaryInfoTypes.length === 0) {
+      setActiveInputStep("primary-info");
+      setInputWizardMessage(
+        "この生成ログには一次情報の種類が保存されていません。内容に合う種類を1つ以上選択してください。",
+      );
+    } else {
+      setInputWizardMessage("");
+    }
   }
 
   function mergeJobSteps(jobSteps: GenerationStep[]) {

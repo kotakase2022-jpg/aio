@@ -60,24 +60,6 @@ export function primaryInformationLabels(types: readonly string[]) {
 
 export function primaryInformationTypesForRestore(
   types: readonly string[] | undefined,
-  primaryInfo: string | undefined,
 ): PrimaryInformationType[] {
-  const validTypes = (types ?? []).filter(isPrimaryInformationType);
-  if (validTypes.length > 0) return validTypes;
-
-  const text = primaryInfo?.trim();
-  if (!text) return [];
-
-  const legacyCategoryRules: Array<[RegExp, PrimaryInformationType]> = [
-    [/(?:%|％|アンケート|調査|集計|データ|件中|人中)/i, "original-data"],
-    [/(?:相談|問い合わせ|繰り返し起きる課題)/i, "frequent-consultations"],
-    [/(?:失敗|教訓|改善|見直した)/i, "failures-lessons"],
-    [/(?:支援事例|導入事例|成果|支援前後)/i, "case-results"],
-    [/(?:顧客の声|利用者の声|導入後の反応)/i, "customer-voice"],
-    [/(?:開発の背景|設計上|なぜ作った)/i, "service-background"],
-    [/(?:判断基準|ノウハウ|チェック項目|優先順位|運用ルール)/i, "criteria-knowhow"],
-  ];
-  const inferredType = legacyCategoryRules.find(([pattern]) => pattern.test(text))?.[1];
-
-  return [inferredType ?? "expert-opinion"];
+  return (types ?? []).filter(isPrimaryInformationType);
 }
