@@ -242,6 +242,12 @@ export function ArticleGeneratorApp() {
     useState<InputWizardStepId>("references");
   const [inputWizardMessage, setInputWizardMessage] = useState("");
   const generationPollingRef = useRef<string | null>(null);
+  const generationPollRunRef = useRef(0);
+  const generationResumeStartedRef = useRef(false);
+  const generationLogOpenRequestRef = useRef(0);
+  const formRestoreVersionRef = useRef(0);
+  const competitorResearchRequestRef = useRef(0);
+  const themeCandidateRequestRef = useRef(0);
   const themeCandidateApplyTimerRef = useRef<number | null>(null);
   const inputWizardPanelRef = useRef<HTMLDivElement>(null);
 
@@ -302,29 +308,26 @@ export function ArticleGeneratorApp() {
   const isGenerating = Boolean(activeGenerationJobId);
 
   useEffect(() => {
+    if (generationResumeStartedRef.current) return;
+    generationResumeStartedRef.current = true;
+
     void loadGenerationLogs();
 
     const storedJobId = window.localStorage.getItem(activeGenerationJobStorageKey);
     if (storedJobId) {
-      void pollGenerationJob(storedJobId);
+      void pollGenerationJob(storedJobId, true);
+    } else {
+      window.queueMicrotask(() => setGenerationResumeChecked(true));
     }
 
-    let canceled = false;
-    window.queueMicrotask(() => {
-      if (!canceled) {
-        setGenerationResumeChecked(true);
-      }
-    });
-
-    return () => {
-      canceled = true;
-    };
     // Run once on mount to resume a server-side job that may outlive the tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     return () => {
+      competitorResearchRequestRef.current += 1;
+      themeCandidateRequestRef.current += 1;
       if (themeCandidateApplyTimerRef.current) {
         window.clearTimeout(themeCandidateApplyTimerRef.current);
       }
@@ -392,6 +395,8 @@ export function ArticleGeneratorApp() {
   }, [singleImageRegenerating]);
 
   async function runCompetitorResearch() {
+    const requestId = competitorResearchRequestRef.current + 1;
+    competitorResearchRequestRef.current = requestId;
     setResearchLoading(true);
     setResearchProgress(8);
     setActiveError("");
@@ -407,19 +412,25 @@ export function ArticleGeneratorApp() {
           keywords: theme,
         },
       );
+      if (competitorResearchRequestRef.current !== requestId) return;
       setCompetitorResearch(result.result);
       setCompetitorJson(JSON.stringify(result.result, null, 2));
       setCompetitorJsonError("");
       setResearchProgress(100);
     } catch (error) {
+      if (competitorResearchRequestRef.current !== requestId) return;
       setResearchProgress(0);
       setActiveError(readError(error));
     } finally {
-      setResearchLoading(false);
+      if (competitorResearchRequestRef.current === requestId) {
+        setResearchLoading(false);
+      }
     }
   }
 
   async function generateThemeCandidates() {
+    const requestId = themeCandidateRequestRef.current + 1;
+    themeCandidateRequestRef.current = requestId;
     setThemeCandidateLoading(true);
     setThemeCandidateError("");
     setThemeCandidateApplyMessage("");
@@ -437,11 +448,15 @@ export function ArticleGeneratorApp() {
         primaryInfoTypes,
         primaryInfo,
       });
+      if (themeCandidateRequestRef.current !== requestId) return;
       setThemeCandidates(result.result);
     } catch (error) {
+      if (themeCandidateRequestRef.current !== requestId) return;
       setThemeCandidateError(readError(error));
     } finally {
-      setThemeCandidateLoading(false);
+      if (themeCandidateRequestRef.current === requestId) {
+        setThemeCandidateLoading(false);
+      }
     }
   }
 
@@ -471,6 +486,7 @@ export function ArticleGeneratorApp() {
       return;
     }
 
+    generationLogOpenRequestRef.current += 1;
     setActiveError("");
     setDraft(isRegeneration ? previousDraft : null);
     setTab("preview");
@@ -543,14 +559,31 @@ export function ArticleGeneratorApp() {
     await generateArticle(articleRegenerationInstruction);
   }
 
-  async function pollGenerationJob(jobId: string) {
+  async function pollGenerationJob(jobId: string, restoreInputsOnFirstPoll = false) {
+    const pollRunId = generationPollRunRef.current + 1;
+    generationPollRunRef.current = pollRunId;
+    generationLogOpenRequestRef.current += 1;
     generationPollingRef.current = jobId;
     setActiveGenerationJobId(jobId);
+    let shouldRestoreInputs = restoreInputsOnFirstPoll;
 
     try {
-      while (generationPollingRef.current === jobId) {
+      while (
+        generationPollingRef.current === jobId &&
+        generationPollRunRef.current === pollRunId
+      ) {
         const result = await apiGet<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}`);
-        applyGenerationJob(result.job);
+        if (
+          generationPollingRef.current !== jobId ||
+          generationPollRunRef.current !== pollRunId
+        ) {
+          return;
+        }
+        applyGenerationJob(result.job, shouldRestoreInputs);
+        if (shouldRestoreInputs) {
+          setGenerationResumeChecked(true);
+        }
+        shouldRestoreInputs = false;
 
         if (result.job.status === "completed") {
           finishGenerationPolling(jobId);
@@ -572,8 +605,16 @@ export function ArticleGeneratorApp() {
         await delay(1800);
       }
     } catch (error) {
-      if (generationPollingRef.current !== jobId) return;
+      if (
+        generationPollingRef.current !== jobId ||
+        generationPollRunRef.current !== pollRunId
+      ) {
+        return;
+      }
 
+      if (shouldRestoreInputs) {
+        setGenerationResumeChecked(true);
+      }
       finishGenerationPolling(jobId);
       setActiveError(readError(error));
       markRunningAsError(readError(error));
@@ -591,15 +632,65 @@ export function ArticleGeneratorApp() {
     }
   }
 
-  function applyGenerationJob(job: GenerationJob) {
+  function applyGenerationJob(
+    job: GenerationJob,
+    restoreInputs = false,
+    replaceDraft = false,
+  ) {
     setSteps(mergeJobSteps(job.steps));
     setFetchedReferences(job.fetchedReferences ?? []);
     setFetchedCompetitors(job.fetchedCompetitors ?? []);
+    if (restoreInputs) {
+      restoreFormFromGenerationJob(job);
+    }
 
     const hydratedDraft = hydrateDraftFromGenerationJob(job);
-    if (hydratedDraft) {
+    if (hydratedDraft || replaceDraft) {
       setDraft(hydratedDraft);
     }
+  }
+
+  function restoreFormFromGenerationJob(job: GenerationJob) {
+    const input = job.inputPayload;
+    const restoredResearch = job.draft?.competitorResearch ?? job.competitorResearch ?? null;
+
+    formRestoreVersionRef.current += 1;
+    competitorResearchRequestRef.current += 1;
+    themeCandidateRequestRef.current += 1;
+    setReferenceFileUploading(false);
+    setCompetitorFileUploading(false);
+    setResearchLoading(false);
+    setResearchProgress(0);
+    setThemeCandidateLoading(false);
+    setThemeCandidates(null);
+    setThemeCandidateError("");
+    setThemeCandidateApplyMessage("");
+    setThemeCandidateAppliedIndex(null);
+    if (themeCandidateApplyTimerRef.current) {
+      window.clearTimeout(themeCandidateApplyTimerRef.current);
+      themeCandidateApplyTimerRef.current = null;
+    }
+
+    setReferences(input.references?.length ? input.references : [blankInput()]);
+    setCompetitors(input.competitors?.length ? input.competitors : [blankInput()]);
+    setReferenceFiles(input.referenceFiles ?? []);
+    setCompetitorFiles(input.competitorFiles ?? []);
+    setTheme(input.theme ?? "");
+    setPrimaryInfoTypes(input.primaryInfoTypes ?? []);
+    setPrimaryInfo(input.primaryInfo ?? "");
+    setClosingText(input.closingText ?? "");
+    setAuthor(input.author ?? {});
+    setVisualTone(
+      input.visualTone ?? {
+        mode: "preset",
+        preset: tonePresets[0],
+      },
+    );
+    setImageCount(input.imageCount ?? 2);
+    setWordCount(input.wordCount ?? 3000);
+    setCompetitorResearch(restoredResearch);
+    setCompetitorJson(restoredResearch ? JSON.stringify(restoredResearch, null, 2) : "");
+    setCompetitorJsonError("");
   }
 
   function mergeJobSteps(jobSteps: GenerationStep[]) {
@@ -624,13 +715,27 @@ export function ArticleGeneratorApp() {
 
   async function openGenerationLog(jobId: string) {
     setActiveError("");
+    if (activeGenerationJobId) {
+      setActiveError("記事生成中は生成ログを開けません。生成完了後にもう一度お試しください。");
+      return;
+    }
+    const requestId = generationLogOpenRequestRef.current + 1;
+    generationLogOpenRequestRef.current = requestId;
     try {
       const result = await apiGet<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}`);
-      applyGenerationJob(result.job);
-      if (hydrateDraftFromGenerationJob(result.job)) {
+      if (
+        generationLogOpenRequestRef.current !== requestId ||
+        generationPollingRef.current
+      ) {
+        return;
+      }
+      const hydratedDraft = hydrateDraftFromGenerationJob(result.job);
+      applyGenerationJob(result.job, true, true);
+      if (hydratedDraft) {
         setTab("preview");
       }
     } catch (error) {
+      if (generationLogOpenRequestRef.current !== requestId) return;
       setActiveError(readError(error));
     }
   }
@@ -774,24 +879,29 @@ export function ArticleGeneratorApp() {
 
   async function uploadAuthorImage(file: File | null) {
     if (!file) return;
+    const formVersion = formRestoreVersionRef.current;
     setActiveError("");
     try {
       const uploaded = await uploadImage(file, "authors");
+      if (formRestoreVersionRef.current !== formVersion) return;
       setAuthor((current) => ({
         ...current,
         imageUrl: uploaded.url,
         imagePath: uploaded.path,
       }));
     } catch (error) {
+      if (formRestoreVersionRef.current !== formVersion) return;
       setActiveError(readError(error));
     }
   }
 
   async function uploadToneImage(file: File | null) {
     if (!file) return;
+    const formVersion = formRestoreVersionRef.current;
     setActiveError("");
     try {
       const uploaded = await uploadImage(file, "article-inserts");
+      if (formRestoreVersionRef.current !== formVersion) return;
       setVisualTone({
         mode: "upload",
         uploadedImageUrl: uploaded.url,
@@ -799,6 +909,7 @@ export function ArticleGeneratorApp() {
         uploadedImageName: uploaded.filename,
       });
     } catch (error) {
+      if (formRestoreVersionRef.current !== formVersion) return;
       setActiveError(readError(error));
     }
   }
@@ -806,6 +917,7 @@ export function ArticleGeneratorApp() {
   async function uploadAttachmentFiles(files: FileList | null, target: "reference" | "competitor") {
     const selectedFiles = Array.from(files ?? []);
     if (selectedFiles.length === 0) return;
+    const formVersion = formRestoreVersionRef.current;
 
     const setUploading =
       target === "reference" ? setReferenceFileUploading : setCompetitorFileUploading;
@@ -834,9 +946,13 @@ export function ArticleGeneratorApp() {
         }),
       );
 
-      setFileState((current) => mergeAttachmentRetries(current, extractedFiles));
+      if (formRestoreVersionRef.current === formVersion) {
+        setFileState((current) => mergeAttachmentRetries(current, extractedFiles));
+      }
     } finally {
-      setUploading(false);
+      if (formRestoreVersionRef.current === formVersion) {
+        setUploading(false);
+      }
     }
   }
 
@@ -1292,7 +1408,15 @@ export function ArticleGeneratorApp() {
 
       <div className="mx-auto grid max-w-[1680px] grid-cols-[560px_minmax(0,1fr)] gap-6 px-8 py-6">
         <aside>
-          <div className="sticky top-24 z-10 space-y-3" data-testid="input-wizard">
+          <fieldset
+            className={cn(
+              "sticky top-24 z-10 m-0 min-w-0 space-y-3 border-0 p-0",
+              !generationResumeChecked && "pointer-events-none opacity-60",
+            )}
+            data-testid="input-wizard"
+            aria-busy={!generationResumeChecked}
+            disabled={!generationResumeChecked}
+          >
             <Card className="border-slate-200 shadow-lg">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-4">
@@ -1923,7 +2047,7 @@ export function ArticleGeneratorApp() {
                 ),
               )}
             </div>
-          </div>
+          </fieldset>
         </aside>
 
         <section className="space-y-4">
@@ -1954,6 +2078,7 @@ export function ArticleGeneratorApp() {
             onToggle={() => setLogsExpanded((current) => !current)}
             onRefresh={loadGenerationLogs}
             onOpen={openGenerationLog}
+            activeGenerationJobId={activeGenerationJobId}
           />
 
           <Card>
@@ -2626,6 +2751,7 @@ function GenerationLogsPanel({
   onToggle,
   onRefresh,
   onOpen,
+  activeGenerationJobId,
 }: {
   logs: GenerationLogSummary[];
   loading: boolean;
@@ -2634,6 +2760,7 @@ function GenerationLogsPanel({
   onToggle: () => void;
   onRefresh: () => void;
   onOpen: (jobId: string) => void;
+  activeGenerationJobId: string | null;
 }) {
   return (
     <Card data-testid="generation-logs-panel">
@@ -2726,6 +2853,12 @@ function GenerationLogsPanel({
                         variant="secondary"
                         size="sm"
                         onClick={() => onOpen(log.id)}
+                        disabled={Boolean(activeGenerationJobId)}
+                        title={
+                          activeGenerationJobId
+                            ? "記事生成中は生成ログを開けません。"
+                            : undefined
+                        }
                       >
                         開く
                       </Button>

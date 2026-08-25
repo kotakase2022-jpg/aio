@@ -1889,6 +1889,31 @@ test("invalid editable competitor research JSON can be fixed before generation",
 test("generation logs show previous output and can reopen a saved draft", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   const completedJob = createCompletedGenerationJob();
+  const jobLevelResearch = {
+    ...competitorResearchFixture,
+    summary: "Job-level restored competitor research",
+  };
+  const draftLevelResearch = {
+    ...competitorResearchFixture,
+    summary: "Draft-level restored competitor research",
+  };
+  const staleResearch = {
+    ...competitorResearchFixture,
+    summary: "Stale competitor research that must be ignored",
+  };
+  let releaseStaleResearch!: () => void;
+  let releaseStaleAttachment!: () => void;
+  let markStaleAttachmentStarted!: () => void;
+  const staleResearchGate = new Promise<void>((resolve) => {
+    releaseStaleResearch = resolve;
+  });
+  const staleAttachmentGate = new Promise<void>((resolve) => {
+    releaseStaleAttachment = resolve;
+  });
+  const staleAttachmentStarted = new Promise<void>((resolve) => {
+    markStaleAttachmentStarted = resolve;
+  });
+  let includeDraftLevelResearch = false;
   completedJob.id = "job-log-e2e";
   completedJob.draftId = "draft-log-e2e";
   completedJob.wordpressPostStatus = "draft";
@@ -1897,6 +1922,7 @@ test("generation logs show previous output and can reopen a saved draft", async 
     ...completedJob.inputPayload,
     theme: "ログから再利用するAIO記事",
   };
+  completedJob.competitorResearch = jobLevelResearch;
   completedJob.draft = {
     ...completedJob.draft!,
     id: "draft-log-e2e",
@@ -1908,6 +1934,15 @@ test("generation logs show previous output and can reopen a saved draft", async 
         url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
       },
     ],
+  };
+  const failedJob = {
+    ...createCompletedGenerationJob(),
+    id: "job-log-failed-e2e",
+    status: "failed" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    error: "生成処理は保存前に失敗しました。",
   };
 
   await page.route("**/api/generation-logs", async (route) => {
@@ -1928,16 +1963,63 @@ test("generation logs show previous output and can reopen a saved draft", async 
             wordpressPostStatus: "draft",
             wordpressPostUrl: "https://wordpress.example.com/recovered-log-article",
           },
+          {
+            id: failedJob.id,
+            status: failedJob.status,
+            createdAt: failedJob.createdAt,
+            updatedAt: failedJob.updatedAt,
+            inputSummary: "保存前に失敗した生成ログ / 参照1件",
+            outputTitle: null,
+            outputSlug: null,
+            draftStatus: "failed",
+          },
         ],
       },
     });
   });
+  await page.route("**/api/theme-candidates", async (route) => {
+    await route.fulfill({ json: themeCandidates });
+  });
+  await page.route("**/api/extract-file-content", async (route) => {
+    markStaleAttachmentStarted();
+    await staleAttachmentGate;
+    await route.fulfill({
+      json: {
+        ...extractFileSuccess,
+        attachment: {
+          ...extractFileSuccess.attachment,
+          id: "stale-reference-file",
+          name: "stale-reference.txt",
+        },
+      },
+    });
+  });
+  await page.route("**/api/competitor-research", async (route) => {
+    await staleResearchGate;
+    await route.fulfill({ json: { ok: true, result: staleResearch } });
+  });
   await page.route("**/api/generation-jobs/job-log-e2e", async (route) => {
-    await route.fulfill({ json: { ok: true, job: completedJob } });
+    await route.fulfill({
+      json: {
+        ok: true,
+        job: includeDraftLevelResearch
+          ? {
+              ...completedJob,
+              draft: {
+                ...completedJob.draft!,
+                competitorResearch: draftLevelResearch,
+              },
+            }
+          : completedJob,
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-log-failed-e2e", async (route) => {
+    await route.fulfill({ json: { ok: true, job: failedJob } });
   });
 
   await login(page);
-  await expect(page.getByTestId("generation-logs-panel")).toContainText("1件");
+  await expect(page.getByTestId("generation-logs-panel")).toContainText("2件");
   await expect(page.getByTestId("generation-logs-content")).toBeHidden();
   await page.getByTestId("generation-logs-toggle").click();
 
@@ -1951,6 +2033,20 @@ test("generation logs show previous output and can reopen a saved draft", async 
   await expect(page.getByTestId("generation-logs-content")).toContainText("下書き投稿");
   await expect(page.getByTestId("generation-logs-content")).toContainText("完了");
 
+  await page.getByTestId("input-wizard-step-button-references").click();
+  await page.getByTestId("reference-file-input").setInputFiles({
+    name: "stale-reference.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("This extraction belongs to the previous form."),
+  });
+  await staleAttachmentStarted;
+  await page.getByTestId("input-wizard-step-button-theme").click();
+  await page.getByTestId("theme-candidates-button").click();
+  await expect(page.getByTestId("theme-candidate-card-0")).toBeVisible();
+  await page.getByTestId("input-wizard-step-button-competitors").click();
+  await page.getByTestId("competitor-research-button").click();
+  await expect(page.getByTestId("competitor-research-progress")).toBeVisible();
+
   await page.getByTestId("generation-log-open-job-log-e2e").click();
   await expect(
     page.getByRole("article").getByRole("heading", { name: "Recovered Log Article" }),
@@ -1961,6 +2057,62 @@ test("generation logs show previous output and can reopen a saved draft", async 
     "https://wordpress.example.com/recovered-log-article",
   );
   await expect(page.getByTestId("download-html-button")).toBeVisible();
+  const staleAttachmentResponse = page.waitForResponse("**/api/extract-file-content");
+  releaseStaleAttachment();
+  await staleAttachmentResponse;
+  await page.getByTestId("input-wizard-step-button-references").click();
+  await expect(page.getByText("stale-reference.txt")).toHaveCount(0);
+  await expect(page.getByTestId("reference-file-input")).toBeEnabled();
+  await page.getByTestId("input-wizard-step-button-competitors").click();
+  await expect(page.getByTestId("competitor-research-json")).toHaveValue(
+    /Job-level restored competitor research/,
+  );
+  const staleResearchResponse = page.waitForResponse("**/api/competitor-research");
+  releaseStaleResearch();
+  await staleResearchResponse;
+  await expect(page.getByTestId("competitor-research-json")).toHaveValue(
+    /Job-level restored competitor research/,
+  );
+  await expect(page.getByTestId("competitor-research-json")).not.toHaveValue(
+    /Stale competitor research that must be ignored/,
+  );
+  await page.getByTestId("input-wizard-step-button-theme").click();
+  await expect(page.getByTestId("theme-candidate-card-0")).toHaveCount(0);
+
+  includeDraftLevelResearch = true;
+  await page.getByTestId("generation-log-open-job-log-e2e").click();
+  await page.getByTestId("input-wizard-step-button-competitors").click();
+  await expect(page.getByTestId("competitor-research-json")).toHaveValue(
+    /Draft-level restored competitor research/,
+  );
+  await expect(page.getByTestId("competitor-research-json")).not.toHaveValue(
+    /Job-level restored competitor research/,
+  );
+
+  await page.getByTestId("input-wizard-step-button-references").click();
+  await expect(page.getByTestId("reference-text-0")).toHaveValue(
+    completedJob.inputPayload.references[0].text ?? "",
+  );
+  await page.getByTestId("input-wizard-step-button-theme").click();
+  await expect(page.getByTestId("theme-textarea")).toHaveValue(
+    "ログから再利用するAIO記事",
+  );
+  await page.getByTestId("input-wizard-step-button-primary-info").click();
+  await expect(page.getByTestId("primary-info-textarea")).toHaveValue(
+    completedJob.inputPayload.primaryInfo ?? "",
+  );
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeVisible();
+  await page.getByTestId("article-regeneration-cancel").click();
+
+  await page.getByTestId("generation-log-open-job-log-failed-e2e").click();
+  await expect(
+    page.getByRole("article").getByRole("heading", { name: "Recovered Log Article" }),
+  ).toHaveCount(0);
+  await expect(page.getByTestId("article-primary-button")).toContainText(
+    "AIによる記事作成",
+  );
   expect(errors()).toEqual([]);
 });
 
@@ -2716,14 +2868,35 @@ test("active generation job is restored after a page reload and opens the comple
     id: "job-reload-resume-e2e",
   };
   let shouldReturnCompleted = false;
+  let delayNextPoll = false;
+  let resumePageNavigated = false;
+  let releaseResumePoll!: () => void;
+  let markResumePollStarted!: () => void;
+  const resumePollGate = new Promise<void>((resolve) => {
+    releaseResumePoll = resolve;
+  });
+  const resumePollStarted = new Promise<void>((resolve) => {
+    markResumePollStarted = resolve;
+  });
   let pollCalls = 0;
   let generationJobStarts = 0;
+
+  page.on("framenavigated", (frame) => {
+    if (delayNextPoll && frame === page.mainFrame()) {
+      resumePageNavigated = true;
+    }
+  });
 
   await page.route("**/api/generation-logs", async (route) => {
     await route.fulfill({ json: { ok: true, logs: [] } });
   });
   await page.route("**/api/generation-jobs/job-reload-resume-e2e", async (route) => {
     pollCalls += 1;
+    if (delayNextPoll && resumePageNavigated) {
+      delayNextPoll = false;
+      markResumePollStarted();
+      await resumePollGate;
+    }
     await route.fulfill({
       json: { ok: true, job: shouldReturnCompleted ? completedJob : runningJob },
     });
@@ -2744,10 +2917,28 @@ test("active generation job is restored after a page reload and opens the comple
   await expect(
     page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
   ).resolves.toBe("job-reload-resume-e2e");
+  await expect.poll(() => pollCalls).toBeGreaterThanOrEqual(1);
 
+  delayNextPoll = true;
   await page.reload();
+  await resumePollStarted;
+  await expect(page.getByTestId("input-wizard")).toHaveAttribute("aria-busy", "true");
+  const referenceInput = page.getByTestId("reference-text-0");
+  await expect(page.getByTestId("input-wizard")).toHaveAttribute("disabled", "");
+  await expect(referenceInput).toBeDisabled();
+
+  releaseResumePoll();
+  await expect(page.getByTestId("input-wizard")).toHaveAttribute("aria-busy", "false");
+  await expect(page.getByTestId("input-wizard")).not.toHaveAttribute("disabled", "");
+  await expect(referenceInput).toBeEnabled();
   await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
   expect(generationJobStarts).toBe(1);
+
+  await page.getByTestId("input-wizard-step-button-references").click();
+  await expect(referenceInput).toHaveValue(
+    completedJob.inputPayload.references[0].text ?? "",
+  );
+  await referenceInput.fill("User edit made after the initial resume response.");
 
   shouldReturnCompleted = true;
   await expect(
@@ -2756,7 +2947,144 @@ test("active generation job is restored after a page reload and opens the comple
   await expect(
     page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
   ).resolves.toBeNull();
+  await expect(referenceInput).toHaveValue(
+    "User edit made after the initial resume response.",
+  );
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
   expect(pollCalls).toBeGreaterThanOrEqual(1);
+  expect(errors()).toEqual([]);
+});
+
+test("another generation log cannot replace form inputs while a job is active", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const activeJob = {
+    ...createCompletedGenerationJob(),
+    id: "job-active-log-guard",
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    steps: [
+      { id: "generate_body", label: "AIO body generation", status: "running" as const },
+      { id: "save", label: "Draft save", status: "pending" as const },
+    ],
+  };
+  const archivedJob = {
+    ...createCompletedGenerationJob(),
+    id: "job-archived-log-guard",
+    inputPayload: {
+      ...createCompletedGenerationJob().inputPayload,
+      theme: "別ログのテーマ",
+    },
+  };
+  let archivedLoads = 0;
+  let releaseArchivedLoad!: () => void;
+  let markArchivedLoadStarted!: () => void;
+  const archivedLoadGate = new Promise<void>((resolve) => {
+    releaseArchivedLoad = resolve;
+  });
+  const archivedLoadStarted = new Promise<void>((resolve) => {
+    markArchivedLoadStarted = resolve;
+  });
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({
+      json: {
+        ok: true,
+        logs: [
+          {
+            id: activeJob.id,
+            status: activeJob.status,
+            createdAt: activeJob.createdAt,
+            updatedAt: activeJob.updatedAt,
+            inputSummary: "進行中ジョブ / 参照1件",
+            outputTitle: null,
+            outputSlug: null,
+            draftStatus: "draft",
+          },
+          {
+            id: archivedJob.id,
+            status: "completed",
+            createdAt: archivedJob.createdAt,
+            updatedAt: archivedJob.updatedAt,
+            completedAt: archivedJob.completedAt,
+            inputSummary: "別ログのテーマ / 参照1件",
+            outputTitle: archivedJob.draft?.editedTitle,
+            outputSlug: archivedJob.draft?.editedSlug,
+            draftStatus: archivedJob.draft?.status,
+          },
+        ],
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-active-log-guard/cancel", async (route) => {
+    await route.fulfill({
+      json: {
+        ok: true,
+        job: { ...activeJob, status: "canceled", error: "ユーザー操作により停止しました。" },
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-active-log-guard", async (route) => {
+    await route.fulfill({ json: { ok: true, job: activeJob } });
+  });
+  await page.route("**/api/generation-jobs/job-archived-log-guard", async (route) => {
+    archivedLoads += 1;
+    markArchivedLoadStarted();
+    await archivedLoadGate;
+    await route.fulfill({ json: { ok: true, job: archivedJob } });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { ok: true, job: activeJob } });
+  });
+
+  await login(page);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text that must stay attached to the active job.");
+  await page.getByTestId("generation-logs-toggle").click();
+  const archivedOpenButton = page.getByTestId(
+    "generation-log-open-job-archived-log-guard",
+  );
+  await archivedOpenButton.click();
+  await archivedLoadStarted;
+
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("article-primary-button")).toContainText(
+    "記事作成をストップ",
+  );
+  const archivedResponse = page.waitForResponse(
+    "**/api/generation-jobs/job-archived-log-guard",
+  );
+  releaseArchivedLoad();
+  await archivedResponse;
+
+  const activeOpenButton = page.getByTestId(
+    "generation-log-open-job-active-log-guard",
+  );
+  await expect(activeOpenButton).toBeDisabled();
+  await expect(archivedOpenButton).toBeDisabled();
+  await expect(activeOpenButton).toHaveAttribute(
+    "title",
+    "記事生成中は生成ログを開けません。",
+  );
+  await expect(archivedOpenButton).toHaveAttribute(
+    "title",
+    "記事生成中は生成ログを開けません。",
+  );
+  await expect(page.getByTestId("reference-text-0")).toHaveValue(
+    "Reference text that must stay attached to the active job.",
+  );
+  await page.getByTestId("input-wizard-step-button-theme").click();
+  await expect(page.getByTestId("theme-textarea")).not.toHaveValue("別ログのテーマ");
+  expect(archivedLoads).toBe(1);
+
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByText("記事作成を停止しました。")).toBeVisible();
   expect(errors()).toEqual([]);
 });
 
