@@ -1741,6 +1741,61 @@ test("reference URL fetch failure is visible while manual fallback still generat
   expect(errors()).toEqual([]);
 });
 
+test("successful URL metadata fallback is shown as a note instead of a fetch failure", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  const fallbackUrl = "https://reference.example.com/metadata-fallback";
+  const fetchedReferences = [
+    {
+      url: fallbackUrl,
+      title: "Metadata fallback fixture",
+      text: "Metadata and heading text extracted from the reference page.",
+      ok: true,
+      reason: "本文量が少ないため、メタ情報・見出しを利用しました。",
+      sourceType: "url" as const,
+    },
+  ];
+  const completedWithFetchNote = {
+    ...completedJob,
+    fetchedReferences,
+    draft: completedJob.draft
+      ? {
+          ...completedJob.draft,
+          fetchedReferences,
+        }
+      : completedJob.draft,
+  };
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { ok: true, job: completedWithFetchNote } });
+  });
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    await route.fulfill({ json: { ok: true, job: completedWithFetchNote } });
+  });
+
+  await login(page);
+  await page.getByTestId("reference-url-0").fill(fallbackUrl);
+  await openInputStep(page, "word-count");
+  await page.getByTestId("article-primary-button").click();
+
+  const fetchResults = page.getByTestId("fetch-result-alerts");
+  await expect(fetchResults.getByText("URLは取得できました。本文抽出時の補足情報を確認できます。")).toBeVisible();
+  await expect(fetchResults.getByText("取得成功（補足）")).toBeVisible();
+  await expect(fetchResults.getByText("取得できなかったURLは、該当入力へ戻って手動テキストで補えます。")).toBeHidden();
+  await expect(fetchResults.getByText(fallbackUrl, { exact: true })).toBeVisible();
+  await expect(fetchResults.getByText("本文量が少ないため、メタ情報・見出しを利用しました。")).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("competitor URL fetch failure is visible while manual competitor notes still generate a draft", async ({
   page,
 }) => {
