@@ -306,7 +306,7 @@ export function ArticleGeneratorApp() {
 
     const storedJobId = window.localStorage.getItem(activeGenerationJobStorageKey);
     if (storedJobId) {
-      void pollGenerationJob(storedJobId);
+      void pollGenerationJob(storedJobId, true);
     }
 
     let canceled = false;
@@ -543,14 +543,16 @@ export function ArticleGeneratorApp() {
     await generateArticle(articleRegenerationInstruction);
   }
 
-  async function pollGenerationJob(jobId: string) {
+  async function pollGenerationJob(jobId: string, restoreInputsOnFirstPoll = false) {
     generationPollingRef.current = jobId;
     setActiveGenerationJobId(jobId);
+    let shouldRestoreInputs = restoreInputsOnFirstPoll;
 
     try {
       while (generationPollingRef.current === jobId) {
         const result = await apiGet<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}`);
-        applyGenerationJob(result.job);
+        applyGenerationJob(result.job, shouldRestoreInputs);
+        shouldRestoreInputs = false;
 
         if (result.job.status === "completed") {
           finishGenerationPolling(jobId);
@@ -591,15 +593,44 @@ export function ArticleGeneratorApp() {
     }
   }
 
-  function applyGenerationJob(job: GenerationJob) {
+  function applyGenerationJob(job: GenerationJob, restoreInputs = false) {
     setSteps(mergeJobSteps(job.steps));
     setFetchedReferences(job.fetchedReferences ?? []);
     setFetchedCompetitors(job.fetchedCompetitors ?? []);
+    if (restoreInputs) {
+      restoreFormFromGenerationJob(job);
+    }
 
     const hydratedDraft = hydrateDraftFromGenerationJob(job);
     if (hydratedDraft) {
       setDraft(hydratedDraft);
     }
+  }
+
+  function restoreFormFromGenerationJob(job: GenerationJob) {
+    const input = job.inputPayload;
+    const restoredResearch = job.draft?.competitorResearch ?? job.competitorResearch ?? null;
+
+    setReferences(input.references?.length ? input.references : [blankInput()]);
+    setCompetitors(input.competitors?.length ? input.competitors : [blankInput()]);
+    setReferenceFiles(input.referenceFiles ?? []);
+    setCompetitorFiles(input.competitorFiles ?? []);
+    setTheme(input.theme ?? "");
+    setPrimaryInfoTypes(input.primaryInfoTypes ?? []);
+    setPrimaryInfo(input.primaryInfo ?? "");
+    setClosingText(input.closingText ?? "");
+    setAuthor(input.author ?? {});
+    setVisualTone(
+      input.visualTone ?? {
+        mode: "preset",
+        preset: tonePresets[0],
+      },
+    );
+    setImageCount(input.imageCount ?? 2);
+    setWordCount(input.wordCount ?? 3000);
+    setCompetitorResearch(restoredResearch);
+    setCompetitorJson(restoredResearch ? JSON.stringify(restoredResearch, null, 2) : "");
+    setCompetitorJsonError("");
   }
 
   function mergeJobSteps(jobSteps: GenerationStep[]) {
@@ -626,7 +657,7 @@ export function ArticleGeneratorApp() {
     setActiveError("");
     try {
       const result = await apiGet<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}`);
-      applyGenerationJob(result.job);
+      applyGenerationJob(result.job, true);
       if (hydrateDraftFromGenerationJob(result.job)) {
         setTab("preview");
       }

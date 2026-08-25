@@ -27,7 +27,11 @@ Required for Supabase persistence and Storage on Vercel:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- Run `supabase/migrations/001_initial_schema.sql`
+- Apply every SQL file in `supabase/migrations/` in filename order.
+
+The migrations create the application tables and Storage bucket, remove direct public Storage
+table reads, add foreign-key indexes, and create the gateway-token store. Provision gateway token
+hashes separately; never commit a plaintext gateway token or its production hash.
 
 Required for production WordPress credential storage:
 

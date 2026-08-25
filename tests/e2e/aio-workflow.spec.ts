@@ -1961,6 +1961,21 @@ test("generation logs show previous output and can reopen a saved draft", async 
     "https://wordpress.example.com/recovered-log-article",
   );
   await expect(page.getByTestId("download-html-button")).toBeVisible();
+  await page.getByTestId("input-wizard-step-button-references").click();
+  await expect(page.getByTestId("reference-text-0")).toHaveValue(
+    completedJob.inputPayload.references[0].text ?? "",
+  );
+  await page.getByTestId("input-wizard-step-button-theme").click();
+  await expect(page.getByTestId("theme-textarea")).toHaveValue(
+    "ログから再利用するAIO記事",
+  );
+  await page.getByTestId("input-wizard-step-button-primary-info").click();
+  await expect(page.getByTestId("primary-info-textarea")).toHaveValue(
+    completedJob.inputPayload.primaryInfo ?? "",
+  );
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeVisible();
   expect(errors()).toEqual([]);
 });
 
@@ -2756,6 +2771,11 @@ test("active generation job is restored after a page reload and opens the comple
   await expect(
     page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
   ).resolves.toBeNull();
+  await page.getByTestId("input-wizard-step-button-references").click();
+  await expect(page.getByTestId("reference-text-0")).toHaveValue(
+    completedJob.inputPayload.references[0].text ?? "",
+  );
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
   expect(pollCalls).toBeGreaterThanOrEqual(1);
   expect(errors()).toEqual([]);
 });
