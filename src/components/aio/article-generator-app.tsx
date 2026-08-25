@@ -1496,7 +1496,7 @@ export function ArticleGeneratorApp() {
               aria-modal="false"
               aria-labelledby={`input-wizard-title-${activeInputStep}`}
               data-testid={`input-wizard-step-${activeInputStep}`}
-              className="max-h-[calc(100vh-390px)] min-h-[320px] overflow-y-auto rounded-lg shadow-2xl ring-1 ring-slate-950/10"
+              className="max-h-[calc(100vh-470px)] min-h-[240px] overflow-y-auto rounded-lg shadow-2xl ring-1 ring-slate-950/10"
             >
 
           {activeInputStep === "references" ? (

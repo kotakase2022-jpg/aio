@@ -2108,6 +2108,24 @@ test("generation logs show previous output and can reopen a saved draft", async 
     page.getByRole("article").getByRole("heading", { name: "Recovered Log Article" }),
   ).toBeVisible();
   await expect(page.getByTestId("input-wizard-step-primary-info")).toBeVisible();
+  const approvalShortcut = page.locator('a[href="#approval"]');
+  const wordpressShortcut = page.locator('a[href="#wordpress"]');
+  for (const viewportHeight of [1000, 768]) {
+    await page.setViewportSize({ width: 1440, height: viewportHeight });
+    await expect(approvalShortcut).toBeInViewport();
+    await expect(wordpressShortcut).toBeInViewport();
+    const approvalShortcutBox = await approvalShortcut.boundingBox();
+    const wordpressShortcutBox = await wordpressShortcut.boundingBox();
+    expect(approvalShortcutBox).not.toBeNull();
+    expect(wordpressShortcutBox).not.toBeNull();
+    expect(approvalShortcutBox!.y + approvalShortcutBox!.height).toBeLessThanOrEqual(
+      viewportHeight,
+    );
+    expect(wordpressShortcutBox!.y + wordpressShortcutBox!.height).toBeLessThanOrEqual(
+      viewportHeight,
+    );
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.getByTestId("input-wizard-message")).toContainText(
     "この生成ログには一次情報の種類が保存されていません",
   );
