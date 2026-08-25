@@ -1889,6 +1889,15 @@ test("invalid editable competitor research JSON can be fixed before generation",
 test("generation logs show previous output and can reopen a saved draft", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   const completedJob = createCompletedGenerationJob();
+  const jobLevelResearch = {
+    ...competitorResearchFixture,
+    summary: "Job-level restored competitor research",
+  };
+  const draftLevelResearch = {
+    ...competitorResearchFixture,
+    summary: "Draft-level restored competitor research",
+  };
+  let includeDraftLevelResearch = false;
   completedJob.id = "job-log-e2e";
   completedJob.draftId = "draft-log-e2e";
   completedJob.wordpressPostStatus = "draft";
@@ -1897,6 +1906,7 @@ test("generation logs show previous output and can reopen a saved draft", async 
     ...completedJob.inputPayload,
     theme: "ログから再利用するAIO記事",
   };
+  completedJob.competitorResearch = jobLevelResearch;
   completedJob.draft = {
     ...completedJob.draft!,
     id: "draft-log-e2e",
@@ -1933,7 +1943,20 @@ test("generation logs show previous output and can reopen a saved draft", async 
     });
   });
   await page.route("**/api/generation-jobs/job-log-e2e", async (route) => {
-    await route.fulfill({ json: { ok: true, job: completedJob } });
+    await route.fulfill({
+      json: {
+        ok: true,
+        job: includeDraftLevelResearch
+          ? {
+              ...completedJob,
+              draft: {
+                ...completedJob.draft!,
+                competitorResearch: draftLevelResearch,
+              },
+            }
+          : completedJob,
+      },
+    });
   });
 
   await login(page);
@@ -1961,6 +1984,21 @@ test("generation logs show previous output and can reopen a saved draft", async 
     "https://wordpress.example.com/recovered-log-article",
   );
   await expect(page.getByTestId("download-html-button")).toBeVisible();
+  await page.getByTestId("input-wizard-step-button-competitors").click();
+  await expect(page.getByTestId("competitor-research-json")).toHaveValue(
+    /Job-level restored competitor research/,
+  );
+
+  includeDraftLevelResearch = true;
+  await page.getByTestId("generation-log-open-job-log-e2e").click();
+  await page.getByTestId("input-wizard-step-button-competitors").click();
+  await expect(page.getByTestId("competitor-research-json")).toHaveValue(
+    /Draft-level restored competitor research/,
+  );
+  await expect(page.getByTestId("competitor-research-json")).not.toHaveValue(
+    /Job-level restored competitor research/,
+  );
+
   await page.getByTestId("input-wizard-step-button-references").click();
   await expect(page.getByTestId("reference-text-0")).toHaveValue(
     completedJob.inputPayload.references[0].text ?? "",

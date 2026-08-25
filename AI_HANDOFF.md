@@ -21,10 +21,10 @@ Current objective:
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/loop5-strict-production-audit`
-- Latest branch commit before the Bugbot follow-up: `f0b37b14f3279754bbd02070c1eeff34f4bfa94a`
+- Latest branch commit before the CodeRabbit follow-up: `d27c5ad0a5540ab062d7f7169c28d54302751960`
 - Last known good commit: `8b7636e06cb12ca62fceb74d8bca65f5433f975e`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/13
-- CodeRabbit OSS review status: In progress
+- CodeRabbit OSS review status: First-pass review received; all five actionable findings are addressed locally and awaiting hosted revalidation.
 
 ## 3. What Was Done
 
@@ -74,15 +74,15 @@ Current objective:
 - Live WordPress post/media/delete remains `UNVERIFIED`: no disposable sandbox credentials or seven required safety variables are configured. Production WordPress was not used.
 - Supabase Security Advisor still reports leaked-password protection as WARN. The application does not use Supabase password Auth; reassess if that changes.
 - Supabase Performance Advisor unused-index/Auth connection notices remain informational. No production index was removed.
-- PR #13 is open. CodeRabbit review is in progress.
+- PR #13 is open. CodeRabbit follow-up review and hosted CI are pending the current fix commit.
 
 ## 7. CodeRabbit Review
 
-- Review status: Pending current PR.
-- Critical findings: None received.
-- Resolved findings: None received.
-- Deferred findings: None yet.
-- False positives / not applicable: None yet.
+- Review status: First-pass review completed; follow-up validation pending.
+- Critical findings: None.
+- Resolved findings: Five actionable comments were addressed: full-severity npm audit evidence, precise `.env.example` guidance, forward-compatible migration ordering, gateway-token RLS/grant/deny-policy assertions, and E2E coverage for competitor-research fallback/precedence.
+- Deferred findings: None.
+- False positives / not applicable: The pre-merge docstring-coverage warning is not applicable to this TypeScript/Next.js repository. Adding nonessential comments solely to satisfy that metric would reduce signal and is not part of the repository's configured quality gate.
 
 ## 8. Optional Bugbot Findings
 
@@ -95,7 +95,7 @@ Current objective:
 Commands and checks completed:
 
 ```bash
-npm.cmd audit --audit-level=high
+npm.cmd audit --audit-level=low
 npm.cmd run quality
 npm.cmd run test:live:openai
 npm.cmd run test:live:supabase
@@ -148,7 +148,7 @@ Next Claude Code should:
 
 ## 13. Do Not Touch
 
-- Do not expose or commit `.env*`, API keys, Supabase/WordPress credentials, access cookies, gateway tokens, or token hashes.
+- Do not expose or commit secret-bearing environment files or values, API keys, Supabase/WordPress credentials, access cookies, gateway tokens, or token hashes. Sanitized templates such as `.env.example` are allowed and should contain placeholders only.
 - Do not delete or stage untracked `output/` manual artifacts.
 - Do not stage `.claude/settings.local.json` without determining ownership and reviewing its contents.
 - Do not weaken authentication, SSRF, upload validation, sanitization, image concurrency/rollback, migrations, or test-integrity checks.

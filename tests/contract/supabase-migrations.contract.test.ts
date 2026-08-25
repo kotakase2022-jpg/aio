@@ -10,11 +10,18 @@ describe("Supabase migration contract", () => {
       .filter((filename) => filename.endsWith(".sql"))
       .sort();
 
-    expect(filenames).toEqual([
+    const requiredMigrations = [
       "001_initial_schema.sql",
       "002_harden_aio_schema.sql",
       "003_aio_gateway_token_store.sql",
-    ]);
+    ];
+    expect(filenames).toEqual(expect.arrayContaining(requiredMigrations));
+    expect(filenames.indexOf(requiredMigrations[0])).toBeLessThan(
+      filenames.indexOf(requiredMigrations[1]),
+    );
+    expect(filenames.indexOf(requiredMigrations[1])).toBeLessThan(
+      filenames.indexOf(requiredMigrations[2]),
+    );
 
     const hardeningSql = await readFile(
       path.join(migrationDirectory, "002_harden_aio_schema.sql"),
@@ -53,7 +60,17 @@ describe("Supabase migration contract", () => {
     );
 
     expect(gatewaySql).toContain("create table if not exists public.aio_gateway_tokens");
+    expect(gatewaySql).toContain(
+      "alter table public.aio_gateway_tokens enable row level security",
+    );
     expect(gatewaySql).toContain("revoke all on public.aio_gateway_tokens from anon, authenticated");
+    expect(gatewaySql).toContain(
+      "grant select, insert, update, delete on public.aio_gateway_tokens to service_role",
+    );
+    expect(gatewaySql).toContain('create policy "deny client gateway token access"');
+    expect(gatewaySql).toContain("to anon, authenticated");
+    expect(gatewaySql).toContain("using (false)");
+    expect(gatewaySql).toContain("with check (false)");
     expect(gatewaySql).not.toMatch(/values\s*\(\s*'[a-f0-9]{64}'/i);
   });
 });
