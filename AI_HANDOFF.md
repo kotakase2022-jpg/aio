@@ -23,7 +23,7 @@
 - Latest production code commit: `e808fe036b9a100bb0bd740488c997e6f578212b`
 - Last known good commit: `e808fe036b9a100bb0bd740488c997e6f578212b`
 - Implementation/fix PR: https://github.com/kotakase2022-jpg/aio/pull/16 (`MERGED`)
-- Final handoff PR: pending creation
+- Final handoff PR: https://github.com/kotakase2022-jpg/aio/pull/17
 - CodeRabbit OSS review status: PR #16 completed with no actionable comments. Merge risk was reported as minimal.
 - Production URL: https://aio-article-generator.vercel.app
 - Production deployment: `dpl_Hh95BodizMDnwiHvkFp317Kmf8tg`
