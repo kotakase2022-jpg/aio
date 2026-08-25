@@ -57,3 +57,9 @@ export function primaryInformationLabels(types: readonly string[]) {
     return option ? [option.label] : [];
   });
 }
+
+export function primaryInformationTypesForRestore(
+  types: readonly string[] | undefined,
+): PrimaryInformationType[] {
+  return (types ?? []).filter(isPrimaryInformationType);
+}

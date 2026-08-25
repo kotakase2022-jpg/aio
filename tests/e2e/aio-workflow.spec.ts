@@ -1921,6 +1921,7 @@ test("generation logs show previous output and can reopen a saved draft", async 
   completedJob.inputPayload = {
     ...completedJob.inputPayload,
     theme: "ログから再利用するAIO記事",
+    primaryInfoTypes: undefined,
   };
   completedJob.competitorResearch = jobLevelResearch;
   completedJob.draft = {
@@ -2051,6 +2052,11 @@ test("generation logs show previous output and can reopen a saved draft", async 
   await expect(
     page.getByRole("article").getByRole("heading", { name: "Recovered Log Article" }),
   ).toBeVisible();
+  await expect(page.getByTestId("input-wizard-step-primary-info")).toBeVisible();
+  await expect(page.getByTestId("input-wizard-message")).toContainText(
+    "この生成ログには一次情報の種類が保存されていません",
+  );
+  await expect(page.getByTestId("article-primary-button")).toBeDisabled();
   await expect(page.getByText("投稿済み").first()).toBeVisible();
   await expect(page.getByRole("link", { name: "投稿URL" })).toHaveAttribute(
     "href",
@@ -2101,6 +2107,11 @@ test("generation logs show previous output and can reopen a saved draft", async 
   await expect(page.getByTestId("primary-info-textarea")).toHaveValue(
     completedJob.inputPayload.primaryInfo ?? "",
   );
+  await expect(page.getByTestId("primary-info-type-expert-opinion")).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  await page.getByTestId("primary-info-type-expert-opinion").click();
   await expect(page.getByTestId("article-primary-button")).toBeEnabled();
   await page.getByTestId("article-primary-button").click();
   await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeVisible();
