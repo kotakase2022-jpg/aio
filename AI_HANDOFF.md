@@ -6,8 +6,8 @@
 - Next owner: Claude Code
 - Loop: 7
 - Loop number inferred from: Loop 6 completed its production audit and returned the repository for a new user-requested Codex audit. This viewport regression fix therefore starts Loop 7.
-- Phase: Development / Autonomous Improvement
-- Last updated: 2026-08-25 21:30 +09:00
+- Phase: Handoff
+- Last updated: 2026-08-25 21:46 +09:00
 
 ## 1. Current Goal
 
@@ -18,14 +18,16 @@
 
 ## 2. Current Branch / Commit / PR
 
-- Branch: `codex/loop7-sticky-wizard-viewport`
-- Latest commit: `f65587f35a92b256dcd990a2dcee01d28a7038af`
-- Last known good commit: `442c0034de551832b7508328517dfa175a73ca79` (`main` before this fix)
-- PR: https://github.com/kotakase2022-jpg/aio/pull/18
+- Branch: `codex/loop7-final-production-handoff` (documentation-only protected PR branch)
+- Latest production/main commit: `742370efe44ec292d6879c9c4315be5f51fb45bb`
+- Last known good commit: `742370efe44ec292d6879c9c4315be5f51fb45bb`
+- Implementation PR: https://github.com/kotakase2022-jpg/aio/pull/18 (`MERGED`)
+- Final handoff PR: https://github.com/kotakase2022-jpg/aio/pull/19
 - CodeRabbit OSS review status: completed; no actionable comments; merge risk minimal
 - Production URL: https://aio-article-generator.vercel.app
-- Current production deployment before this fix: `dpl_3RGtmVq65k9UtrWKKoWbGFiyqtSn`
-- Deployment status for this fix: pending PR merge
+- Production deployment: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt` (`READY`)
+- Unique deployment URL: https://aio-article-generator-po9ft9l40-sl2026.vercel.app
+- Vercel inspector: https://vercel.com/sl2026/aio-article-generator/HaGiMSgjDJ4ygs757JvsnNy7n5Pt
 
 ## 3. What Was Done
 
@@ -43,6 +45,11 @@
 - 修正後のfocused E2E、typecheck、lint、full qualityを再実行し、全成功を確認した。
 - PR #18を作成し、required CI成功、CodeRabbitのactionable commentなし、リポジトリ設定で自動実行されたCursor Bugbot成功を確認した。
 - GitHub Codex reviewの「handoffを今回の修正へ更新する」という指摘に対応して、この文書を更新した。
+- 対応済みレビュー会話を解決し、PR #18が`CLEAN`かつ`MERGEABLE`であることを確認して`main`へマージした。
+- `main`の`742370e`をVercel productionへデプロイし、deployment `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`が`READY`、固定URLへalias済みであることを確認した。
+- 本番PCブラウザで保存済みログを再度開き、一次情報ステップ復元後の実座標を確認した。1440x1000では両リンク下端963px、1440x768では731pxで完全にviewport内だった。
+- 本番で`保存・承認へ`と`WordPressへ`を実クリックし、`#approval`と`#wordpress`へ正常遷移した。内部パネルの長文は既存スクロールで保持され、横overflow 0、console error 0だった。
+- 未認証トップ307、未認証生成ログAPI 401、CSP/HSTS/frame/nosniff/permissions/referrer headers、Vercel error/5xxログ0件を再確認した。
 
 ## 4. Files Changed
 
@@ -64,9 +71,13 @@
 - CodeRabbit: PASS; no actionable comments; merge risk minimal
 - Cursor Bugbot: repository setting auto-ran and passed; no finding was reported
 - Critical / High bugs: 0 after the viewport fix
-- PR #18 merge: pending this handoff update and CI refresh
-- Vercel production deployment for `f65587f`: pending PR merge
-- Production post-deploy viewport regression: pending deployment
+- PR #18: `MERGED`、merge commit `742370efe44ec292d6879c9c4315be5f51fb45bb`
+- Vercel production: `READY`、canonical alias更新済み
+- Production post-deploy viewport regression: PASS at 1440x1000 and 1440x768
+- Production shortcut clicks: PASS (`#approval` / `#wordpress`)
+- Production horizontal overflow: 0
+- Production browser console errors: 0
+- Production Vercel error / 5xx logs after smoke: 0
 
 ## 6. Known Issues
 
@@ -108,6 +119,12 @@ npm.cmd run test:live:openai
 npm.cmd run test:live:supabase
 npm.cmd run test:live:readiness:wordpress
 gh pr checks 18 --watch --interval 10
+npx.cmd vercel deploy --prod --yes --scope sl2026
+npx.cmd vercel inspect https://aio-article-generator-po9ft9l40-sl2026.vercel.app --scope sl2026
+curl.exe -sSI https://aio-article-generator.vercel.app/
+curl.exe -sS -D - https://aio-article-generator.vercel.app/api/generation-logs -o NUL
+npx.cmd vercel logs dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt --level error --since 15m --limit 100 --scope sl2026
+npx.cmd vercel logs dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt --status-code 5xx --since 15m --limit 100 --scope sl2026
 ```
 
 結果：
@@ -125,13 +142,23 @@ gh pr checks 18 --watch --interval 10
 - Live Supabase: PASS、2/2、cleanup済み。
 - Live WordPress readiness: EXPECTED FAIL CLOSED、外部requestなし。
 - GitHub required CI: PASS。
+- PR #18: MERGED、merge commit `742370e`。
+- Vercel production build/deploy: PASS、`dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt` READY。
+- Production unauthenticated root: `307` to `/demo-login?next=%2F`。
+- Production unauthenticated `/api/generation-logs`: `401`。
+- Production CSP/HSTS/X-Frame-Options/nosniff/Permissions-Policy/Referrer-Policy: PASS。
+- Production 1440x1000: wizard bottom 963px、approval/WordPress bottom 963px、horizontal overflow 0。
+- Production 1440x768: wizard bottom 731px、approval/WordPress bottom 731px、horizontal overflow 0。
+- Production shortcut clicks and section navigation: PASS。
+- Production browser console: 0件。
+- Production Vercel runtime error / 5xx logs: 0件。
 
 ## 10. Next Recommended Action
 
 次にClaude Codeが最初にやるべきこと：
 
 1. PR #18の入力パネル高さ変更とviewport E2Eを独立レビューする。
-2. `AI_HANDOFF.md`に追記される最終merge/deployment/production browser結果と実際のGit/Vercel状態が一致するか確認する。
+2. `AI_HANDOFF.md`のmerge/deployment/production browser結果と実際のGit/Vercel状態が一致するか確認する。
 3. `npm.cmd run quality`を再実行し、差分がなければコードを変更せずレビュー結果を記録する。
 4. WordPress live契約が必要なら、使い捨てsandboxと全安全変数を用意してから実行する。本番WordPressでは実行しない。
 
@@ -150,7 +177,7 @@ Claude Codeに重点レビューしてほしい範囲：
 - 最終判定はWordPress live契約だけ`UNVERIFIED`のため`CONDITIONAL PASS`予定。それ以外の確認可能な要求はPASS。
 - WordPress実サイトの投稿、media upload、deleteはデータ破壊リスクがあるため、通常の本番資格情報では検証しない。
 - 監査中のOpenAI/Supabase操作はlive環境で実行した。Supabase/Storageの使い捨てデータはcleanup済み。
-- 本番反映後、保存済みログから一次情報ステップを復元し、下部リンクの実座標とクリックを再確認する必要がある。
+- 本番のviewport修正は実座標と実クリックまで確認済み。将来ウィザード上部カードの高さを変更する場合は、1440x768/1000の回帰E2Eを維持する。
 
 ## 13. Do Not Touch
 
