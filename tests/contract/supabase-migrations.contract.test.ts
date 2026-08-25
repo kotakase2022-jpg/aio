@@ -5,15 +5,15 @@ import { describe, expect, test } from "vitest";
 const migrationDirectory = path.join(process.cwd(), "supabase", "migrations");
 
 describe("Supabase migration contract", () => {
-  test("tracks the production hardening migration before the gateway store", async () => {
+  test("preserves the published gateway migration before additive hardening", async () => {
     const filenames = (await readdir(migrationDirectory))
       .filter((filename) => filename.endsWith(".sql"))
       .sort();
 
     const requiredMigrations = [
       "001_initial_schema.sql",
-      "002_harden_aio_schema.sql",
-      "003_aio_gateway_token_store.sql",
+      "002_aio_gateway_token_store.sql",
+      "003_harden_aio_schema.sql",
     ];
     expect(filenames).toEqual(expect.arrayContaining(requiredMigrations));
     expect(filenames.indexOf(requiredMigrations[0])).toBeLessThan(
@@ -24,7 +24,7 @@ describe("Supabase migration contract", () => {
     );
 
     const hardeningSql = await readFile(
-      path.join(migrationDirectory, "002_harden_aio_schema.sql"),
+      path.join(migrationDirectory, "003_harden_aio_schema.sql"),
       "utf8",
     );
     expect(hardeningSql).toContain(
@@ -54,8 +54,11 @@ describe("Supabase migration contract", () => {
   });
 
   test("keeps production gateway credentials out of tracked migrations", async () => {
+    const filenames = (await readdir(migrationDirectory))
+      .filter((filename) => filename.endsWith(".sql"))
+      .sort();
     const gatewaySql = await readFile(
-      path.join(migrationDirectory, "003_aio_gateway_token_store.sql"),
+      path.join(migrationDirectory, "002_aio_gateway_token_store.sql"),
       "utf8",
     );
 
@@ -71,6 +74,14 @@ describe("Supabase migration contract", () => {
     expect(gatewaySql).toContain("to anon, authenticated");
     expect(gatewaySql).toContain("using (false)");
     expect(gatewaySql).toContain("with check (false)");
-    expect(gatewaySql).not.toMatch(/values\s*\(\s*'[a-f0-9]{64}'/i);
+
+    const gatewayDataMutation =
+      /\b(?:insert\s+into|update|delete\s+from|merge\s+into|copy|truncate(?:\s+table)?)\s+(?:"?public"?\.)?"?aio_gateway_tokens"?\b/i;
+    for (const filename of filenames) {
+      const migrationSql = await readFile(path.join(migrationDirectory, filename), "utf8");
+      expect(migrationSql, `${filename} must not provision gateway credentials`).not.toMatch(
+        gatewayDataMutation,
+      );
+    }
   });
 });
