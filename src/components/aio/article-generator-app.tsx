@@ -2669,6 +2669,7 @@ function FetchFailures({ results }: { results: FetchResult[] }) {
     <div className="space-y-2">
       {failures.length > 0 ? (
         <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-semibold text-amber-900">取得失敗</p>
           {failures.map((failure) => (
             <div
               key={`${failure.url}-${failure.reason}`}
@@ -2682,6 +2683,7 @@ function FetchFailures({ results }: { results: FetchResult[] }) {
       ) : null}
       {notes.length > 0 ? (
         <div className="space-y-2 rounded-md border border-sky-100 bg-sky-50 p-3">
+          <p className="text-xs font-semibold text-sky-900">取得成功（補足）</p>
           {notes.map((note) => (
             <div key={`${note.url}-${note.reason}`} className="text-xs leading-5 text-sky-900">
               <span className="font-semibold">{note.url}</span>:{" "}
@@ -2706,13 +2708,19 @@ function FetchResultAlerts({
   const referenceNotices = referenceResults.filter((result) => result.reason);
   const competitorNotices = competitorResults.filter((result) => result.reason);
   if (referenceNotices.length === 0 && competitorNotices.length === 0) return null;
+  const hasFailures = [...referenceNotices, ...competitorNotices].some((result) => !result.ok);
 
   return (
-    <Card data-testid="fetch-result-alerts" className="border-amber-200">
+    <Card
+      data-testid="fetch-result-alerts"
+      className={hasFailures ? "border-amber-200" : "border-sky-200"}
+    >
       <CardHeader>
         <CardTitle>URL取得結果</CardTitle>
         <CardDescription>
-          取得できなかったURLは、該当入力へ戻って手動テキストで補えます。
+          {hasFailures
+            ? "取得できなかったURLは、該当入力へ戻って手動テキストで補えます。"
+            : "URLは取得できました。本文抽出時の補足情報を確認できます。"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
