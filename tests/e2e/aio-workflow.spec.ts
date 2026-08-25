@@ -1921,6 +1921,7 @@ test("generation logs show previous output and can reopen a saved draft", async 
   completedJob.inputPayload = {
     ...completedJob.inputPayload,
     theme: "ログから再利用するAIO記事",
+    primaryInfoTypes: undefined,
   };
   completedJob.competitorResearch = jobLevelResearch;
   completedJob.draft = {
@@ -2100,6 +2101,10 @@ test("generation logs show previous output and can reopen a saved draft", async 
   await page.getByTestId("input-wizard-step-button-primary-info").click();
   await expect(page.getByTestId("primary-info-textarea")).toHaveValue(
     completedJob.inputPayload.primaryInfo ?? "",
+  );
+  await expect(page.getByTestId("primary-info-type-other")).toHaveAttribute(
+    "aria-pressed",
+    "true",
   );
   await expect(page.getByTestId("article-primary-button")).toBeEnabled();
   await page.getByTestId("article-primary-button").click();

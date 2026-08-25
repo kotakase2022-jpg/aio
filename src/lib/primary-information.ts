@@ -39,6 +39,11 @@ export const primaryInformationOptions = [
     label: "自社独自の見解・提言",
     description: "業界の常識と異なる考え、今後重視すべき論点",
   },
+  {
+    id: "other",
+    label: "その他の一次情報",
+    description: "上記に当てはまらない自社固有の経験・事実・考え",
+  },
 ] as const;
 
 export type PrimaryInformationType = (typeof primaryInformationOptions)[number]["id"];
@@ -56,4 +61,14 @@ export function primaryInformationLabels(types: readonly string[]) {
     const option = primaryInformationOptions.find((candidate) => candidate.id === type);
     return option ? [option.label] : [];
   });
+}
+
+export function primaryInformationTypesForRestore(
+  types: readonly string[] | undefined,
+  primaryInfo: string | undefined,
+): PrimaryInformationType[] {
+  const validTypes = (types ?? []).filter(isPrimaryInformationType);
+  if (validTypes.length > 0) return validTypes;
+
+  return primaryInfo?.trim() ? ["other"] : [];
 }

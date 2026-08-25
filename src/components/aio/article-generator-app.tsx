@@ -55,6 +55,7 @@ import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
 import { truncatePromptLine } from "@/lib/prompt-text";
 import {
   primaryInformationOptions,
+  primaryInformationTypesForRestore,
   type PrimaryInformationType,
 } from "@/lib/primary-information";
 import { qualityCheckEditGuidance } from "@/lib/quality-edit-guidance";
@@ -676,7 +677,9 @@ export function ArticleGeneratorApp() {
     setReferenceFiles(input.referenceFiles ?? []);
     setCompetitorFiles(input.competitorFiles ?? []);
     setTheme(input.theme ?? "");
-    setPrimaryInfoTypes(input.primaryInfoTypes ?? []);
+    setPrimaryInfoTypes(
+      primaryInformationTypesForRestore(input.primaryInfoTypes, input.primaryInfo),
+    );
     setPrimaryInfo(input.primaryInfo ?? "");
     setClosingText(input.closingText ?? "");
     setAuthor(input.author ?? {});
