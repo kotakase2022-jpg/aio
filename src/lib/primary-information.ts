@@ -39,11 +39,6 @@ export const primaryInformationOptions = [
     label: "自社独自の見解・提言",
     description: "業界の常識と異なる考え、今後重視すべき論点",
   },
-  {
-    id: "other",
-    label: "その他の一次情報",
-    description: "上記に当てはまらない自社固有の経験・事実・考え",
-  },
 ] as const;
 
 export type PrimaryInformationType = (typeof primaryInformationOptions)[number]["id"];
@@ -70,5 +65,19 @@ export function primaryInformationTypesForRestore(
   const validTypes = (types ?? []).filter(isPrimaryInformationType);
   if (validTypes.length > 0) return validTypes;
 
-  return primaryInfo?.trim() ? ["other"] : [];
+  const text = primaryInfo?.trim();
+  if (!text) return [];
+
+  const legacyCategoryRules: Array<[RegExp, PrimaryInformationType]> = [
+    [/(?:%|％|アンケート|調査|集計|データ|件中|人中)/i, "original-data"],
+    [/(?:相談|問い合わせ|繰り返し起きる課題)/i, "frequent-consultations"],
+    [/(?:失敗|教訓|改善|見直した)/i, "failures-lessons"],
+    [/(?:支援事例|導入事例|成果|支援前後)/i, "case-results"],
+    [/(?:顧客の声|利用者の声|導入後の反応)/i, "customer-voice"],
+    [/(?:開発の背景|設計上|なぜ作った)/i, "service-background"],
+    [/(?:判断基準|ノウハウ|チェック項目|優先順位|運用ルール)/i, "criteria-knowhow"],
+  ];
+  const inferredType = legacyCategoryRules.find(([pattern]) => pattern.test(text))?.[1];
+
+  return [inferredType ?? "expert-opinion"];
 }

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  primaryInformationLabels,
-  primaryInformationTypesForRestore,
-} from "@/lib/primary-information";
+import { primaryInformationTypesForRestore } from "@/lib/primary-information";
 
 describe("primaryInformationTypesForRestore", () => {
   it("preserves valid saved categories", () => {
@@ -14,11 +11,13 @@ describe("primaryInformationTypesForRestore", () => {
     ).toEqual(["original-data", "frequent-consultations"]);
   });
 
-  it("classifies legacy text without categories as other", () => {
-    expect(primaryInformationTypesForRestore(undefined, "以前に保存した一次情報")).toEqual([
-      "other",
+  it("infers a concrete category for legacy text without categories", () => {
+    expect(
+      primaryInformationTypesForRestore(undefined, "スマホで簡単なDXを希望する企業80％"),
+    ).toEqual(["original-data"]);
+    expect(primaryInformationTypesForRestore(undefined, "以前に保存した自社独自の考え")).toEqual([
+      "expert-opinion",
     ]);
-    expect(primaryInformationLabels(["other"])).toEqual(["その他の一次情報"]);
   });
 
   it("does not invent a category when primary information is empty", () => {

@@ -2102,7 +2102,7 @@ test("generation logs show previous output and can reopen a saved draft", async 
   await expect(page.getByTestId("primary-info-textarea")).toHaveValue(
     completedJob.inputPayload.primaryInfo ?? "",
   );
-  await expect(page.getByTestId("primary-info-type-other")).toHaveAttribute(
+  await expect(page.getByTestId("primary-info-type-expert-opinion")).toHaveAttribute(
     "aria-pressed",
     "true",
   );
