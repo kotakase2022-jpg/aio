@@ -21,10 +21,10 @@ Current objective:
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/loop5-strict-production-audit`
-- Latest commit before this change set: `8b7636e06cb12ca62fceb74d8bca65f5433f975e`
+- Latest branch commit before the Bugbot follow-up: `f0b37b14f3279754bbd02070c1eeff34f4bfa94a`
 - Last known good commit: `8b7636e06cb12ca62fceb74d8bca65f5433f975e`
-- PR: Pending creation
-- CodeRabbit OSS review status: Pending current PR
+- PR: https://github.com/kotakase2022-jpg/aio/pull/13
+- CodeRabbit OSS review status: In progress
 
 ## 3. What Was Done
 
@@ -60,7 +60,7 @@ Current objective:
 - Local `npm.cmd run quality`: PASS.
 - Unit/integration: 49 files / 411 tests PASS.
 - Contract: 4 files / 15 tests PASS.
-- Chromium PC E2E: 50/50 PASS.
+- Chromium PC E2E: 51/51 PASS.
 - Production build: 19 routes PASS.
 - Live OpenAI contract: PASS.
 - Live Supabase contract and exact cleanup: PASS.
@@ -74,7 +74,7 @@ Current objective:
 - Live WordPress post/media/delete remains `UNVERIFIED`: no disposable sandbox credentials or seven required safety variables are configured. Production WordPress was not used.
 - Supabase Security Advisor still reports leaked-password protection as WARN. The application does not use Supabase password Auth; reassess if that changes.
 - Supabase Performance Advisor unused-index/Auth connection notices remain informational. No production index was removed.
-- CodeRabbit has not reviewed the current branch because its PR is not created yet.
+- PR #13 is open. CodeRabbit review is in progress.
 
 ## 7. CodeRabbit Review
 
@@ -86,9 +86,9 @@ Current objective:
 
 ## 8. Optional Bugbot Findings
 
-- Status: Not run.
-- Findings: None.
-- Actions taken: Not applicable. CodeRabbit OSS is standard; use Bugbot only if CodeRabbit is unavailable or a second review is warranted for the migration/security changes.
+- Status: Run automatically on PR #13 despite its optional/backup role.
+- Findings: One valid Medium finding: opening another generation log during active polling could leave the form inputs on the old log while steps/draft later switched back to the active job.
+- Actions taken: Added a handler guard and disabled other log-open buttons while a different job is active. Added a PC E2E regression proving the active form stays unchanged and the archived-job endpoint is not called. Focused E2E and the full quality gate passed.
 
 ## 9. Verification Results
 
@@ -111,7 +111,7 @@ Results:
 - Unit/integration: PASS, 49 files / 411 tests.
 - Contract: PASS, 4 files / 15 tests.
 - Coverage: PASS; statements 86.85%, branches 76.50%, functions 91.54%, lines 87.30%.
-- Chromium PC E2E: PASS, 50 scenarios.
+- Chromium PC E2E: PASS, 51 scenarios.
 - Next.js 16.3.2 build: PASS, 19 routes.
 - Focused restoration E2E: PASS, 2/2.
 - Live OpenAI: PASS, 1/1 structured article contract across three BtoB themes.

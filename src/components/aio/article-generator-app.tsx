@@ -655,6 +655,10 @@ export function ArticleGeneratorApp() {
 
   async function openGenerationLog(jobId: string) {
     setActiveError("");
+    if (activeGenerationJobId && activeGenerationJobId !== jobId) {
+      setActiveError("記事生成中は別の生成ログを開けません。生成完了後にもう一度お試しください。");
+      return;
+    }
     try {
       const result = await apiGet<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}`);
       applyGenerationJob(result.job, true);
@@ -1985,6 +1989,7 @@ export function ArticleGeneratorApp() {
             onToggle={() => setLogsExpanded((current) => !current)}
             onRefresh={loadGenerationLogs}
             onOpen={openGenerationLog}
+            activeGenerationJobId={activeGenerationJobId}
           />
 
           <Card>
@@ -2657,6 +2662,7 @@ function GenerationLogsPanel({
   onToggle,
   onRefresh,
   onOpen,
+  activeGenerationJobId,
 }: {
   logs: GenerationLogSummary[];
   loading: boolean;
@@ -2665,6 +2671,7 @@ function GenerationLogsPanel({
   onToggle: () => void;
   onRefresh: () => void;
   onOpen: (jobId: string) => void;
+  activeGenerationJobId: string | null;
 }) {
   return (
     <Card data-testid="generation-logs-panel">
@@ -2757,6 +2764,14 @@ function GenerationLogsPanel({
                         variant="secondary"
                         size="sm"
                         onClick={() => onOpen(log.id)}
+                        disabled={Boolean(
+                          activeGenerationJobId && activeGenerationJobId !== log.id,
+                        )}
+                        title={
+                          activeGenerationJobId && activeGenerationJobId !== log.id
+                            ? "記事生成中は別の生成ログを開けません。"
+                            : undefined
+                        }
                       >
                         開く
                       </Button>

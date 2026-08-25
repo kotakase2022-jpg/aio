@@ -2780,6 +2780,101 @@ test("active generation job is restored after a page reload and opens the comple
   expect(errors()).toEqual([]);
 });
 
+test("another generation log cannot replace form inputs while a job is active", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const activeJob = {
+    ...createCompletedGenerationJob(),
+    id: "job-active-log-guard",
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    steps: [
+      { id: "generate_body", label: "AIO body generation", status: "running" as const },
+      { id: "save", label: "Draft save", status: "pending" as const },
+    ],
+  };
+  const archivedJob = {
+    ...createCompletedGenerationJob(),
+    id: "job-archived-log-guard",
+    inputPayload: {
+      ...createCompletedGenerationJob().inputPayload,
+      theme: "別ログのテーマ",
+    },
+  };
+  let archivedLoads = 0;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({
+      json: {
+        ok: true,
+        logs: [
+          {
+            id: archivedJob.id,
+            status: "completed",
+            createdAt: archivedJob.createdAt,
+            updatedAt: archivedJob.updatedAt,
+            completedAt: archivedJob.completedAt,
+            inputSummary: "別ログのテーマ / 参照1件",
+            outputTitle: archivedJob.draft?.editedTitle,
+            outputSlug: archivedJob.draft?.editedSlug,
+            draftStatus: archivedJob.draft?.status,
+          },
+        ],
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-active-log-guard/cancel", async (route) => {
+    await route.fulfill({
+      json: {
+        ok: true,
+        job: { ...activeJob, status: "canceled", error: "ユーザー操作により停止しました。" },
+      },
+    });
+  });
+  await page.route("**/api/generation-jobs/job-active-log-guard", async (route) => {
+    await route.fulfill({ json: { ok: true, job: activeJob } });
+  });
+  await page.route("**/api/generation-jobs/job-archived-log-guard", async (route) => {
+    archivedLoads += 1;
+    await route.fulfill({ json: { ok: true, job: archivedJob } });
+  });
+  await page.route("**/api/generation-jobs", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/api/generation-jobs") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { ok: true, job: activeJob } });
+  });
+
+  await login(page);
+  await page
+    .getByTestId("reference-text-0")
+    .fill("Reference text that must stay attached to the active job.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("article-primary-button")).toContainText(
+    "記事作成をストップ",
+  );
+
+  await page.getByTestId("generation-logs-toggle").click();
+  const archivedOpenButton = page.getByTestId(
+    "generation-log-open-job-archived-log-guard",
+  );
+  await expect(archivedOpenButton).toBeDisabled();
+  await expect(archivedOpenButton).toHaveAttribute(
+    "title",
+    "記事生成中は別の生成ログを開けません。",
+  );
+  await expect(page.getByTestId("reference-text-0")).toHaveValue(
+    "Reference text that must stay attached to the active job.",
+  );
+  expect(archivedLoads).toBe(0);
+
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByText("記事作成を停止しました。")).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("user can stop an in-progress generation job from the primary CTA", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   const runningJob = {
