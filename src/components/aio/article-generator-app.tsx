@@ -244,6 +244,8 @@ export function ArticleGeneratorApp() {
   const generationPollingRef = useRef<string | null>(null);
   const generationPollRunRef = useRef(0);
   const generationResumeStartedRef = useRef(false);
+  const generationLogOpenRequestRef = useRef(0);
+  const formRestoreVersionRef = useRef(0);
   const competitorResearchRequestRef = useRef(0);
   const themeCandidateRequestRef = useRef(0);
   const themeCandidateApplyTimerRef = useRef<number | null>(null);
@@ -484,6 +486,7 @@ export function ArticleGeneratorApp() {
       return;
     }
 
+    generationLogOpenRequestRef.current += 1;
     setActiveError("");
     setDraft(isRegeneration ? previousDraft : null);
     setTab("preview");
@@ -559,6 +562,7 @@ export function ArticleGeneratorApp() {
   async function pollGenerationJob(jobId: string, restoreInputsOnFirstPoll = false) {
     const pollRunId = generationPollRunRef.current + 1;
     generationPollRunRef.current = pollRunId;
+    generationLogOpenRequestRef.current += 1;
     generationPollingRef.current = jobId;
     setActiveGenerationJobId(jobId);
     let shouldRestoreInputs = restoreInputsOnFirstPoll;
@@ -650,8 +654,11 @@ export function ArticleGeneratorApp() {
     const input = job.inputPayload;
     const restoredResearch = job.draft?.competitorResearch ?? job.competitorResearch ?? null;
 
+    formRestoreVersionRef.current += 1;
     competitorResearchRequestRef.current += 1;
     themeCandidateRequestRef.current += 1;
+    setReferenceFileUploading(false);
+    setCompetitorFileUploading(false);
     setResearchLoading(false);
     setResearchProgress(0);
     setThemeCandidateLoading(false);
@@ -712,14 +719,23 @@ export function ArticleGeneratorApp() {
       setActiveError("記事生成中は生成ログを開けません。生成完了後にもう一度お試しください。");
       return;
     }
+    const requestId = generationLogOpenRequestRef.current + 1;
+    generationLogOpenRequestRef.current = requestId;
     try {
       const result = await apiGet<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}`);
+      if (
+        generationLogOpenRequestRef.current !== requestId ||
+        generationPollingRef.current
+      ) {
+        return;
+      }
       const hydratedDraft = hydrateDraftFromGenerationJob(result.job);
       applyGenerationJob(result.job, true, true);
       if (hydratedDraft) {
         setTab("preview");
       }
     } catch (error) {
+      if (generationLogOpenRequestRef.current !== requestId) return;
       setActiveError(readError(error));
     }
   }
@@ -863,24 +879,29 @@ export function ArticleGeneratorApp() {
 
   async function uploadAuthorImage(file: File | null) {
     if (!file) return;
+    const formVersion = formRestoreVersionRef.current;
     setActiveError("");
     try {
       const uploaded = await uploadImage(file, "authors");
+      if (formRestoreVersionRef.current !== formVersion) return;
       setAuthor((current) => ({
         ...current,
         imageUrl: uploaded.url,
         imagePath: uploaded.path,
       }));
     } catch (error) {
+      if (formRestoreVersionRef.current !== formVersion) return;
       setActiveError(readError(error));
     }
   }
 
   async function uploadToneImage(file: File | null) {
     if (!file) return;
+    const formVersion = formRestoreVersionRef.current;
     setActiveError("");
     try {
       const uploaded = await uploadImage(file, "article-inserts");
+      if (formRestoreVersionRef.current !== formVersion) return;
       setVisualTone({
         mode: "upload",
         uploadedImageUrl: uploaded.url,
@@ -888,6 +909,7 @@ export function ArticleGeneratorApp() {
         uploadedImageName: uploaded.filename,
       });
     } catch (error) {
+      if (formRestoreVersionRef.current !== formVersion) return;
       setActiveError(readError(error));
     }
   }
@@ -895,6 +917,7 @@ export function ArticleGeneratorApp() {
   async function uploadAttachmentFiles(files: FileList | null, target: "reference" | "competitor") {
     const selectedFiles = Array.from(files ?? []);
     if (selectedFiles.length === 0) return;
+    const formVersion = formRestoreVersionRef.current;
 
     const setUploading =
       target === "reference" ? setReferenceFileUploading : setCompetitorFileUploading;
@@ -923,9 +946,13 @@ export function ArticleGeneratorApp() {
         }),
       );
 
-      setFileState((current) => mergeAttachmentRetries(current, extractedFiles));
+      if (formRestoreVersionRef.current === formVersion) {
+        setFileState((current) => mergeAttachmentRetries(current, extractedFiles));
+      }
     } finally {
-      setUploading(false);
+      if (formRestoreVersionRef.current === formVersion) {
+        setUploading(false);
+      }
     }
   }
 

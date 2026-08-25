@@ -1902,8 +1902,16 @@ test("generation logs show previous output and can reopen a saved draft", async 
     summary: "Stale competitor research that must be ignored",
   };
   let releaseStaleResearch!: () => void;
+  let releaseStaleAttachment!: () => void;
+  let markStaleAttachmentStarted!: () => void;
   const staleResearchGate = new Promise<void>((resolve) => {
     releaseStaleResearch = resolve;
+  });
+  const staleAttachmentGate = new Promise<void>((resolve) => {
+    releaseStaleAttachment = resolve;
+  });
+  const staleAttachmentStarted = new Promise<void>((resolve) => {
+    markStaleAttachmentStarted = resolve;
   });
   let includeDraftLevelResearch = false;
   completedJob.id = "job-log-e2e";
@@ -1972,6 +1980,20 @@ test("generation logs show previous output and can reopen a saved draft", async 
   await page.route("**/api/theme-candidates", async (route) => {
     await route.fulfill({ json: themeCandidates });
   });
+  await page.route("**/api/extract-file-content", async (route) => {
+    markStaleAttachmentStarted();
+    await staleAttachmentGate;
+    await route.fulfill({
+      json: {
+        ...extractFileSuccess,
+        attachment: {
+          ...extractFileSuccess.attachment,
+          id: "stale-reference-file",
+          name: "stale-reference.txt",
+        },
+      },
+    });
+  });
   await page.route("**/api/competitor-research", async (route) => {
     await staleResearchGate;
     await route.fulfill({ json: { ok: true, result: staleResearch } });
@@ -2011,6 +2033,13 @@ test("generation logs show previous output and can reopen a saved draft", async 
   await expect(page.getByTestId("generation-logs-content")).toContainText("下書き投稿");
   await expect(page.getByTestId("generation-logs-content")).toContainText("完了");
 
+  await page.getByTestId("input-wizard-step-button-references").click();
+  await page.getByTestId("reference-file-input").setInputFiles({
+    name: "stale-reference.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("This extraction belongs to the previous form."),
+  });
+  await staleAttachmentStarted;
   await page.getByTestId("input-wizard-step-button-theme").click();
   await page.getByTestId("theme-candidates-button").click();
   await expect(page.getByTestId("theme-candidate-card-0")).toBeVisible();
@@ -2028,6 +2057,12 @@ test("generation logs show previous output and can reopen a saved draft", async 
     "https://wordpress.example.com/recovered-log-article",
   );
   await expect(page.getByTestId("download-html-button")).toBeVisible();
+  const staleAttachmentResponse = page.waitForResponse("**/api/extract-file-content");
+  releaseStaleAttachment();
+  await staleAttachmentResponse;
+  await page.getByTestId("input-wizard-step-button-references").click();
+  await expect(page.getByText("stale-reference.txt")).toHaveCount(0);
+  await expect(page.getByTestId("reference-file-input")).toBeEnabled();
   await page.getByTestId("input-wizard-step-button-competitors").click();
   await expect(page.getByTestId("competitor-research-json")).toHaveValue(
     /Job-level restored competitor research/,
@@ -2943,6 +2978,14 @@ test("another generation log cannot replace form inputs while a job is active", 
     },
   };
   let archivedLoads = 0;
+  let releaseArchivedLoad!: () => void;
+  let markArchivedLoadStarted!: () => void;
+  const archivedLoadGate = new Promise<void>((resolve) => {
+    releaseArchivedLoad = resolve;
+  });
+  const archivedLoadStarted = new Promise<void>((resolve) => {
+    markArchivedLoadStarted = resolve;
+  });
 
   await page.route("**/api/generation-logs", async (route) => {
     await route.fulfill({
@@ -2987,6 +3030,8 @@ test("another generation log cannot replace form inputs while a job is active", 
   });
   await page.route("**/api/generation-jobs/job-archived-log-guard", async (route) => {
     archivedLoads += 1;
+    markArchivedLoadStarted();
+    await archivedLoadGate;
     await route.fulfill({ json: { ok: true, job: archivedJob } });
   });
   await page.route("**/api/generation-jobs", async (route) => {
@@ -3001,17 +3046,25 @@ test("another generation log cannot replace form inputs while a job is active", 
   await page
     .getByTestId("reference-text-0")
     .fill("Reference text that must stay attached to the active job.");
+  await page.getByTestId("generation-logs-toggle").click();
+  const archivedOpenButton = page.getByTestId(
+    "generation-log-open-job-archived-log-guard",
+  );
+  await archivedOpenButton.click();
+  await archivedLoadStarted;
+
   await page.getByTestId("article-primary-button").click();
   await expect(page.getByTestId("article-primary-button")).toContainText(
     "記事作成をストップ",
   );
+  const archivedResponse = page.waitForResponse(
+    "**/api/generation-jobs/job-archived-log-guard",
+  );
+  releaseArchivedLoad();
+  await archivedResponse;
 
-  await page.getByTestId("generation-logs-toggle").click();
   const activeOpenButton = page.getByTestId(
     "generation-log-open-job-active-log-guard",
-  );
-  const archivedOpenButton = page.getByTestId(
-    "generation-log-open-job-archived-log-guard",
   );
   await expect(activeOpenButton).toBeDisabled();
   await expect(archivedOpenButton).toBeDisabled();
@@ -3026,7 +3079,9 @@ test("another generation log cannot replace form inputs while a job is active", 
   await expect(page.getByTestId("reference-text-0")).toHaveValue(
     "Reference text that must stay attached to the active job.",
   );
-  expect(archivedLoads).toBe(0);
+  await page.getByTestId("input-wizard-step-button-theme").click();
+  await expect(page.getByTestId("theme-textarea")).not.toHaveValue("別ログのテーマ");
+  expect(archivedLoads).toBe(1);
 
   await page.getByTestId("article-primary-button").click();
   await expect(page.getByText("記事作成を停止しました。")).toBeVisible();
