@@ -22,8 +22,8 @@
 - Latest repository/main commit: `8c2a9b5a584ede25d94d2747550cc692db4d6f90`
 - Latest production runtime implementation commit: `742370efe44ec292d6879c9c4315be5f51fb45bb`
 - Last known good commit: `8c2a9b5a584ede25d94d2747550cc692db4d6f90`
-- PR: not created yet
-- CodeRabbit OSS review status: not run for Loop 8 because no application/test/migration change was required
+- PR: https://github.com/kotakase2022-jpg/aio/pull/20 (`OPEN`)
+- CodeRabbit OSS review status: completed; 2 documentation findings addressed in the follow-up commit
 - Production URL: https://aio-article-generator.vercel.app
 - Production deployment: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt` (`READY`)
 - Unique deployment URL: https://aio-article-generator-po9ft9l40-sl2026.vercel.app
@@ -67,6 +67,9 @@
 - Chromium PC E2E: PASS、52/52
 - Next.js 16.3.2 build: PASS、19 routes
 - Dependency audit high severity: PASS、0 vulnerabilities
+- GitHub required quality gate: PASS、run `32928056979`、4m10s
+- CodeRabbit OSS: PASS after addressing 2 documentation findings
+- Cursor Bugbot: repository setting auto-ran and passed; no finding reported
 - Live Supabase disposable CRUD/Storage: PASS、2/2、cleanup済み
 - Live OpenAI structured generation: FAIL、`credit_balance_exhausted`
 - Live WordPress post/media/delete: UNVERIFIED、安全なsandbox credentials/flagsなし
@@ -91,20 +94,20 @@
 
 CodeRabbit OSSの指摘と対応状況：
 
-- Review status: Loop 8は未実行。アプリ、テスト、migrationの差分がなく、handoff文書のみ更新したため。
+- Review status: PR #20で完了。required statusはPASS。
 - Critical findings: なし。
-- Resolved findings: なし。
+- Resolved findings: `PR: not created yet`をPR #20のURLへ更新した。OpenAI利用枠回復後の画像live検証を任意ではなく厳格判定更新前の必須条件へ変更した。
 - Deferred findings: なし。
 - False positives / not applicable: なし。
-- Reference: 直近PR #19ではdocs-only差分に対してCodeRabbit OSS無料枠のrate limitとなった。required quality checksはPASSしている。
+- Reference: CodeRabbitはPR #20のdocs-only差分をレビューし、上記2件以外にactionable findingなし。
 
 ## 8. Optional Bugbot Findings
 
 Cursor Bugbotの任意確認：
 
-- Status: Not run
+- Status: Run automatically by repository configuration on PR #20
 - Findings: なし。
-- Actions taken: CodeRabbitが標準レビューであり、Loop 8に高リスクコード差分がないため追加実行していない。
+- Actions taken: Codexから追加実行はしていない。自動checkは2m53sでPASS。
 
 ## 9. Verification Results
 
@@ -144,7 +147,7 @@ npx.cmd vercel logs dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt --status-code 5xx --since 2
 1. Vercel/localが参照するOpenAI projectの請求残高または利用枠を、秘密情報を表示せずに回復する。
 2. `npm.cmd run test:live:openai`を再実行し、structured generation成功を確認する。
 3. 成功後、本番で画像0枚・1000字・合成入力の記事を1件生成し、完了、draft保存、reload復元、生成ログ反映を確認して監査データをcleanupする。
-4. 画像生成のlive確認が必要なら、上限回復後に画像1枚で実施し、生成/Storage/再生成/cleanupを確認する。
+4. 厳格判定を更新する前に、上限回復後の本番で画像1枚を必ず生成し、生成/Storage保存/再生成/cleanupを確認する。
 5. WordPress live契約は、使い捨てsandbox credentialsと全安全フラグが揃った場合のみpost/media/deleteを実行する。本番WordPressでは実行しない。
 6. 全live success gateがPASSした場合にのみ、厳格判定を更新する。コード差分がなければ不要な再deployは行わない。
 
