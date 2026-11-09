@@ -892,6 +892,39 @@ describe("generateAioArticle", () => {
     expect(result.body_html).not.toContain("javascript:alert");
   });
 
+  test("does not append a declared source URL when the matching fetch is unusable", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      body_html:
+        "<h2>犬猫のオーラルケアとは日々の口内変化を確認することです</h2><p>飼い主は口臭や食べ方の変化を記録し、必要に応じて動物病院へ相談します。</p>",
+      sources: [
+        {
+          url: "https://example.com/mojibake",
+          title: "文字化けした取得元",
+          usage_notes: "モデルが誤って宣言した出典。",
+        },
+      ],
+    });
+
+    const result = await generateAioArticle({
+      form: sampleFormPayload,
+      fetchedReferences: [
+        {
+          url: "https://example.com/mojibake",
+          ok: true,
+          evidenceUsable: false,
+          reason: "文字化けのため記事根拠には使用しません。",
+        },
+      ],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    expect(result.body_html).not.toContain("https://example.com/mojibake");
+  });
+
   test("caps self-evaluation when generated body ignores target reader and search intent", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");

@@ -4,7 +4,9 @@ import {
   articleContainsCanonicalSourceLink,
   canonicalSourceUrlKey,
   decodeHtmlAmpersands,
+  isUnusableFetchedSourceUrl,
   normalizeSourceUrl,
+  unusableFetchedSourceUrlKeys,
 } from "@/lib/source-url";
 
 type BuildDraftArticleHtmlOptions = {
@@ -65,7 +67,7 @@ export function replaceDraftImageReferences(
 
 export function appendFaqBlockWhenNeeded(html: string, faqItems: FaqItem[]) {
   const items = canonicalizeFaqItems(faqItems);
-  const withoutManagedFaq = removeGeneratedFaqBlocks(removeManagedFaqBlock(html));
+  const withoutManagedFaq = removeGeneratedFaqBlocks(removeManagedFaqBlock(html), items);
   if (items.length === 0) {
     return withoutManagedFaq;
   }
@@ -309,8 +311,14 @@ function removeManagedFaqBlock(html: string) {
   return removeSectionsByClass(html, "aio-faq-block");
 }
 
-function removeGeneratedFaqBlocks(html: string) {
+function removeGeneratedFaqBlocks(
+  html: string,
+  faqItems: Array<{ question: string; answer: string }>,
+) {
   const ranges: Array<{ start: number; end: number }> = [];
+  const canonicalQuestionKeys = new Set(
+    faqItems.map((item) => normalizeFaqQuestion(item.question)).filter(Boolean),
+  );
   const headingPattern = /<h([1-6])\b[^>]*>[\s\S]*?<\/h\1>/gi;
   let headingMatch: RegExpExecArray | null;
 
@@ -319,15 +327,11 @@ function removeGeneratedFaqBlocks(html: string) {
       continue;
     }
 
-    const sectionRange = enclosingFaqSectionRange(html, headingMatch.index, headingMatch[0]);
-    if (sectionRange) {
-      ranges.push(sectionRange);
-      headingPattern.lastIndex = sectionRange.end;
-      continue;
-    }
-
-    const level = Number(headingMatch[1]);
-    const end = findNextHeadingBoundary(html, headingPattern.lastIndex, level);
+    const end = findGeneratedFaqContentEnd(
+      html,
+      headingPattern.lastIndex,
+      canonicalQuestionKeys,
+    );
     ranges.push({ start: headingMatch.index, end });
     headingPattern.lastIndex = end;
   }
@@ -351,43 +355,56 @@ function isFaqSectionHeading(headingHtml: string) {
   return /^(?:faq(?:よくある(?:ご)?質問)?|よくある(?:ご)?質問|q&a|質問と回答)$/.test(value);
 }
 
-function enclosingFaqSectionRange(html: string, headingStart: number, headingHtml: string) {
-  const sectionStartPattern = /<section\b[^>]*>/gi;
-  let match: RegExpExecArray | null;
-  let candidate: { start: number; contentStart: number; end: number } | null = null;
-
-  while ((match = sectionStartPattern.exec(html)) && match.index < headingStart) {
-    const end = findSectionEnd(html, sectionStartPattern.lastIndex);
-    if (end && end > headingStart) {
-      candidate = { start: match.index, contentStart: sectionStartPattern.lastIndex, end };
-    }
-  }
-
-  if (!candidate) {
-    return null;
-  }
-
-  const beforeHeading = html.slice(candidate.contentStart, headingStart);
-  if (stripHtmlText(beforeHeading).trim()) {
-    return null;
-  }
-
-  const firstHeading = html.slice(candidate.contentStart, candidate.end).match(/<h[1-6]\b[^>]*>[\s\S]*?<\/h[1-6]>/i)?.[0];
-  return firstHeading === headingHtml ? { start: candidate.start, end: candidate.end } : null;
+function looksLikeFaqQuestion(value: string) {
+  const normalized = value.normalize("NFKC").trim();
+  return (
+    /[?？]$/.test(normalized) ||
+    /^(?:q\s*[.:：]|質問\s*[.:：])/i.test(normalized) ||
+    /(?:ですか|ますか|でしょうか|できますか|なりますか)[。.]?$/.test(normalized)
+  );
 }
 
-function findNextHeadingBoundary(html: string, fromIndex: number, currentLevel: number) {
-  const nextHeadingPattern = /<h([1-6])\b[^>]*>/gi;
-  nextHeadingPattern.lastIndex = fromIndex;
-  let match: RegExpExecArray | null;
+function findGeneratedFaqContentEnd(
+  html: string,
+  fromIndex: number,
+  canonicalQuestionKeys: Set<string>,
+) {
+  let cursor = skipHtmlSpacing(html, fromIndex);
+  let lastEnd = fromIndex;
 
-  while ((match = nextHeadingPattern.exec(html))) {
-    if (Number(match[1]) <= currentLevel) {
-      return match.index;
+  while (cursor < html.length) {
+    const questionMatch = html
+      .slice(cursor)
+      .match(/^<h([34])\b[^>]*>([\s\S]*?)<\/h\1>/i);
+    if (!questionMatch) {
+      break;
     }
+
+    const question = decodeBasicHtmlEntities(stripHtmlText(questionMatch[2])).trim();
+    const questionKey = normalizeFaqQuestion(question);
+    if (!canonicalQuestionKeys.has(questionKey) && !looksLikeFaqQuestion(question)) {
+      break;
+    }
+
+    const questionEnd = cursor + questionMatch[0].length;
+    const answerStart = skipHtmlSpacing(html, questionEnd);
+    const answerMatch = html
+      .slice(answerStart)
+      .match(/^<(p|div|ul|ol|table|blockquote)\b[^>]*>[\s\S]*?<\/\1>/i);
+
+    lastEnd = questionEnd;
+    if (answerMatch) {
+      lastEnd = answerStart + answerMatch[0].length;
+    }
+    cursor = skipHtmlSpacing(html, lastEnd);
   }
 
-  return html.length;
+  return lastEnd;
+}
+
+function skipHtmlSpacing(html: string, fromIndex: number) {
+  const spacing = html.slice(fromIndex).match(/^(?:\s|<!--[\s\S]*?-->)+/);
+  return fromIndex + (spacing?.[0].length ?? 0);
 }
 
 function removeManagedSourceBlock(html: string) {
@@ -464,17 +481,14 @@ function findUnclosedManagedSectionEnd(html: string, fromIndex: number) {
 
 function collectRenderableSources(draft: ArticleDraft) {
   const seen = new Set<string>();
-  const unusableFetchedSourceKeys = new Set(
-    [...draft.fetchedReferences, ...draft.fetchedCompetitors]
-      .filter((source) => !source.ok || source.evidenceUsable === false)
-      .map((source) => canonicalSourceUrlKey(normalizeSourceUrl(source.url)))
-      .filter(Boolean),
+  const unusableSourceKeys = unusableFetchedSourceUrlKeys(
+    [...draft.fetchedReferences, ...draft.fetchedCompetitors],
   );
   const declaredSources = draft.aiResult.sources.map((source) => ({
-      url: normalizeSourceUrl(source.url),
-      title: source.title.trim(),
-      usageNotes: publicSourceNote(source.usage_notes),
-    }));
+    url: normalizeSourceUrl(source.url),
+    title: source.title.trim(),
+    usageNotes: publicSourceNote(source.usage_notes),
+  }));
   const legacyFallbackSources = [
     ...draft.fetchedReferences
       .filter((source) => source.ok && source.evidenceUsable !== false)
@@ -486,9 +500,7 @@ function collectRenderableSources(draft: ArticleDraft) {
     ...draft.inputPayload.references
       .filter(
         (source) =>
-          !unusableFetchedSourceKeys.has(
-            canonicalSourceUrlKey(normalizeSourceUrl(source.url ?? "")),
-          ),
+          !isUnusableFetchedSourceUrl(source.url ?? "", unusableSourceKeys),
       )
       .map((source) => ({
       url: normalizeSourceUrl(source.url ?? ""),
@@ -505,25 +517,29 @@ function collectRenderableSources(draft: ArticleDraft) {
     ...draft.inputPayload.competitors
       .filter(
         (source) =>
-          !unusableFetchedSourceKeys.has(
-            canonicalSourceUrlKey(normalizeSourceUrl(source.url ?? "")),
-          ),
+          !isUnusableFetchedSourceUrl(source.url ?? "", unusableSourceKeys),
       )
       .map((source) => ({
       url: normalizeSourceUrl(source.url ?? ""),
       title: source.url?.trim() || "",
       usageNotes: "",
     })),
-    ...(draft.competitorResearch?.insights ?? []).map((source) => ({
-      url: normalizeSourceUrl(source.url),
-      title: source.title.trim() || source.url.trim(),
-      usageNotes: "",
-    })),
+    ...(draft.competitorResearch?.insights ?? [])
+      .filter((source) => !isUnusableFetchedSourceUrl(source.url, unusableSourceKeys))
+      .map((source) => ({
+        url: normalizeSourceUrl(source.url),
+        title: source.title.trim() || source.url.trim(),
+        usageNotes: "",
+      })),
   ];
 
   // New drafts declare only sources that support published claims. Older drafts may not
   // have that field populated, so keep their historical URL fallback for compatibility.
-  return (declaredSources.some((source) => source.url) ? declaredSources : legacyFallbackSources)
+  return (declaredSources.some((source) => source.url)
+    ? declaredSources.filter(
+        (source) => !isUnusableFetchedSourceUrl(source.url, unusableSourceKeys),
+      )
+    : legacyFallbackSources)
     .filter((source) => {
       const sourceKey = canonicalSourceUrlKey(source.url);
       if (!source.url || seen.has(sourceKey)) {

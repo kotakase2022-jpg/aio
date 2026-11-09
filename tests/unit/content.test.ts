@@ -199,6 +199,7 @@ describe("fetchUrlContent", () => {
       ok: true,
       evidenceUsable: false,
       pageKind: "insufficient",
+      reason: expect.stringContaining("手動テキストで補ってください"),
     });
 
     const emptyFetcher = vi.fn(async () =>
@@ -211,7 +212,37 @@ describe("fetchUrlContent", () => {
       ok: true,
       evidenceUsable: false,
       pageKind: "insufficient",
+      reason: expect.stringContaining("手動テキストで補ってください"),
     });
+  });
+
+  test("keeps article content wrapped by a page-level form", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        "<html><body><form id=\"form1\"><main><h1>資金調達の判断基準</h1><p>必要書類、資金使途、返済条件を確認し、複数の選択肢を比較します。</p><p>経営者は調達時期と必要額を先に整理すると、条件の違いを判断しやすくなります。</p></main></form></body></html>",
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+    );
+
+    const result = await fetchUrlContent("https://example.com/webforms", fetcher);
+
+    expect(result).toMatchObject({ ok: true, evidenceUsable: true, pageKind: "article" });
+    expect(result.text).toContain("必要書類、資金使途、返済条件");
+  });
+
+  test("keeps an article header while removing the page-level header", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        "<html><body><header><p>全ページ共通メニュー</p></header><article><header><h1>犬猫のオーラルケア</h1><p>飼い主が確認する口内変化</p></header><p>口臭や歯ぐきの変化を記録し、気になる症状があれば動物病院へ相談します。</p><p>毎日の観察では、食べ方や口元を触られることへの反応も確認します。</p></article></body></html>",
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+    );
+
+    const result = await fetchUrlContent("https://example.com/article-header", fetcher);
+
+    expect(result).toMatchObject({ ok: true, evidenceUsable: true, pageKind: "article" });
+    expect(result.text).toContain("犬猫のオーラルケア");
+    expect(result.text).not.toContain("全ページ共通メニュー");
   });
 
   test("returns fallback error result on network failure", async () => {

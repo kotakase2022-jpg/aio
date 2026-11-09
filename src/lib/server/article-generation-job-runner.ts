@@ -187,6 +187,7 @@ async function fetchInputs(inputs: KeyValueInput[], files: AttachedFileInput[] =
         url,
         ok: false,
         reason: error instanceof Error ? error.message : "URL本文抽出に失敗しました。",
+        sourceType: "url",
       });
     }
   }

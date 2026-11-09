@@ -219,7 +219,7 @@ function detectLinkIssues(html: string, requiredSourceUrls: string[]): Publicati
 
 function detectNumericIssues(html: string, evidenceTexts: string[]): PublicationIssue[] {
   const $ = cheerio.load(html, null, false);
-  $(".aio-source-block, script, style, noscript").remove();
+  $(".aio-source-block, .aio-author-block, script, style, noscript").remove();
   const articleText = cleanText($.root().text()).replace(/https?:\/\/\S+/g, " ");
   const evidenceSentences = evidenceTexts.flatMap(extractSentences);
   const issues: PublicationIssue[] = [];
@@ -330,6 +330,9 @@ function looksLikeQuestion(value: string) {
 
 function isPublishableHref(value: string) {
   if (/^(?:mailto:|tel:)/i.test(value)) {
+    return true;
+  }
+  if (value.startsWith("/") && !value.startsWith("//")) {
     return true;
   }
   try {

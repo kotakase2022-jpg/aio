@@ -60,7 +60,10 @@ import {
 } from "@/lib/primary-information";
 import { qualityCheckEditGuidance } from "@/lib/quality-edit-guidance";
 import { qualityRegenerationAction } from "@/lib/quality-regeneration-action";
-import { canonicalSourceUrlKey, normalizeSourceUrl } from "@/lib/source-url";
+import {
+  isUnusableFetchedSourceUrl,
+  unusableFetchedSourceUrlKeys,
+} from "@/lib/source-url";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import {
   ARTICLE_ATTACHMENT_ACCEPT,
@@ -1070,6 +1073,7 @@ export function ArticleGeneratorApp() {
             image.prompt,
             instruction.trim(),
             draft.aiResult,
+            draft.inputPayload.audienceType,
           ),
           slot: image.slot,
           altText: image.altText,
@@ -1141,6 +1145,7 @@ export function ArticleGeneratorApp() {
             image.prompt,
             rewriteInstruction,
             draft.aiResult,
+            draft.inputPayload.audienceType,
           ),
           altText: image.altText,
           replaceImageId: image.id,
@@ -1151,6 +1156,7 @@ export function ArticleGeneratorApp() {
             prompt.prompt,
             rewriteInstruction,
             draft.aiResult,
+            draft.inputPayload.audienceType,
           ),
           altText: prompt.alt_text,
         })),
@@ -3838,18 +3844,27 @@ function buildImageRegenerationPrompt(
   basePrompt: string,
   instruction: string,
   article: Pick<ArticleGenerationResult, "article_summary" | "headings" | "key_takeaways">,
+  audienceType: AudienceType = "auto",
 ) {
+  const audienceDirection =
+    audienceType === "btoc"
+      ? "Audience direction: use an approachable consumer-facing Japanese editorial style. Ignore corporate whitepaper styling in the base prompt when it conflicts with the reader and topic."
+      : audienceType === "btob"
+        ? "Audience direction: use a restrained business editorial style that supports decision-making without defaulting to generic SaaS imagery."
+        : "Audience direction: infer the visual language from the article topic, intended reader, and requested tone instead of assuming BtoB or BtoC.";
+
   return [
     basePrompt,
     "",
     `Article summary anchor: ${truncatePromptLine(article.article_summary, 220)}`,
     `Key takeaways to preserve: ${article.key_takeaways.slice(0, 3).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
     `Relevant headings: ${article.headings.slice(0, 4).map((heading) => truncatePromptLine(heading.text, 80)).join(" / ")}`,
+    audienceDirection,
     "",
     instruction ? "Regeneration direction from the user:" : "Regeneration direction from the user: improve the image quality while preserving the article intent.",
-    instruction || "Make it more polished, premium, coherent, and suitable for a Japanese B2B article.",
+    instruction || "Make it more polished, premium, coherent, and suitable for the Japanese article and its intended audience.",
     "",
-    "Quality bar: premium Japanese B2B SaaS / consulting / financial whitepaper visual, crisp layout, coherent perspective, refined lighting, generous whitespace, high-end corporate polish.",
+    "Quality bar: premium Japanese editorial visual appropriate for the article audience and requested tone, crisp layout, coherent perspective, refined lighting, and generous whitespace.",
     "Keep the regenerated image article-specific: show the concrete workflow, decision points, evidence/source checks, or comparison axes implied by the article anchors.",
     "Avoid readable text, random letters, logos, watermarks, fake UI screenshots, cluttered charts, distorted hands, unnecessary people, clip-art, cheap stock-photo look, and dark blurry AI-art backgrounds.",
   ].join("\n");
@@ -3888,18 +3903,18 @@ function collectDraftReferenceTexts(draft: ArticleDraft) {
 }
 
 function collectDraftSourceUrls(draft: ArticleDraft) {
+  const fetchedSources = [...draft.fetchedReferences, ...draft.fetchedCompetitors];
+  const unusableSourceKeys = unusableFetchedSourceUrlKeys(fetchedSources);
   const declaredSourceUrls = draft.aiResult.sources.map((item) => item.url).filter((url) => url.trim());
   if (declaredSourceUrls.length > 0) {
-    return Array.from(new Set(declaredSourceUrls));
+    return Array.from(
+      new Set(
+        declaredSourceUrls.filter(
+          (url) => !isUnusableFetchedSourceUrl(url, unusableSourceKeys),
+        ),
+      ),
+    );
   }
-
-  const fetchedSources = [...draft.fetchedReferences, ...draft.fetchedCompetitors];
-  const unusableSourceKeys = new Set(
-    fetchedSources
-      .filter((item) => !item.ok || item.evidenceUsable === false)
-      .map((item) => canonicalSourceUrlKey(normalizeSourceUrl(item.url)))
-      .filter(Boolean),
-  );
 
   return Array.from(
     new Set([
@@ -3908,15 +3923,13 @@ function collectDraftSourceUrls(draft: ArticleDraft) {
         .map((item) => item.url),
       ...draft.inputPayload.references
         .map((item) => item.url ?? "")
-        .filter(
-          (url) => !unusableSourceKeys.has(canonicalSourceUrlKey(normalizeSourceUrl(url))),
-        ),
+        .filter((url) => !isUnusableFetchedSourceUrl(url, unusableSourceKeys)),
       ...draft.inputPayload.competitors
         .map((item) => item.url ?? "")
-        .filter(
-          (url) => !unusableSourceKeys.has(canonicalSourceUrlKey(normalizeSourceUrl(url))),
-        ),
-      ...(draft.competitorResearch?.insights ?? []).map((item) => item.url),
+        .filter((url) => !isUnusableFetchedSourceUrl(url, unusableSourceKeys)),
+      ...(draft.competitorResearch?.insights ?? [])
+        .map((item) => item.url)
+        .filter((url) => !isUnusableFetchedSourceUrl(url, unusableSourceKeys)),
     ]),
   ).filter((url) => url.trim());
 }

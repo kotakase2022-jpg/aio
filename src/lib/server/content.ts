@@ -249,8 +249,6 @@ function removeBoilerplate($: cheerio.CheerioAPI) {
       "svg",
       "nav",
       "footer",
-      "header",
-      "form",
       "aside",
       '[role="navigation"]',
       '[role="banner"]',
@@ -269,6 +267,22 @@ function removeBoilerplate($: cheerio.CheerioAPI) {
       ".cookie-banner",
     ].join(","),
   ).remove();
+
+  const contentContainerSelector = [
+    "article",
+    "main",
+    '[role="main"]',
+    ".article-body",
+    ".entry-content",
+    ".post-content",
+    ".article-content",
+    "#main-content",
+  ].join(",");
+  $("header").each((_, element) => {
+    if ($(element).closest(contentContainerSelector).length === 0) {
+      $(element).remove();
+    }
+  });
 }
 
 function findContentRoot($: cheerio.CheerioAPI) {

@@ -33,6 +33,24 @@ export function canonicalSourceUrlKey(url: string) {
   }
 }
 
+export function unusableFetchedSourceUrlKeys(
+  sources: Array<{ url: string; ok: boolean; evidenceUsable?: boolean }>,
+) {
+  return new Set(
+    sources
+      .filter((source) => !source.ok || source.evidenceUsable === false)
+      .map((source) => canonicalSourceUrlKey(normalizeSourceUrl(source.url)))
+      .filter(Boolean),
+  );
+}
+
+export function isUnusableFetchedSourceUrl(url: string, unusableKeys: Set<string>) {
+  const normalizedUrl = normalizeSourceUrl(url);
+  return Boolean(
+    normalizedUrl && unusableKeys.has(canonicalSourceUrlKey(normalizedUrl)),
+  );
+}
+
 export function sourceUrlCandidates(url: string) {
   try {
     const normalizedUrl = normalizeSourceUrlValue(url);

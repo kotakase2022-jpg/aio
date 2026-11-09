@@ -247,6 +247,50 @@ describe("article generation job runner", () => {
     );
   });
 
+  test("counts a malformed URL as a failed URL fetch in the progress detail", async () => {
+    const { fetchUrlContent } = await import("@/lib/server/content");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    const { createArticleImagesForDraft } = await import("@/lib/server/article-images");
+    const { saveDraft } = await import("@/lib/server/drafts");
+    const { createGenerationJob, getGenerationJob } = await import(
+      "@/lib/server/generation-jobs"
+    );
+    const { runArticleGenerationJob } = await import(
+      "@/lib/server/article-generation-job-runner"
+    );
+
+    vi.mocked(fetchUrlContent).mockRejectedValueOnce(new Error("URL形式が正しくありません。"));
+    vi.mocked(generateAioArticle).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      image_prompts: [],
+    });
+    vi.mocked(createArticleImagesForDraft).mockResolvedValueOnce([]);
+    vi.mocked(saveDraft).mockImplementationOnce(async (draft) => ({
+      draft,
+      storageMode: "local" as const,
+    }));
+    const job = await createGenerationJob({
+      inputPayload: {
+        ...sampleFormPayload,
+        references: [{ id: "invalid-url", url: "example.com/no-scheme", text: "" }],
+        imageCount: 0,
+      },
+    });
+
+    await runArticleGenerationJob(job.id);
+
+    const completed = await getGenerationJob(job.id);
+    expect(completed?.status).toBe("completed");
+    expect(completed?.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "fetch_refs",
+          detail: "0件を記事根拠として取得・1件失敗",
+        }),
+      ]),
+    );
+  });
+
   test("continues saving a draft when image generation fails but records the image failure detail", async () => {
     const { fetchUrlContent } = await import("@/lib/server/content");
     const { generateAioArticle } = await import("@/lib/server/article-generation");

@@ -8,7 +8,11 @@ import { evaluateImageAltQuality } from "@/lib/image-alt-quality";
 import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
 import { primaryInformationLabels } from "@/lib/primary-information";
 import { truncatePromptLine } from "@/lib/prompt-text";
-import { articleContainsCanonicalSourceLink } from "@/lib/source-url";
+import {
+  articleContainsCanonicalSourceLink,
+  isUnusableFetchedSourceUrl,
+  unusableFetchedSourceUrlKeys,
+} from "@/lib/source-url";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import { compactOptionalText, truncateText } from "@/lib/utils";
 import type {
@@ -106,6 +110,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
 
   const sourceUrls = collectSourceUrls(
     result.sources,
+    [...compactPayload.fetchedReferences, ...compactPayload.fetchedCompetitors],
   );
   const sanitizedBodyHtml = ensureGeneratedSourceUrls(
     ensureGeneratedBodyStructure(
@@ -551,8 +556,31 @@ function collectReferenceTexts(
   ]);
 }
 
-function collectSourceUrls(sources: Array<{ url?: string }>) {
-  return uniqueItems(sources.map((source) => source.url ?? ""));
+function collectSourceUrls(
+  sources: Array<{ url?: string }>,
+  fetchedSources: Array<Record<string, unknown>>,
+) {
+  const unusableSourceKeys = unusableFetchedSourceUrlKeys(
+    fetchedSources.flatMap((source) =>
+      typeof source.url === "string" && typeof source.ok === "boolean"
+        ? [
+            {
+              url: source.url,
+              ok: source.ok,
+              evidenceUsable:
+                typeof source.evidenceUsable === "boolean"
+                  ? source.evidenceUsable
+                  : undefined,
+            },
+          ]
+        : [],
+    ),
+  );
+  return uniqueItems(
+    sources
+      .map((source) => source.url ?? "")
+      .filter((url) => !isUnusableFetchedSourceUrl(url, unusableSourceKeys)),
+  );
 }
 
 function collectCompetitorTexts(

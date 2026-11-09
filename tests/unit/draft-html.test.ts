@@ -70,6 +70,27 @@ describe("draft HTML rendering", () => {
     expect(html).toContain("Edited answer approved by the reviewer.");
   });
 
+  test("preserves closing copy, CTA, and source notes after an unwrapped generated FAQ", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<h2>FAQ</h2>",
+          "<h3>What is AIO?</h3><p>Old generated answer.</p>",
+          '<p class="closing-copy">まずは自社の公開工程を確認してください。</p>',
+          '<p><a href="/contact">お問い合わせはこちら</a></p>',
+          '<p>出典注記: 編集者が確認した一次資料</p>',
+        ].join(""),
+        faqItems: [{ question: "What is AIO?", answer: "Edited and approved answer." }],
+      }),
+    );
+
+    expect(html).not.toContain("Old generated answer.");
+    expect(html).toContain("Edited and approved answer.");
+    expect(html).toContain("まずは自社の公開工程を確認してください。");
+    expect(html).toContain('href="/contact"');
+    expect(html).toContain("出典注記: 編集者が確認した一次資料");
+  });
+
   test("deduplicates equivalent FAQ questions across punctuation, width, and HTML differences", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
@@ -888,6 +909,41 @@ describe("draft HTML rendering", () => {
 
     expect(html).not.toContain("https://example.com/mojibake");
     expect(html).not.toContain("https://example.com/failed");
+    expect(html).not.toContain('class="aio-source-block"');
+  });
+
+  test("does not publish an AI-declared source that the fetch result marked unusable", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: "<p>Body only.</p>",
+        aiResult: {
+          ...createSampleDraft().aiResult,
+          sources: [
+            {
+              url: "https://example.com/mojibake",
+              title: "Broken source",
+              usage_notes: "The model declared this despite the failed evidence check.",
+            },
+          ],
+        },
+        fetchedReferences: [
+          {
+            url: "https://example.com/mojibake",
+            title: "Broken source",
+            ok: true,
+            evidenceUsable: false,
+            reason: "文字化けのため記事根拠には使用しません。",
+            sourceType: "url",
+          },
+        ],
+        inputPayload: {
+          ...createSampleDraft().inputPayload,
+          references: [{ id: "ref", url: "https://example.com/mojibake", text: "" }],
+        },
+      }),
+    );
+
+    expect(html).not.toContain("https://example.com/mojibake");
     expect(html).not.toContain('class="aio-source-block"');
   });
 

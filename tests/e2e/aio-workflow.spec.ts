@@ -1195,6 +1195,9 @@ test("bulk image regeneration preserves successful images when a later image fai
   await page
     .getByTestId("reference-text-0")
     .fill("Reference text for partial image regeneration failure.");
+  await page.getByTestId("input-wizard-next").click();
+  await page.getByTestId("input-wizard-next").click();
+  await page.getByTestId("audience-type-select").selectOption("btoc");
   await page.getByTestId("article-primary-button").click();
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
@@ -1209,6 +1212,15 @@ test("bulk image regeneration preserves successful images when a later image fai
   await expect(page.getByText("一部の画像再作成に失敗しました。")).toBeVisible();
   expect(calls.generateImage).toBe(2);
   expect(calls.generateImageMaxConcurrency).toBe(2);
+  expect(calls.generateImagePrompts.join("\n")).not.toContain(
+    "suitable for a Japanese B2B article",
+  );
+  expect(calls.generateImagePrompts.join("\n")).not.toContain(
+    "premium Japanese B2B SaaS / consulting / financial whitepaper visual",
+  );
+  expect(calls.generateImagePrompts).toEqual(
+    expect.arrayContaining([expect.stringContaining("consumer-facing Japanese editorial style")]),
+  );
   await expect(page.getByTestId("image-regeneration-progress")).toHaveAttribute(
     "aria-valuenow",
     "100",

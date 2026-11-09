@@ -115,4 +115,34 @@ describe("evaluatePublicationReadiness", () => {
       expect.arrayContaining([expect.objectContaining({ id: "unsupported-numeric-claim" })]),
     );
   });
+
+  test("accepts root-relative article links while rejecting protocol-relative links", () => {
+    const relative = evaluatePublicationReadiness(
+      '<p><a href="/contact">お問い合わせ</a></p>',
+    );
+    const protocolRelative = evaluatePublicationReadiness(
+      '<p><a href="//untrusted.example.com/path">外部リンク</a></p>',
+    );
+
+    expect(relative.issues).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "broken-link" })]),
+    );
+    expect(protocolRelative.issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "broken-link" })]),
+    );
+  });
+
+  test("does not evaluate author profile numbers as article claims", () => {
+    const result = evaluatePublicationReadiness(`
+      <p>本文には数値の主張がありません。</p>
+      <section class="aio-author-block">
+        <h2>この記事の執筆者</h2>
+        <p>編集歴20年、100社以上を支援。</p>
+      </section>
+    `);
+
+    expect(result.issues).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "unsupported-numeric-claim" })]),
+    );
+  });
 });
