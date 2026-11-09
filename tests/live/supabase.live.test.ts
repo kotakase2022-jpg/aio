@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { randomUUID } from "node:crypto";
-import type { GenerationJob } from "@/types/aio";
+import type { ArticleImage, GenerationJob } from "@/types/aio";
 import {
   cleanEnvValue,
   expectLiveContractEnabled,
@@ -10,6 +10,43 @@ import {
 } from "./live-test-helpers";
 
 describe("Supabase live sandbox contract", () => {
+  test("atomically rolls back body, approval, and images when an image constraint fails", async () => {
+    loadLiveEnv();
+    expectLiveContractEnabled();
+    expectSupabaseWriteTargetConfirmed();
+    expect(cleanEnvValue(process.env.AIO_LIVE_SUPABASE_ALLOW_WRITE)).toBe("1");
+    expectRequiredEnv(["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+    vi.resetModules();
+    const { createSampleDraft } = await import("../fixtures/article");
+    const { saveDraft, getDraft } = await import("@/lib/server/drafts");
+    const id = randomUUID();
+    const sample = createSampleDraft();
+    const draft = createSampleDraft({
+      id, status: "draft", editedBodyHtml: "<p>Original disposable body</p>",
+      images: [{ ...sample.images[0], id: randomUUID() }],
+      updatedAt: new Date().toISOString(),
+    });
+    try {
+      await saveDraft(draft);
+      const before = await getDraft(id);
+      expect(before).not.toBeNull();
+      // Deliberately bypass TypeScript to exercise the database CHECK constraint.
+      const invalidImage = { ...draft.images[0], id: randomUUID(), slot: "invalid-slot" } as unknown as ArticleImage;
+      await expect(saveDraft({
+        ...draft, status: "approved", editedBodyHtml: "<p>Must never commit</p>",
+        images: [invalidImage], updatedAt: new Date(Date.now() + 1).toISOString(),
+      })).rejects.toMatchObject({ status: 500 });
+      const after = await getDraft(id);
+      expect(after?.editedBodyHtml).toBe(before?.editedBodyHtml);
+      expect(after?.status).toBe(before?.status);
+      expect(after?.images).toEqual(before?.images);
+      expect(after?.updatedAt).toBe(before?.updatedAt);
+    } finally {
+      const cleanup = await deleteSupabaseDraft(id);
+      expect(cleanup.ok).toBe(true);
+    }
+  }, 90_000);
+
   test(
     "writes, reads, lists, and cleans up a disposable generation job",
     async () => {

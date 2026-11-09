@@ -28,6 +28,37 @@ describe("OpenAI server wrapper", () => {
     expect(getImageModel()).toBe("gpt-image-2");
   });
 
+  test("keeps the timeout active until the response body finishes", async () => {
+    vi.useFakeTimers();
+    process.env.OPENAI_MAX_RETRIES = "0";
+    let requestSignal: AbortSignal | null | undefined;
+    let bodyController: ReadableStreamDefaultController<Uint8Array>;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, options: RequestInit) => {
+      requestSignal = options.signal;
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          bodyController = controller;
+          requestSignal?.addEventListener("abort", () => {
+            controller.error(new DOMException("Timed out reading body", "AbortError"));
+          }, { once: true });
+        },
+      }));
+    }));
+    const result = createStructuredResponse({
+      instructions: "Return JSON", input: "test", schemaName: "timeout_schema",
+      schema: { type: "object" }, timeoutMs: 100,
+    }).catch((error: unknown) => error);
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(requestSignal?.aborted).toBe(true);
+      expect(await result).toMatchObject({ status: 504 });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      bodyController!.error(new Error("Test cleanup"));
+      await result;
+    }
+  });
+
   test("fails with Japanese setup guidance when OPENAI_API_KEY is missing", async () => {
     delete process.env.OPENAI_API_KEY;
     vi.stubGlobal("fetch", vi.fn());

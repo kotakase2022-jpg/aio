@@ -1,0 +1,16 @@
+.git
+.vercel
+.env*
+node_modules
+.next
+.next-*
+.data
+public/uploads
+output
+coverage
+playwright-report
+test-results
+.verification-files
+*.tsbuildinfo
+*.pem
+*-debug.log*

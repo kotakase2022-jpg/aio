@@ -16,67 +16,49 @@ beforeEach(() => {
 });
 
 describe("draft persistence with Supabase", () => {
-  test("upserts current image rows before removing stale rows", async () => {
+  test("sends draft and image rows in one atomic save request", async () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { saveDraft } = await import("@/lib/server/drafts");
     const draft = createSampleDraft({ id: "draft-supabase-save" });
-    const upsert = vi.fn(async () => ({ error: null }));
-    const cleanupNot = vi.fn(async () => ({ error: null }));
-    const cleanupEq = vi.fn(() => ({ not: cleanupNot }));
-    const deleteImages = vi.fn(() => ({ eq: cleanupEq }));
-    const upsertImages = vi.fn(async () => ({ error: null }));
-    const from = vi.fn((table: string) => {
-      if (table === "article_drafts") {
-        return { upsert };
-      }
-
-      return {
-        delete: deleteImages,
-        upsert: upsertImages,
-      };
-    });
+    const rpc = vi.fn(async () => ({ error: null }));
+    const from = vi.fn();
 
     vi.mocked(getSupabaseAdmin).mockReturnValue({
-      from,
+      from, rpc,
     } as unknown as ReturnType<typeof getSupabaseAdmin>);
 
     const result = await saveDraft(draft);
 
     expect(result).toEqual({ draft, storageMode: "supabase" });
-    expect(from).toHaveBeenCalledWith("article_drafts");
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(from).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("aio_save_draft", {
+      draft_row: expect.objectContaining({
         id: "draft-supabase-save",
         input_payload: draft.inputPayload,
         edited_title: draft.editedTitle,
         generated_image_urls: [transparentPixelDataUrl],
         status: "draft",
       }),
-    );
-    expect(upsertImages).toHaveBeenCalledWith([
-      expect.objectContaining({
+      image_rows: [expect.objectContaining({
         id: draft.images[0].id,
         draft_id: "draft-supabase-save",
         slot: "featured",
         image_url: transparentPixelDataUrl,
         storage_path: "generated/featured.png",
         source: "generated",
-      }),
-    ]);
-    expect(cleanupEq).toHaveBeenCalledWith("draft_id", "draft-supabase-save");
-    expect(cleanupNot).toHaveBeenCalledWith("id", "in", `(${draft.images[0].id})`);
+      })],
+      expected_updated_at: null,
+    });
   });
 
   test("returns Japanese errors when Supabase draft saving fails", async () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { saveDraft } = await import("@/lib/server/drafts");
     const draft = createSampleDraft({ id: "draft-supabase-save-failure" });
-    const from = vi.fn(() => ({
-      upsert: vi.fn(async () => ({ error: { message: "row upsert failed" } })),
-    }));
+    const rpc = vi.fn(async () => ({ error: { message: "row upsert failed" } }));
 
     vi.mocked(getSupabaseAdmin).mockReturnValue({
-      from,
+      rpc,
     } as unknown as ReturnType<typeof getSupabaseAdmin>);
 
     await expect(saveDraft(draft)).rejects.toMatchObject({
@@ -90,22 +72,14 @@ describe("draft persistence with Supabase", () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { saveDraft } = await import("@/lib/server/drafts");
     const draft = createSampleDraft({ id: "draft-supabase-image-failure" });
-    const from = vi.fn((table: string) => {
-      if (table === "article_drafts") {
-        return { upsert: vi.fn(async () => ({ error: null })) };
-      }
-
-      return {
-        upsert: vi.fn(async () => ({ error: { message: "image upsert failed" } })),
-      };
-    });
+    const rpc = vi.fn(async () => ({ error: { message: "image upsert failed" } }));
 
     vi.mocked(getSupabaseAdmin).mockReturnValue({
-      from,
+      rpc,
     } as unknown as ReturnType<typeof getSupabaseAdmin>);
 
     await expect(saveDraft(draft)).rejects.toMatchObject({
-      message: "下書き画像の保存に失敗しました。",
+      message: "下書きの保存に失敗しました。",
       detail: "image upsert failed",
       status: 500,
     });
@@ -127,10 +101,11 @@ describe("draft persistence with Supabase", () => {
     });
     vi.mocked(getSupabaseAdmin).mockReturnValue({
       from,
+      rpc: vi.fn(async () => ({ error: { message: "upsert failed" } })),
     } as unknown as ReturnType<typeof getSupabaseAdmin>);
 
     await expect(saveDraft(draft)).rejects.toMatchObject({
-      message: "下書き画像の保存に失敗しました。",
+      message: "下書きの保存に失敗しました。",
     });
     expect(deleteImages).not.toHaveBeenCalled();
   });

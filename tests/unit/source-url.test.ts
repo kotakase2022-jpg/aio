@@ -90,6 +90,23 @@ describe("source URL helpers", () => {
     ).toBe(false);
   });
 
+  test.each([
+    '<!-- <a href="https://example.com/reference">Source</a> -->',
+    '<a data-href="https://example.com/reference">Source</a>',
+    '<a href="/contact" data-href="https://example.com/reference">Contact</a>',
+    '<a data-href="https://example.com/reference" href="/contact">Contact</a>',
+    '<script>const example = \'<a href="https://example.com/reference">Source</a>\';</script>',
+  ])("does not treat inert markup or data attributes as a source link: %s", (html) => {
+    expect(articleContainsCanonicalSourceLink("https://example.com/reference", html)).toBe(false);
+  });
+
+  test("uses the real href even when a data-href attribute follows it", () => {
+    expect(articleContainsCanonicalSourceLink(
+      "https://example.com/reference",
+      '<a href="https://example.com/reference" data-href="https://other.example/">Source</a>',
+    )).toBe(true);
+  });
+
   test("keeps path-only candidates separate from meaningful query URLs", () => {
     expect(sourceUrlCandidates("https://www.example.com/reference?id=primary&Amp;page=1")).toEqual(
       expect.arrayContaining([

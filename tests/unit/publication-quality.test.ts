@@ -2,6 +2,70 @@ import { describe, expect, test } from "vitest";
 import { evaluatePublicationReadiness } from "@/lib/publication-quality";
 
 describe("evaluatePublicationReadiness", () => {
+  test.each([
+    ["9.5%", "1.5%"],
+    ["９．５％", "１．５％"],
+    ["12.5%", "12.6%"],
+  ])("does not accept %s as supported by %s", (claim, evidence) => {
+    const result = evaluatePublicationReadiness(`<p>Rate: ${claim}.</p>`, {
+      evidenceTexts: [`Rate: ${evidence}.`],
+    });
+
+    expect(result.publishReady).toBe(false);
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      id: "unsupported-numeric-claim",
+      detail: expect.stringContaining(claim),
+    }));
+  });
+
+  test.each(["1.5%", "１．５％"])("accepts a supported complete decimal: %s", (claim) => {
+    const result = evaluatePublicationReadiness(`<p>Rate: ${claim}. Review annually.</p>`, {
+      evidenceTexts: ["Rate: 1.5%. Review annually."],
+    });
+
+    expect(result.publishReady).toBe(true);
+  });
+
+  test("retains source attribution and conditions around decimal claims", () => {
+    const result = evaluatePublicationReadiness("<p>手数料は1.5%です。</p>", {
+      evidenceTexts: ["当社の支援事例では、必要書類が揃った場合に手数料は1.5%でした。"],
+    });
+
+    expect(result.issues).toContainEqual(expect.objectContaining({ id: "condition-generalization" }));
+  });
+
+  test.each([
+    "全員に10万円が支給されます。",
+    "会員も含め全員に10万円が支給されます。",
+    "非会員のみ10万円が支給されます。",
+  ])("requires the exclusive source audience despite a shared predicate: %s", (claim) => {
+    const result = evaluatePublicationReadiness(`<p>${claim}</p>`, {
+      evidenceTexts: ["会員のみ10万円が支給されます。"],
+    });
+
+    expect(result.issues).toContainEqual(expect.objectContaining({ id: "condition-generalization" }));
+  });
+
+  test.each([
+    "会員のみ10万円が支給されます。",
+    "会員に限り10万円が支給されます。",
+  ])("accepts the same explicit exclusive audience: %s", (claim) => {
+    const result = evaluatePublicationReadiness(`<p>${claim}</p>`, {
+      evidenceTexts: ["会員のみ10万円が支給されます。"],
+    });
+
+    expect(result.publishReady).toBe(true);
+  });
+
+  test.each([
+    ["Can I use C++?", "Can I use C#?"],
+    ["Is 1.5% supported?", "Is 15% supported?"],
+  ])("does not label distinct questions %s and %s as duplicates", (first, second) => {
+    const result = evaluatePublicationReadiness(`<h3>${first}</h3><p>First.</p><h3>${second}</h3><p>Second.</p>`);
+
+    expect(result.issues).not.toContainEqual(expect.objectContaining({ id: "duplicate-faq" }));
+  });
+
   test("blocks an unsupported number even when the draft adds 約 or 目安", () => {
     const result = evaluatePublicationReadiness(
       "<h2>審査期間</h2><p>審査は約30日が目安です。</p>",

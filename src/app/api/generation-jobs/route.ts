@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { z } from "zod";
 import { assertRequiredArticleGenerationInputs } from "@/lib/server/article-form-validation";
+import { articleFormSchema } from "@/lib/server/article-form-schema";
 import { runArticleGenerationJob } from "@/lib/server/article-generation-job-runner";
 import { createGenerationJob } from "@/lib/server/generation-jobs";
 import { errorJson, okJson } from "@/lib/server/http";
@@ -18,8 +19,9 @@ export async function POST(request: Request) {
   try {
     const body = schema.parse(await request.json());
     assertRequiredArticleGenerationInputs(body.form);
+    const form = articleFormSchema.parse(body.form);
     const job = await createGenerationJob({
-      inputPayload: body.form as ArticleFormPayload,
+      inputPayload: form as ArticleFormPayload,
       competitorResearch: body.competitorResearch as CompetitorResearchResult | null | undefined,
     });
 

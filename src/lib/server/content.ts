@@ -87,6 +87,8 @@ export async function fetchUrlContent(
         "",
     );
     removeBoilerplate($);
+    // Keep adjacent blocks from joining into a different word or numeric claim.
+    $("h1,h2,h3,h4,h5,h6,p,div,li,tr,td,th,section,article,br").before("\n").after("\n");
     const root = findContentRoot($);
     const headings = cleanText(root.find("h1, h2, h3").text());
     const paragraphs = root
@@ -232,10 +234,8 @@ function hasSuspectedMojibake(value: string) {
     .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
     .replace(/<[^>]+>/g, " ");
   const replacementCount = (visibleValue.match(/\uFFFD/g) ?? []).length;
-  const visibleLength = Math.max(1, cleanText(visibleValue).length);
   return (
-    replacementCount >= 2 ||
-    replacementCount / visibleLength > 0.005 ||
+    replacementCount > 0 ||
     /(?:譁�|蜿門|縺[\u0080-\uFFFF]|繧[\u0080-\uFFFF])/.test(visibleValue)
   );
 }
@@ -308,10 +308,11 @@ function findContentRoot($: cheerio.CheerioAPI) {
 
 function classifyPage({ $, root, title, headings, paragraphText, articleText }: PageClassificationInput) {
   const linkCount = root.find("a[href]").length;
+  const pageLinkCount = $("body a[href]").length;
   const paragraphCount = root.find("p").filter((_, element) => cleanText($(element).text()).length >= 20).length;
   const listLabel = `${title} ${headings}`;
   const looksLikeListing =
-    (/(一覧|検索結果|記事一覧|ニュース一覧|お知らせ一覧)/.test(listLabel) && linkCount >= 6) ||
+    (/(一覧|検索結果|記事一覧|ニュース一覧|お知らせ一覧)/.test(listLabel) && pageLinkCount >= 6) ||
     (linkCount >= 12 && paragraphText.length < Math.max(160, articleText.length * 0.35));
 
   if (looksLikeListing) return "listing" as const;

@@ -40,6 +40,9 @@ export async function regenerateDraftImages({
       "ドラフトを保存してから画像を再作成してください。",
     );
   }
+  if (Date.parse(draft.updatedAt) < Date.parse(persistedDraft.updatedAt)) {
+    throw new ApiError("ドラフトが更新されました。最新の内容を開き直してください。", 409);
+  }
   const preparedRequests = prepareRequests(draft, persistedDraft, requests);
   const outcomes = await Promise.allSettled(
     preparedRequests.map(async (request) => ({
@@ -91,10 +94,15 @@ export async function regenerateDraftImages({
   let savedDraft: ArticleDraft;
 
   try {
-    const saved = await saveDraft(nextDraft);
+    const saved = await saveDraft(nextDraft, persistedDraft.updatedAt);
     savedDraft = saved.draft;
   } catch (error) {
-    return cleanupNewImagesOrThrow(newPaths, error);
+    // A transport failure can occur after the transaction commits. Never delete an
+    // asset until a fresh read proves it was not attached to the saved draft.
+    const persistedAfterFailure = await getDraft(draft.id).catch(() => undefined);
+    if (persistedAfterFailure === undefined) throw error;
+    const attachedPaths = new Set(persistedAfterFailure?.images.map((image) => image.path));
+    return cleanupNewImagesOrThrow(newPaths.filter((objectPath) => !attachedPaths.has(objectPath)), error);
   }
 
   const warnings: string[] = [];
@@ -113,7 +121,10 @@ export async function regenerateDraftImages({
     .filter((objectPath) => !newPaths.includes(objectPath));
 
   try {
-    await deleteStoredAssets([...new Set(replacedPaths)]);
+    // Published HTML still references these public URLs, including the featured image in the body.
+    if (persistedDraft.status !== "posted" && !persistedDraft.wordpressPostUrl) {
+      await deleteStoredAssets([...new Set(replacedPaths)]);
+    }
   } catch (error) {
     warnings.push(`旧画像の整理に失敗しました: ${readableError(error)}`);
   }

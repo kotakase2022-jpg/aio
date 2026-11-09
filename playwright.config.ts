@@ -1,7 +1,11 @@
 import { defineConfig } from "@playwright/test";
 
 const port = Number(process.env.E2E_PORT ?? 4310);
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${port}`;
+// Never point the mutation-oriented fixture suite at a deployed app.
+const baseURL = `http://localhost:${port}`;
+if (process.env.PLAYWRIGHT_BASE_URL && process.env.PLAYWRIGHT_BASE_URL !== baseURL) {
+  throw new Error("E2E must use the isolated local server; use E2E_PORT to change its port.");
+}
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -26,9 +30,9 @@ export default defineConfig({
     navigationTimeout: 30_000,
   },
   webServer: {
-    command: `npm run dev -- --port ${port}`,
+    command: `npm run build && npm run start -- --port ${port}`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
     env: {
       DEMO_ACCESS_CODE: "202607",
@@ -36,6 +40,7 @@ export default defineConfig({
       NEXT_PUBLIC_SUPABASE_URL: "",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
       SUPABASE_SERVICE_ROLE_KEY: "",
+      SUPABASE_GATEWAY_URL: "",
       SUPABASE_GATEWAY_TOKEN: "",
       OPENAI_API_KEY: "test-openai-key-not-used-in-e2e",
       WORDPRESS_ENCRYPTION_KEY: "test-wordpress-key-for-e2e-only",

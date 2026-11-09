@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 export function normalizeSourceUrl(url: string) {
   const trimmed = normalizeSourceUrlValue(url).replace(/[)）、。,\s]+$/g, "");
   return /^https?:\/\//i.test(trimmed) ? trimmed.replace(/\/$/, "") : "";
@@ -86,17 +88,12 @@ export function articleContainsCanonicalSourceUrl(url: string, articleText: stri
 
 export function articleContainsCanonicalSourceLink(url: string, articleHtml: string) {
   const expectedKey = canonicalSourceUrlKey(url);
-  const hrefPattern = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = hrefPattern.exec(articleHtml))) {
-    const href = match[1] ?? match[2] ?? match[3] ?? "";
-    if (canonicalSourceUrlKey(href) === expectedKey) {
-      return true;
-    }
-  }
-
-  return false;
+  const $ = cheerio.load(articleHtml, null, false);
+  $("script, style, noscript, template").remove();
+  return $("a[href]").toArray().some((element) => {
+    const href = ($(element).attr("href") ?? "").trim();
+    return /^https?:\/\//i.test(href) && canonicalSourceUrlKey(href) === expectedKey;
+  });
 }
 
 export function extractHttpUrls(text: string) {

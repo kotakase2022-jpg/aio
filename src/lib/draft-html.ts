@@ -1,3 +1,4 @@
+import * as cheerio from "cheerio";
 import type { ArticleDraft, ArticleImage, AuthorInput, FaqItem } from "@/types/aio";
 import { sanitizeArticleHtml } from "@/lib/article-html";
 import {
@@ -21,7 +22,9 @@ export function buildDraftArticleHtml(
 ) {
   const publicBody = removeInternalProcessNotes(draft.editedBodyHtml);
   const withImages = replaceDraftImageReferences(publicBody, draft.images, options);
-  const withFaq = appendFaqBlockWhenNeeded(withImages, draft.faqItems);
+  const withFaq = appendFaqBlockWhenNeeded(withImages, draft.faqItems, {
+    preserveUnmatchedBodyFaq: true,
+  });
   const withAuthor = appendAuthorBlockWhenNeeded(withFaq, draft.author, options);
   return sanitizeArticleHtml(appendSourceBlockWhenNeeded(withAuthor, draft));
 }
@@ -65,9 +68,17 @@ export function replaceDraftImageReferences(
   }, html);
 }
 
-export function appendFaqBlockWhenNeeded(html: string, faqItems: FaqItem[]) {
+export function appendFaqBlockWhenNeeded(
+  html: string,
+  faqItems: FaqItem[],
+  options: { preserveUnmatchedBodyFaq?: boolean } = {},
+) {
   const items = canonicalizeFaqItems(faqItems);
-  const withoutManagedFaq = removeGeneratedFaqBlocks(removeManagedFaqBlock(html), items);
+  const withoutManagedFaq = removeGeneratedFaqBlocks(
+    removeManagedFaqBlock(html),
+    items,
+    options.preserveUnmatchedBodyFaq ?? false,
+  );
   if (items.length === 0) {
     return withoutManagedFaq;
   }
@@ -75,7 +86,7 @@ export function appendFaqBlockWhenNeeded(html: string, faqItems: FaqItem[]) {
   return joinHtmlBlocks(withoutManagedFaq, buildFaqBlockHtml(items));
 }
 
-function canonicalizeFaqItems(faqItems: FaqItem[]) {
+export function canonicalizeFaqItems(faqItems: FaqItem[]) {
   const items: Array<{ question: string; answer: string }> = [];
   const indexByQuestion = new Map<string, number>();
 
@@ -102,11 +113,13 @@ function canonicalizeFaqItems(faqItems: FaqItem[]) {
   return items;
 }
 
-function normalizeFaqQuestion(value: string) {
-  return decodeBasicHtmlEntities(stripHtmlText(value))
+export function normalizeFaqQuestion(value: string) {
+  return faqPlainText(value)
     .normalize("NFKC")
     .toLowerCase()
-    .replace(/[\s\p{P}\p{S}]+/gu, "");
+    .replace(/[\s、。?!]+/g, "")
+    .replace(/(?<!\d),(?!\d)/g, "")
+    .replace(/\.$/, "");
 }
 
 function faqPlainText(value: string) {
@@ -314,30 +327,82 @@ function removeManagedFaqBlock(html: string) {
 function removeGeneratedFaqBlocks(
   html: string,
   faqItems: Array<{ question: string; answer: string }>,
+  preserveUnmatched: boolean,
 ) {
+  const $ = cheerio.load(html, { sourceCodeLocationInfo: true }, false);
   const ranges: Array<{ start: number; end: number }> = [];
   const canonicalQuestionKeys = new Set(
     faqItems.map((item) => normalizeFaqQuestion(item.question)).filter(Boolean),
   );
-  const headingPattern = /<h([1-6])\b[^>]*>[\s\S]*?<\/h\1>/gi;
-  let headingMatch: RegExpExecArray | null;
-
-  while ((headingMatch = headingPattern.exec(html))) {
-    if (!isFaqSectionHeading(headingMatch[0])) {
+  const headings = $("h1, h2, h3, h4, h5, h6").toArray();
+  for (const [index, heading] of headings.entries()) {
+    if (!isFaqSectionHeading($(heading).text())) {
       continue;
     }
 
-    const end = findGeneratedFaqContentEnd(
-      html,
-      headingPattern.lastIndex,
-      canonicalQuestionKeys,
+    const scopeEnd = heading.parent?.sourceCodeLocation?.endOffset ?? html.length;
+    const section = $(heading).closest("section").get(0);
+    const questions = [];
+    for (const candidate of headings.slice(index + 1)) {
+      const text = $(candidate).text().trim();
+      if (
+        (candidate.sourceCodeLocation?.startOffset ?? html.length) >= scopeEnd ||
+        $(candidate).closest("section").get(0) !== section ||
+        !/^h[34]$/.test(candidate.tagName) ||
+        (!canonicalQuestionKeys.has(normalizeFaqQuestion(text)) && !looksLikeFaqQuestion(text))
+      ) {
+        break;
+      }
+      questions.push(candidate);
+    }
+
+    const matchedQuestions = questions.filter(
+      (question) => !preserveUnmatched || canonicalQuestionKeys.has(normalizeFaqQuestion($(question).text())),
     );
-    ranges.push({ start: headingMatch.index, end });
-    headingPattern.lastIndex = end;
+    const headingLocation = heading.sourceCodeLocation;
+    if (headingLocation && (!preserveUnmatched || (matchedQuestions.length > 0 && matchedQuestions.length === questions.length))) {
+      ranges.push({ start: headingLocation.startOffset, end: headingLocation.endOffset });
+    }
+
+    for (const question of matchedQuestions) {
+      const location = question.sourceCodeLocation;
+      if (!location) continue;
+      ranges.push({ start: location.startOffset, end: location.endOffset });
+
+      const nextQuestion = questions[questions.indexOf(question) + 1];
+      const hasOwnWrapper = question.parent && question.parent !== heading.parent &&
+        $(question.parent).find("h1, h2, h3, h4, h5, h6").length === 1;
+      const boundedAnswer = hasOwnWrapper || nextQuestion?.parent === question.parent;
+      const siblings = question.parent?.children ?? [];
+      let answerCount = 0;
+      for (const sibling of siblings.slice(siblings.indexOf(question) + 1)) {
+        if (sibling.type === "comment" || (sibling.type === "text" && !sibling.data.trim())) continue;
+        if (sibling.type !== "tag") break;
+        const block = $(sibling);
+        const links = block.find("a[href]");
+        const location = sibling.sourceCodeLocation;
+        if (
+          !location ||
+          !/^(p|div|ul|ol|table|blockquote)$/.test(sibling.tagName) ||
+          block.find("h1, h2, h3, h4, h5, h6").length > 0 ||
+          block.is(".closing-copy, .aio-source-block, .aio-author-block") ||
+          block.find(".closing-copy, .aio-source-block, .aio-author-block").length > 0 ||
+          (links.length > 0 && links.text().trim() === block.text().trim()) ||
+          (!boundedAnswer && answerCount > 0)
+        ) {
+          break;
+        }
+        // Only wrappers or the next question bound a multi-block answer. An unwrapped
+        // final answer must not consume ambiguous closing paragraphs or source notes.
+        ranges.push({ start: location.startOffset, end: location.endOffset });
+        answerCount += 1;
+      }
+    }
   }
 
+  // Source offsets preserve every byte outside the selected nodes; never serialize the DOM.
   return ranges
-    .reverse()
+    .sort((left, right) => right.start - left.start)
     .reduce(
       (currentHtml, range) =>
         `${currentHtml.slice(0, range.start)}${currentHtml.slice(range.end)}`,
@@ -364,49 +429,6 @@ function looksLikeFaqQuestion(value: string) {
   );
 }
 
-function findGeneratedFaqContentEnd(
-  html: string,
-  fromIndex: number,
-  canonicalQuestionKeys: Set<string>,
-) {
-  let cursor = skipHtmlSpacing(html, fromIndex);
-  let lastEnd = fromIndex;
-
-  while (cursor < html.length) {
-    const questionMatch = html
-      .slice(cursor)
-      .match(/^<h([34])\b[^>]*>([\s\S]*?)<\/h\1>/i);
-    if (!questionMatch) {
-      break;
-    }
-
-    const question = decodeBasicHtmlEntities(stripHtmlText(questionMatch[2])).trim();
-    const questionKey = normalizeFaqQuestion(question);
-    if (!canonicalQuestionKeys.has(questionKey) && !looksLikeFaqQuestion(question)) {
-      break;
-    }
-
-    const questionEnd = cursor + questionMatch[0].length;
-    const answerStart = skipHtmlSpacing(html, questionEnd);
-    const answerMatch = html
-      .slice(answerStart)
-      .match(/^<(p|div|ul|ol|table|blockquote)\b[^>]*>[\s\S]*?<\/\1>/i);
-
-    lastEnd = questionEnd;
-    if (answerMatch) {
-      lastEnd = answerStart + answerMatch[0].length;
-    }
-    cursor = skipHtmlSpacing(html, lastEnd);
-  }
-
-  return lastEnd;
-}
-
-function skipHtmlSpacing(html: string, fromIndex: number) {
-  const spacing = html.slice(fromIndex).match(/^(?:\s|<!--[\s\S]*?-->)+/);
-  return fromIndex + (spacing?.[0].length ?? 0);
-}
-
 function removeManagedSourceBlock(html: string) {
   return removeSectionsByClass(html, "aio-source-block");
 }
@@ -430,7 +452,8 @@ function removeSectionsByClass(html: string, className: string) {
       findSectionEnd(html, sectionStart.lastIndex) ??
       findUnclosedManagedSectionEnd(html, sectionStart.lastIndex);
     if (end > sectionStart.lastIndex) {
-      ranges.push({ start: match.index, end });
+      const leadingSpacing = html.slice(0, match.index).match(/\s*$/)?.[0].length ?? 0;
+      ranges.push({ start: match.index - leadingSpacing, end });
       sectionStart.lastIndex = end;
     }
   }
@@ -536,13 +559,11 @@ function collectRenderableSources(draft: ArticleDraft) {
   // New drafts declare only sources that support published claims. Older drafts may not
   // have that field populated, so keep their historical URL fallback for compatibility.
   return (declaredSources.some((source) => source.url)
-    ? declaredSources.filter(
-        (source) => !isUnusableFetchedSourceUrl(source.url, unusableSourceKeys),
-      )
+    ? declaredSources
     : legacyFallbackSources)
     .filter((source) => {
       const sourceKey = canonicalSourceUrlKey(source.url);
-      if (!source.url || seen.has(sourceKey)) {
+      if (!source.url || unusableSourceKeys.has(sourceKey) || seen.has(sourceKey)) {
         return false;
       }
       seen.add(sourceKey);

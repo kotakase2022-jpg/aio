@@ -59,6 +59,12 @@ Deno.serve(async (request) => {
         return ok(await getWordpressConnection(payload));
       case "insert_wordpress_post":
         return ok(await insertWordpressPost(payload));
+      case "reserve_wordpress_post":
+        return ok(await reserveWordpressPost(payload));
+      case "finish_wordpress_post":
+        return ok(await finishWordpressPost(payload));
+      case "release_wordpress_post":
+        return ok(await releaseWordpressPost(payload));
       case "upload_asset":
         return ok(await uploadAsset(payload));
       case "delete_assets":
@@ -75,6 +81,14 @@ Deno.serve(async (request) => {
 
 async function upsertJob(payload: Payload) {
   const job = requireRecord(payload.job, "job");
+  if (typeof payload.expectedUpdatedAt === "string") {
+    const { data, error } = await supabase.from("article_inputs")
+      .update({ input_payload: job, updated_at: job.updatedAt })
+      .eq("id", requireString(job.id, "job.id"))
+      .eq("updated_at", payload.expectedUpdatedAt).select("id").maybeSingle();
+    if (error) throw new HttpError(error.message, 500);
+    return { job: data ? job : null };
+  }
   const { error } = await supabase.from("article_inputs").upsert({
     id: requireString(job.id, "job.id"),
     input_payload: job,
@@ -119,27 +133,12 @@ async function upsertDraft(payload: Payload) {
   const images = Array.isArray(payload.images) ? payload.images : [];
   const draftId = requireString(row.id, "row.id");
 
-  const { error } = await supabase.from("article_drafts").upsert(row);
-  if (error) throw new HttpError(error.message, 500);
-
-  if (images.length > 0) {
-    const { error: imageError } = await supabase.from("article_images").upsert(images);
-    if (imageError) throw new HttpError(imageError.message, 500);
-
-    const imageIds = images.map((image) => requireString(image.id, "images[].id"));
-    const { error: cleanupError } = await supabase
-      .from("article_images")
-      .delete()
-      .eq("draft_id", draftId)
-      .not("id", "in", `(${imageIds.join(",")})`);
-    if (cleanupError) throw new HttpError(cleanupError.message, 500);
-  } else {
-    const { error: deleteError } = await supabase
-      .from("article_images")
-      .delete()
-      .eq("draft_id", draftId);
-    if (deleteError) throw new HttpError(deleteError.message, 500);
-  }
+  const { error } = await supabase.rpc("aio_save_draft", {
+    draft_row: row,
+    image_rows: images,
+    expected_updated_at: payload.expectedUpdatedAt ?? null,
+  });
+  if (error) throw new HttpError(error.message, error.code === "40001" ? 409 : 500);
 
   return { draftId };
 }
@@ -189,6 +188,34 @@ async function insertWordpressPost(payload: Payload) {
   const { error } = await supabase.from("wordpress_posts").insert(row);
   if (error) throw new HttpError(error.message, 500);
   return { id: row.id ?? null };
+}
+
+async function reserveWordpressPost(payload: Payload) {
+  const row = requireRecord(payload.row, "row");
+  const draftId = requireString(row.draft_id, "draft_id");
+  const { data, error: readError } = await supabase.from("wordpress_posts")
+    .select("id,post_url").eq("draft_id", draftId).limit(1).maybeSingle();
+  if (readError) throw new HttpError(readError.message, 500);
+  if (data) return { reserved: false, postUrl: data.post_url };
+  const { error } = await supabase.from("wordpress_posts").insert({ ...row, id: draftId });
+  if (error?.code === "23505") return { reserved: false };
+  if (error) throw new HttpError(error.message, 500);
+  return { reserved: true };
+}
+
+async function finishWordpressPost(payload: Payload) {
+  const { error } = await supabase.from("wordpress_posts")
+    .update({ post_url: requireString(payload.postUrl, "postUrl") })
+    .eq("id", requireString(payload.draftId, "draftId"));
+  if (error) throw new HttpError(error.message, 500);
+  return {};
+}
+
+async function releaseWordpressPost(payload: Payload) {
+  const { error } = await supabase.from("wordpress_posts").delete()
+    .eq("id", requireString(payload.draftId, "draftId")).is("post_url", null);
+  if (error) throw new HttpError(error.message, 500);
+  return {};
 }
 
 async function uploadAsset(payload: Payload) {
@@ -263,7 +290,7 @@ function rowToJob(row: Payload) {
     ...payload,
     id: String(payload.id ?? row.id),
     createdAt: String(payload.createdAt ?? row.created_at ?? new Date().toISOString()),
-    updatedAt: String(payload.updatedAt ?? row.updated_at ?? new Date().toISOString()),
+    updatedAt: String(row.updated_at ?? payload.updatedAt ?? new Date().toISOString()),
   };
 }
 

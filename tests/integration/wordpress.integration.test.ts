@@ -242,7 +242,7 @@ describe("WordPress connection and posting", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        Response.json({ link: "https://wordpress.example.com/large-response" }, { status: 201 }),
+        Response.json({ id: 123, link: "https://wordpress.example.com/large-response" }, { status: 201 }),
       ),
     );
 
@@ -278,7 +278,7 @@ describe("WordPress connection and posting", () => {
       "fetch",
       vi.fn(async (_url: string | URL, init?: RequestInit) => {
         postedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-        return Response.json({ link: "https://wordpress.example.com/canonical" }, { status: 201 });
+        return Response.json({ id: 124, link: "https://wordpress.example.com/canonical" }, { status: 201 });
       }),
     );
     const draft = createSampleDraft({
@@ -354,7 +354,7 @@ describe("WordPress connection and posting", () => {
           }
           if (url.endsWith("/wp-json/wp/v2/posts")) {
             return Response.json(
-              { link: "https://wordpress.example.com/local-featured" },
+              { id: 125, link: "https://wordpress.example.com/local-featured" },
               { status: 201 },
             );
           }

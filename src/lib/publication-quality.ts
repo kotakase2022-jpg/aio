@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { normalizeFaqQuestion } from "@/lib/draft-html";
 import { canonicalSourceUrlKey } from "@/lib/source-url";
 
 export type PublicationIssueSeverity = "blocker" | "warning";
@@ -139,7 +140,7 @@ function detectDuplicateFaq(html: string): PublicationIssue[] {
       return;
     }
 
-    const key = normalizeQuestion(question);
+    const key = normalizeFaqQuestion(question);
     if (!key) {
       return;
     }
@@ -263,6 +264,11 @@ function detectNumericIssues(html: string, evidenceTexts: string[]): Publication
 }
 
 function preservesEvidenceScope(articleSentence: string, evidenceSentence: string, claim: string) {
+  const exclusiveSubjects = exclusiveScopeSubjects(evidenceSentence);
+  const articleExclusiveSubjects = new Set(exclusiveScopeSubjects(articleSentence));
+  if (exclusiveSubjects.some((subject) => !articleExclusiveSubjects.has(subject))) {
+    return false;
+  }
   if (
     sourceAttributionPattern.test(evidenceSentence) &&
     !articleAttributionPattern.test(articleSentence)
@@ -277,6 +283,14 @@ function preservesEvidenceScope(articleSentence: string, evidenceSentence: strin
 
   const normalizedArticle = articleSentence.normalize("NFKC").replace(/\s+/g, "");
   return qualifiers.some((qualifier) => normalizedArticle.includes(qualifier));
+}
+
+function exclusiveScopeSubjects(value: string) {
+  // Match explicit noun restrictions, not arbitrary paraphrases or sentence meaning.
+  return Array.from(
+    value.normalize("NFKC").matchAll(/([\p{Script=Han}\p{Script=Katakana}A-Za-z0-9_-]+)\s*(?:のみ|に限(?:り|る|って|定))/gu),
+    (match) => match[1],
+  );
 }
 
 function extractScopeQualifiers(value: string, claim: string) {
@@ -305,7 +319,7 @@ function visibleText(html: string) {
 
 function extractSentences(value: string) {
   return value
-    .split(/[。．.!！？?\n]+/)
+    .split(/[。!！？?\n]+|(?<![0-9０-９])[.．]|[.．](?![0-9０-９])/)
     .map(cleanText)
     .filter(Boolean);
 }
@@ -315,13 +329,6 @@ function normalizeNumericClaim(value: string) {
     .normalize("NFKC")
     .replace(/[\s,，]/g, "")
     .toLowerCase();
-}
-
-function normalizeQuestion(value: string) {
-  return value
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[\s\p{P}\p{S}]+/gu, "");
 }
 
 function looksLikeQuestion(value: string) {

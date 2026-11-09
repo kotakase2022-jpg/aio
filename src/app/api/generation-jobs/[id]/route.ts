@@ -1,4 +1,5 @@
 import { getGenerationJob } from "@/lib/server/generation-jobs";
+import { getDraft } from "@/lib/server/drafts";
 import { errorJson, okJson } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -22,7 +23,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
       );
     }
 
-    return okJson({ job });
+    const draftId = job.draftId ?? job.draft?.id;
+    const draft = draftId ? await getDraft(draftId) : null;
+    return okJson({ job: draft ? { ...job, draft } : job });
   } catch (error) {
     return errorJson(error);
   }

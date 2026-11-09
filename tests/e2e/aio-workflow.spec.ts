@@ -1820,6 +1820,23 @@ test("a fetched short page is shown as successful transport but unusable article
   expect(errors()).toEqual([]);
 });
 
+test("conflicting fetch results do not reintroduce a legacy source or a missing-link warning", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const job = createCompletedGenerationJob();
+  const url = "https://example.com/reference";
+  job.draft!.aiResult.sources = [];
+  job.draft!.fetchedReferences = [{ url, ok: true, evidenceUsable: true, text: "Usable reference" }];
+  job.draft!.fetchedCompetitors = [{ url, ok: false, reason: "取得失敗" }];
+  await mockCommonApiRoutes(page, job);
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Manual fallback text for conflicting fetches.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("article")).toBeVisible();
+  await expect(page.getByRole("article").locator(`a[href="${url}"]`)).toHaveCount(0);
+  await expect(page.getByTestId("publication-readiness-issue").filter({ hasText: "出典リンク不足" })).toHaveCount(0);
+  expect(errors()).toEqual([]);
+});
+
 test("competitor URL fetch failure is visible while manual competitor notes still generate a draft", async ({
   page,
 }) => {
@@ -2538,6 +2555,79 @@ test("WordPress connection validation errors are normalized near the connection 
   expect(errors()).toEqual([]);
 });
 
+test("committed writes show auxiliary failure warnings without inviting duplicate posting", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  await mockCommonApiRoutes(page, createCompletedGenerationJob());
+  for (const action of ["save-draft", "approve-draft", "wordpress/post"]) {
+    await page.route(`**/api/${action}`, async (route) => {
+      const { draft } = route.request().postDataJSON() as { draft: ArticleDraft };
+      await route.fulfill({ json: {
+        ok: true,
+        draft: { ...draft, status: action === "wordpress/post" ? "posted" : action === "approve-draft" ? "approved" : "draft" },
+        postUrl: action === "wordpress/post" ? "https://wordpress.example.com/post" : undefined,
+        warnings: ["生成ログの同期に失敗しました。保存結果は確定済みです。"],
+      } });
+    });
+  }
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for committed writes.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("article")).toBeVisible();
+  await page.getByTestId("save-draft-button").click();
+  await expect(page.getByTestId("draft-action-message")).toContainText("生成ログの同期に失敗");
+  await page.getByTestId("approve-draft-button").click();
+  await expect(page.getByTestId("draft-action-message")).toContainText("生成ログの同期に失敗");
+  await expect(page.getByTestId("draft-status-badge")).toHaveText("承認済み");
+  await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+  await page.getByTestId("wordpress-username").fill("editor");
+  await page.getByTestId("wordpress-application-password").fill("test-only-password");
+  await page.getByTestId("wordpress-connect-button").click();
+  await page.getByTestId("wordpress-post-button").click();
+  await expect(page.getByTestId("wordpress-post-message")).toContainText("生成ログの同期に失敗");
+  await expect(page.getByTestId("wordpress-post-button")).toBeDisabled();
+  expect(errors()).toEqual([]);
+});
+
+for (const action of ["save", "approve"] as const) {
+  test(`${action} locks draft editing until the submitted snapshot is acknowledged`, async ({ page }) => {
+    const errors = collectUnexpectedBrowserErrors(page);
+    const job = createCompletedGenerationJob();
+    job.draft!.images = [];
+    await mockCommonApiRoutes(page, job);
+    let release = () => {};
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    let submitted: ArticleDraft | undefined;
+    await page.route(`**/api/${action === "save" ? "save" : "approve"}-draft`, async (route) => {
+      submitted = route.request().postDataJSON().draft as ArticleDraft;
+      await pending;
+      await route.fulfill({ json: {
+        ok: true,
+        draft: { ...submitted, status: action === "approve" ? "approved" : "draft" },
+      } });
+    });
+    await login(page);
+    await page.getByTestId("reference-text-0").fill("Reference for delayed draft acknowledgement.");
+    await page.getByTestId("article-primary-button").click();
+    await page.getByTestId("draft-edit-tab").click();
+    await page.getByTestId("draft-title-input").fill("Submitted snapshot");
+    await page.getByTestId(`${action}-draft-button`).click();
+    try {
+      await expect.poll(() => submitted?.editedTitle).toBe("Submitted snapshot");
+      await expect(page.getByTestId("draft-title-input")).toBeDisabled();
+      await expect(page.getByTestId("article-primary-button")).toBeDisabled();
+      await expect(page.getByTestId("save-draft-button")).toBeDisabled();
+      await expect(page.getByTestId("approve-draft-button")).toBeDisabled();
+    } finally {
+      release();
+    }
+    await expect(page.getByTestId("draft-title-input")).toBeEnabled();
+    await expect(page.getByTestId("draft-title-input")).toHaveValue("Submitted snapshot");
+    await page.getByTestId("draft-title-input").fill("Next edit after acknowledgement");
+    await expect(page.getByTestId("draft-status-badge")).toHaveText("下書き");
+    expect(errors()).toEqual([]);
+  });
+}
+
 test("draft save failure keeps edits visible and recoverable", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/save-draft$/],
@@ -3022,9 +3112,9 @@ test("active generation job is restored after a page reload and opens the comple
   await login(page);
   await page.getByTestId("reference-text-0").fill("Reference text for reload recovery.");
   await page.getByTestId("article-primary-button").click();
-  await expect(
-    page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
-  ).resolves.toBe("job-reload-resume-e2e");
+  await expect.poll(
+    () => page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
+  ).toBe("job-reload-resume-e2e");
   await expect.poll(() => pollCalls).toBeGreaterThanOrEqual(1);
 
   delayNextPoll = true;

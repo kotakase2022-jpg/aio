@@ -73,6 +73,7 @@ async function callOpenAIJson<T extends { error?: { message?: string; code?: str
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     let response: Response;
+    let json: T;
     try {
       response = await fetch(`${OPENAI_BASE_URL}${path}`, {
         method: "POST",
@@ -83,6 +84,11 @@ async function callOpenAIJson<T extends { error?: { message?: string; code?: str
         },
         body: JSON.stringify(body),
       });
+      // Fetch resolves at headers; the deadline must also cover a stalled body.
+      json = (await response.json().catch((error: unknown) => {
+        if (error instanceof SyntaxError) return {};
+        throw error;
+      })) as T;
     } catch (error) {
       if (attempt < maxRetries) {
         await wait(getRetryDelayMs(attempt));
@@ -94,8 +100,6 @@ async function callOpenAIJson<T extends { error?: { message?: string; code?: str
     } finally {
       clearTimeout(timer);
     }
-
-    const json = (await response.json().catch(() => ({}))) as T;
 
     if (!response.ok) {
       if (isRetryableOpenAIStatus(response.status, json.error) && attempt < maxRetries) {

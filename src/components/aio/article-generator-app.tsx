@@ -319,6 +319,8 @@ export function ArticleGeneratorApp() {
   );
 
   const isGenerating = Boolean(activeGenerationJobId);
+  const draftMutationPending = saving || posting || imageRegenerating || singleImageRegenerating;
+  const draftEditingLocked = draftMutationPending || isGenerating;
 
   useEffect(() => {
     if (generationResumeStartedRef.current) return;
@@ -474,6 +476,7 @@ export function ArticleGeneratorApp() {
   }
 
   async function generateArticle(regenerationInstruction = "") {
+    if (draftMutationPending) return;
     if (!canGenerate) {
       setActiveError(
         formatGenerationRequirementMessage(missingGenerationRequirements) ||
@@ -739,6 +742,10 @@ export function ArticleGeneratorApp() {
 
   async function openGenerationLog(jobId: string) {
     setActiveError("");
+    if (draftMutationPending) {
+      setActiveError("保存・投稿・画像再作成が完了してから生成ログを開いてください。");
+      return;
+    }
     if (activeGenerationJobId) {
       setActiveError("記事生成中は生成ログを開けません。生成完了後にもう一度お試しください。");
       return;
@@ -765,7 +772,7 @@ export function ArticleGeneratorApp() {
   }
 
   async function saveCurrentDraft() {
-    if (!draft) return;
+    if (!draft || draftEditingLocked) return;
     const validationMessage = validateDraftForSubmission(draft);
     if (validationMessage) {
       setActiveError("");
@@ -775,15 +782,16 @@ export function ArticleGeneratorApp() {
       return;
     }
     setSaving(true);
+    generationLogOpenRequestRef.current += 1;
     setActiveError("");
     setDraftActionMessage("");
     setDraftActionError("");
     try {
-      const saved = await apiPost<{ draft: ArticleDraft }>("/api/save-draft", {
+      const saved = await apiPost<{ draft: ArticleDraft; warnings?: string[] }>("/api/save-draft", {
         draft: prepareDraftForSave(draft),
       });
       setDraft({ ...draft, updatedAt: saved.draft.updatedAt });
-      setDraftActionMessage("編集内容を保存しました。");
+      setDraftActionMessage(["編集内容を保存しました。", ...(saved.warnings ?? [])].join(" "));
     } catch (error) {
       setActiveError(readError(error));
     } finally {
@@ -792,7 +800,7 @@ export function ArticleGeneratorApp() {
   }
 
   async function approveCurrentDraft() {
-    if (!draft) return;
+    if (!draft || draftEditingLocked) return;
     const validationMessage = validateDraftForSubmission(draft);
     if (validationMessage) {
       setActiveError("");
@@ -802,11 +810,12 @@ export function ArticleGeneratorApp() {
       return;
     }
     setSaving(true);
+    generationLogOpenRequestRef.current += 1;
     setActiveError("");
     setDraftActionMessage("");
     setDraftActionError("");
     try {
-      const approved = await apiPost<{ draft: ArticleDraft }>("/api/approve-draft", {
+      const approved = await apiPost<{ draft: ArticleDraft; warnings?: string[] }>("/api/approve-draft", {
         draftId: draft.id,
         draft: prepareDraftForSave(draft),
       });
@@ -815,7 +824,7 @@ export function ArticleGeneratorApp() {
         status: "approved",
         updatedAt: approved.draft.updatedAt,
       });
-      setDraftActionMessage("承認済みに変更しました。WordPress投稿が可能です。");
+      setDraftActionMessage(["承認済みに変更しました。WordPress投稿が可能です。", ...(approved.warnings ?? [])].join(" "));
     } catch (error) {
       setActiveError(readError(error));
     } finally {
@@ -858,7 +867,7 @@ export function ArticleGeneratorApp() {
   }
 
   async function postToWordpress() {
-    if (!draft || !connection) return;
+    if (!draft || !connection || draftEditingLocked) return;
     const validationMessage = validateDraftForSubmission(draft);
     if (validationMessage) {
       setActiveError("");
@@ -869,11 +878,12 @@ export function ArticleGeneratorApp() {
       return;
     }
     setPosting(true);
+    generationLogOpenRequestRef.current += 1;
     setActiveError("");
     setWpPostMessage("");
     setDraftActionError("");
     try {
-      const result = await apiPost<{ postUrl: string; draft: ArticleDraft }>(
+      const result = await apiPost<{ postUrl: string; draft: ArticleDraft; warnings?: string[] }>(
         "/api/wordpress/post",
         {
           draft: prepareDraftForSave(draft),
@@ -890,9 +900,9 @@ export function ArticleGeneratorApp() {
       });
       void loadGenerationLogs();
       setWpPostMessage(
-        wpForm.status === "publish"
+        [wpForm.status === "publish"
           ? "WordPressへ公開投稿しました。"
-          : "WordPressへ下書き投稿しました。",
+          : "WordPressへ下書き投稿しました。", ...(result.warnings ?? [])].join(" "),
       );
     } catch (error) {
       setActiveError(readError(error));
@@ -1100,9 +1110,10 @@ export function ArticleGeneratorApp() {
   }
 
   async function startSingleImageRegeneration() {
-    if (!singleImageTarget) return;
+    if (!singleImageTarget || draftEditingLocked) return;
 
     setSingleImageRegenerating(true);
+    generationLogOpenRequestRef.current += 1;
     setSingleImageProgress(10);
     setActiveError("");
     try {
@@ -1120,7 +1131,7 @@ export function ArticleGeneratorApp() {
   }
 
   async function regenerateGeneratedImages(instruction = "") {
-    if (!draft) return;
+    if (!draft || draftEditingLocked) return;
 
     const generatedImages = draft.images.filter((image) => image.source === "generated");
     const missingImagePrompts = getMissingGeneratedImagePrompts(
@@ -1134,6 +1145,7 @@ export function ArticleGeneratorApp() {
     }
 
     setImageRegenerating(true);
+    generationLogOpenRequestRef.current += 1;
     setImageRegenerationProgress(10);
     setActiveError("");
     try {
@@ -1206,7 +1218,7 @@ export function ArticleGeneratorApp() {
   }
 
   function updateDraft<K extends keyof ArticleDraft>(key: K, value: ArticleDraft[K]) {
-    if (!draft) return;
+    if (!draft || draftEditingLocked) return;
     setDraftActionError("");
     setDraftActionMessage("");
     setWpPostMessage("");
@@ -1410,7 +1422,7 @@ export function ArticleGeneratorApp() {
             <Button
               data-testid="article-primary-button"
               onClick={handlePrimaryArticleButton}
-              disabled={!generationResumeChecked || (!isGenerating && !canGenerate)}
+              disabled={!generationResumeChecked || (!isGenerating && (!canGenerate || draftMutationPending))}
               variant={isGenerating ? "secondary" : "default"}
             >
               {isGenerating ? <StopCircle /> : <Sparkles />}
@@ -2140,6 +2152,7 @@ export function ArticleGeneratorApp() {
             onRefresh={loadGenerationLogs}
             onOpen={openGenerationLog}
             activeGenerationJobId={activeGenerationJobId}
+            draftMutationPending={draftMutationPending}
           />
 
           <Card>
@@ -2205,6 +2218,7 @@ export function ArticleGeneratorApp() {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  <fieldset disabled={draftEditingLocked} className="min-w-0 border-0 p-0">
                   {tab === "preview" ? (
                     <ArticlePreview
                       draft={draft}
@@ -2229,6 +2243,7 @@ export function ArticleGeneratorApp() {
                       regenerateImage={openSingleImageRegeneration}
                     />
                   )}
+                  </fieldset>
                 </CardContent>
               </Card>
 
@@ -2242,7 +2257,7 @@ export function ArticleGeneratorApp() {
                       data-testid="save-draft-button"
                       variant="secondary"
                       onClick={saveCurrentDraft}
-                      disabled={saving}
+                      disabled={draftEditingLocked}
                     >
                       {saving ? <Loader2 className="animate-spin" /> : <Save />}
                       編集内容を保存
@@ -2250,7 +2265,7 @@ export function ArticleGeneratorApp() {
                     <Button
                       data-testid="approve-draft-button"
                       onClick={approveCurrentDraft}
-                      disabled={saving}
+                      disabled={draftEditingLocked}
                     >
                       <CheckCircle2 />
                       承認済みに変更
@@ -2363,7 +2378,7 @@ export function ArticleGeneratorApp() {
                     <Button
                       data-testid="wordpress-post-button"
                       onClick={postToWordpress}
-                      disabled={!connection || draft.status !== "approved" || posting}
+                      disabled={!connection || draft.status !== "approved" || draftEditingLocked}
                     >
                       {posting ? <Loader2 className="animate-spin" /> : <Send />}
                       WordPressに投稿
@@ -2846,6 +2861,7 @@ function GenerationLogsPanel({
   onRefresh,
   onOpen,
   activeGenerationJobId,
+  draftMutationPending,
 }: {
   logs: GenerationLogSummary[];
   loading: boolean;
@@ -2855,6 +2871,7 @@ function GenerationLogsPanel({
   onRefresh: () => void;
   onOpen: (jobId: string) => void;
   activeGenerationJobId: string | null;
+  draftMutationPending: boolean;
 }) {
   return (
     <Card data-testid="generation-logs-panel">
@@ -2947,7 +2964,7 @@ function GenerationLogsPanel({
                         variant="secondary"
                         size="sm"
                         onClick={() => onOpen(log.id)}
-                        disabled={Boolean(activeGenerationJobId)}
+                        disabled={Boolean(activeGenerationJobId) || draftMutationPending}
                         title={
                           activeGenerationJobId
                             ? "記事生成中は生成ログを開けません。"
@@ -3931,7 +3948,7 @@ function collectDraftSourceUrls(draft: ArticleDraft) {
         .map((item) => item.url)
         .filter((url) => !isUnusableFetchedSourceUrl(url, unusableSourceKeys)),
     ]),
-  ).filter((url) => url.trim());
+  ).filter((url) => url.trim() && !isUnusableFetchedSourceUrl(url, unusableSourceKeys));
 }
 
 function collectDraftCompetitorTexts(draft: ArticleDraft) {

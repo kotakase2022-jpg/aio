@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -24,6 +24,16 @@ afterEach(async () => {
 });
 
 describe("draft persistence route handlers", () => {
+  test("saving rejects a malformed local store without overwriting it", async () => {
+    const { saveDraft } = await import("@/lib/server/drafts");
+    const draftFile = path.join(tempDir, "drafts.json");
+    const malformedStore = '{"existing-draft":';
+    await writeFile(draftFile, malformedStore, "utf8");
+
+    await expect.soft(saveDraft(createSampleDraft())).rejects.toBeInstanceOf(SyntaxError);
+    await expect(readFile(draftFile, "utf8")).resolves.toBe(malformedStore);
+  });
+
   test("save-draft sanitizes HTML and persists local draft data", async () => {
     const { POST } = await import("@/app/api/save-draft/route");
     const { getDraft } = await import("@/lib/server/drafts");

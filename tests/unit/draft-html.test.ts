@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildDraftArticleHtml } from "@/lib/draft-html";
+import { appendFaqBlockWhenNeeded, buildDraftArticleHtml } from "@/lib/draft-html";
 import { createSampleDraft } from "../fixtures/article";
 
 describe("draft HTML rendering", () => {
@@ -141,6 +141,153 @@ describe("draft HTML rendering", () => {
     expect(twice).toBe(once);
     expect(twice.match(/同じ質問ですか/g)).toHaveLength(1);
     expect(twice.match(/編集後の回答です/g)).toHaveLength(1);
+  });
+
+  test.each([
+    ["Can I use C++?", "Can I use C#?"],
+    ["Is 1.5% supported?", "Is 15% supported?"],
+    ["Is -5 supported?", "Is 5 supported?"],
+  ])("preserves distinct edited answers for %s and %s", (first, second) => {
+    const html = buildDraftArticleHtml(createSampleDraft({
+      editedBodyHtml: "<p>Body.</p>",
+      faqItems: [
+        { question: first, answer: "First approved answer." },
+        { question: second, answer: "Second approved answer." },
+      ],
+      author: {},
+    }));
+
+    expect(html.match(/aio-faq-item/g)).toHaveLength(2);
+    expect(html).toContain("First approved answer.");
+    expect(html).toContain("Second approved answer.");
+  });
+
+  test.each([
+    { faqItems: [] },
+    { faqItems: [{ question: "Can I return it?", answer: "Returns need approval." }] },
+  ])(
+    "preserves edited body-only questions without a replacement: %j",
+    ({ faqItems }) => {
+      const body = "<h2>FAQ</h2><h3>Can I cancel?</h3><p>Cancellation is permitted before shipment.</p>";
+      const draft = createSampleDraft({ editedBodyHtml: body, faqItems, author: {} });
+      const once = buildDraftArticleHtml(draft);
+      const twice = buildDraftArticleHtml({ ...draft, editedBodyHtml: once });
+
+      expect(once).toContain(body);
+      expect(twice).toBe(once);
+    },
+  );
+
+  test("preserves unmatched body questions between replaced FAQ answers", () => {
+    const html = buildDraftArticleHtml(createSampleDraft({
+      editedBodyHtml: [
+        "<h2>FAQ</h2><h3>Can I cancel?</h3><p>Old cancellation answer.</p>",
+        "<h3>Can I exchange it?</h3><p>Editor-only exchange policy.</p>",
+        "<h3>Can I return it?</h3><p>Old return answer.</p>",
+        '<p><a href="/contact">Contact us.</a></p>',
+      ].join(""),
+      faqItems: [
+        { question: "Can I cancel?", answer: "Approved cancellation answer." },
+        { question: "Can I return it?", answer: "Approved return answer." },
+      ],
+      author: {},
+    }));
+
+    expect(html).toContain("<h3>Can I exchange it?</h3><p>Editor-only exchange policy.</p>");
+    expect(html).not.toContain("Old cancellation answer.");
+    expect(html).not.toContain("Old return answer.");
+    expect(html).toContain("Approved cancellation answer.");
+    expect(html).toContain("Approved return answer.");
+    expect(html).toContain('href="/contact"');
+  });
+
+  test("replaces wrapped multi-paragraph answers without rewriting adjacent CTA or unrelated HTML", () => {
+    const prefix = "<p data-note='keep'>Body &amp; context.</p><!-- keep this comment -->";
+    const closing = "<p class='closing-copy'>Editorial closing.</p><p><a href='/contact'>Contact us.</a></p><p>Source note: verified.</p>";
+    const unmatched = '<div class="faq-item"><h3>Can I exchange it?</h3><p>Editor-only exchange policy.</p></div>';
+    const body = `${prefix}<section><h2>FAQ</h2><div class="faq-item"><h3>Can I cancel?</h3><p>Old first paragraph.</p><p>Old second paragraph.</p><div><p>Old nested paragraph.</p></div></div>${unmatched}</section>${closing}`;
+    const items = [{ question: "Can I cancel?", answer: "Approved answer." }];
+    const html = appendFaqBlockWhenNeeded(body, items, { preserveUnmatchedBodyFaq: true });
+
+    expect(html).toContain(prefix);
+    expect(html).toContain(closing);
+    expect(html).toContain(unmatched);
+    expect(html).not.toContain("Old first paragraph.");
+    expect(html).not.toContain("Old second paragraph.");
+    expect(html).not.toContain("Old nested paragraph.");
+    expect(html.match(/Can I cancel\?/g)).toHaveLength(1);
+    expect(html).toContain("Approved answer.");
+    expect(appendFaqBlockWhenNeeded(html, items, { preserveUnmatchedBodyFaq: true })).toBe(html);
+  });
+
+  test("replaces all answer paragraphs before the next FAQ question and preserves the final tail", () => {
+    const tail = '<p>Unmarked editorial closing.</p><p><a href="/contact">Contact us.</a></p><p>Source note: verified.</p>';
+    const body = '<h2>FAQ</h2><h3>Can I cancel?</h3><p>Old first paragraph.</p><p>Old second paragraph.</p><ul><li>Old condition.</li></ul><h3>Can I return it?</h3><p>Old return answer.</p>' + tail;
+    const html = appendFaqBlockWhenNeeded(body, [
+      { question: "Can I cancel?", answer: "Approved cancellation answer." },
+      { question: "Can I return it?", answer: "Approved return answer." },
+    ], { preserveUnmatchedBodyFaq: true });
+
+    expect(html).not.toContain("Old first paragraph.");
+    expect(html).not.toContain("Old second paragraph.");
+    expect(html).not.toContain("Old condition.");
+    expect(html).not.toContain("Old return answer.");
+    expect(html).toContain(tail);
+    expect(html.match(/Can I return it\?/g)).toHaveLength(1);
+  });
+
+  test("keeps CTA blocks inside a question wrapper and questions outside the FAQ section", () => {
+    const cta = '<p class="closing-copy">Editorial closing.</p><p><a href="/contact">Contact us.</a></p>';
+    const outside = '<h3>Can I cancel?</h3><p>This is an unrelated later section.</p>';
+    const html = appendFaqBlockWhenNeeded(
+      `<section><h2>FAQ</h2><div><h3>Can I cancel?</h3><p>Old answer.</p>${cta}</div></section>${outside}`,
+      [{ question: "Can I cancel?", answer: "Approved answer." }],
+      { preserveUnmatchedBodyFaq: true },
+    );
+
+    expect(html).not.toContain("Old answer.");
+    expect(html).toContain(cta);
+    expect(html).toContain(outside);
+  });
+
+  test("does not extend an unwrapped FAQ into a later independent section", () => {
+    const outside = '<section><h3>Can I cancel?</h3><p>Independent section copy.</p></section>';
+    const html = appendFaqBlockWhenNeeded(
+      '<h2>FAQ</h2><div><h3>Can I cancel?</h3><p>Old answer.</p></div>' + outside,
+      [{ question: "Can I cancel?", answer: "Approved answer." }],
+      { preserveUnmatchedBodyFaq: true },
+    );
+
+    expect(html).not.toContain("Old answer.");
+    expect(html).toContain(outside);
+  });
+
+  test("stops answer removal at bare editorial text between elements", () => {
+    const tail = 'Editorial note outside paragraphs.<p>Closing copy.</p>';
+    const html = appendFaqBlockWhenNeeded(
+      `<h2>FAQ</h2><div><h3>Can I cancel?</h3><p>Old answer.</p>${tail}</div>`,
+      [{ question: "Can I cancel?", answer: "Approved answer." }],
+      { preserveUnmatchedBodyFaq: true },
+    );
+
+    expect(html).not.toContain("Old answer.");
+    expect(html).toContain(tail);
+  });
+
+  test("does not treat a shared FAQ wrapper as the final answer's boundary", () => {
+    const tail = '<p>Unmarked editorial closing.</p><p><a href="/contact">Contact us.</a></p>';
+    const html = appendFaqBlockWhenNeeded(
+      `<h2>FAQ</h2><div><h3>Can I cancel?</h3><p>Old cancellation answer.</p><h3>Can I return it?</h3><p>Old return answer.</p>${tail}</div>`,
+      [
+        { question: "Can I cancel?", answer: "Approved cancellation answer." },
+        { question: "Can I return it?", answer: "Approved return answer." },
+      ],
+      { preserveUnmatchedBodyFaq: true },
+    );
+
+    expect(html).not.toContain("Old cancellation answer.");
+    expect(html).not.toContain("Old return answer.");
+    expect(html).toContain(tail);
   });
 
   test("replaces a stale managed FAQ block with the current edited FAQ items", () => {
@@ -945,6 +1092,49 @@ describe("draft HTML rendering", () => {
 
     expect(html).not.toContain("https://example.com/mojibake");
     expect(html).not.toContain('class="aio-source-block"');
+  });
+
+  test.each([
+    { declared: false, ok: false },
+    { declared: false, ok: true },
+    { declared: true, ok: false },
+    { declared: true, ok: true },
+  ])("excludes canonical source conflicts from either fetched list: %j", ({ declared, ok }) => {
+    const successful = { url: "https://example.com/reference", ok: true, evidenceUsable: true, sourceType: "url" as const };
+    const unusable = { url: "http://www.example.com/reference/?utm_source=review", ok, evidenceUsable: false, sourceType: "url" as const };
+    const safe = { url: "https://example.com/safe", ok: true, sourceType: "url" as const };
+    for (const [reference, competitor] of [[successful, unusable], [unusable, successful]]) {
+      const draft = createSampleDraft({
+        editedBodyHtml: "<p>Body.</p>",
+        faqItems: [],
+        author: {},
+        aiResult: {
+          ...createSampleDraft().aiResult,
+          sources: declared ? [
+            { url: successful.url, title: "Conflicted source", usage_notes: "" },
+            { url: safe.url, title: "Safe source", usage_notes: "" },
+          ] : [],
+        },
+        fetchedReferences: [reference, safe],
+        fetchedCompetitors: [competitor],
+        inputPayload: { ...createSampleDraft().inputPayload, references: [], competitors: [] },
+      });
+      const html = buildDraftArticleHtml(draft);
+
+      expect(html).not.toContain(successful.url);
+      expect(html).not.toContain(unusable.url);
+      expect(html).toContain('href="https://example.com/safe"');
+    }
+  });
+
+  test.each([
+    '<!-- <a href="https://example.com/reference">Source</a> -->',
+    '<a href="/contact" data-href="https://example.com/reference">Contact us.</a>',
+  ])("appends a real source link when the edited body only has a false match: %s", (body) => {
+    const html = buildDraftArticleHtml(createSampleDraft({ editedBodyHtml: body, faqItems: [], author: {} }));
+
+    expect(html).toContain('class="aio-source-block"');
+    expect(html).toContain('href="https://example.com/reference"');
   });
 
   test("deduplicates AI, fetched, input, and competitor source URLs after normalization", () => {

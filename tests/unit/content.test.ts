@@ -255,4 +255,38 @@ describe("fetchUrlContent", () => {
       reason: "URL取得に失敗しました。network down",
     });
   });
+
+  test("does not treat the first article card on a listing as complete evidence", async () => {
+    const cards = Array.from({ length: 8 }, (_, index) =>
+      `<article><h2><a href="/news/${index}">記事${index}</a></h2><p>${"これは記事の冒頭だけを掲載した概要です。".repeat(5)}</p></article>`,
+    ).join("");
+    const result = await fetchUrlContent("https://example.com/news", async () =>
+      new Response(`<title>ニュース一覧</title><main><h1>記事一覧</h1>${cards}</main>`, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    );
+    expect(result).toMatchObject({ ok: true, evidenceUsable: false, pageKind: "listing" });
+  });
+
+  test("rejects even one corrupted character in otherwise long article evidence", async () => {
+    const result = await fetchUrlContent("https://example.com/partly-corrupt", async () =>
+      new Response(`<article><p>${"条件と対象を確認してください。".repeat(40)}利率は�%です。</p></article>`, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.evidenceUsable).toBe(false);
+    expect(result.reason).toContain("文字化け");
+  });
+
+  test("preserves block boundaries in extracted source text", async () => {
+    const result = await fetchUrlContent("https://example.com/blocks", async () =>
+      new Response(`<article><h1>条件1</h1><p>0.5%の手数料です。</p><p>${"適用される条件と対象を確認してください。".repeat(5)}</p></article>`, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    );
+    expect(result.evidenceUsable).toBe(true);
+    expect(result.text).toContain("条件1 0.5%");
+    expect(result.text).not.toContain("条件10.5%");
+  });
 });

@@ -30,6 +30,30 @@ describe("image regeneration route", () => {
     vi.clearAllMocks();
   });
 
+  test("does not delete image assets already referenced by WordPress", async () => {
+    const { regenerateDraftImages } = await import("@/lib/server/draft-image-regeneration");
+    const { getDraft } = await import("@/lib/server/drafts");
+    const { deleteStoredAssets } = await import("@/lib/server/storage");
+    const draft = createSampleDraft({ status: "posted", wordpressPostUrl: "https://wordpress.example.com/post" });
+    vi.mocked(getDraft).mockResolvedValue(draft);
+    await regenerateDraftImages({ draft, requests: [{
+      slot: "featured", replaceImageId: "img-1",
+      prompt: "Make the visual more concrete and premium",
+    }] });
+    expect(deleteStoredAssets).not.toHaveBeenCalledWith([draft.images[0].path]);
+  });
+
+  test("rejects a draft snapshot older than the persisted revision", async () => {
+    const { regenerateDraftImages } = await import("@/lib/server/draft-image-regeneration");
+    const { getDraft, saveDraft } = await import("@/lib/server/drafts");
+    const draft = createSampleDraft();
+    vi.mocked(getDraft).mockResolvedValue({ ...draft, editedTitle: "Newer saved edit", updatedAt: "2026-11-09T10:00:00Z" });
+    await expect(regenerateDraftImages({ draft, requests: [{
+      slot: "featured", replaceImageId: "img-1", prompt: "Make the visual more concrete and premium",
+    }] })).rejects.toMatchObject({ status: 409 });
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
+
   test("regenerates, attaches, and saves an image before returning it", async () => {
     const { POST } = await import("@/app/api/generate-image/route");
     const { getDraft, saveDraft } = await import("@/lib/server/drafts");
@@ -101,6 +125,7 @@ describe("image regeneration route", () => {
         status: "draft",
         images: [expect.objectContaining({ path: "generated/new-featured.png" })],
       }),
+      draft.updatedAt,
     );
     expect(syncGenerationJobDraft).toHaveBeenCalledWith(
       expect.objectContaining({ id: draft.id }),

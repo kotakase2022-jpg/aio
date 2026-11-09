@@ -96,7 +96,7 @@ describe("WordPress REST API contract", () => {
         expect(content).toContain('class="aio-faq-block"');
         expect(content).toContain("What is AIO?");
         expect((request.json as { tags: number[] }).tags).toHaveLength(3);
-        sendJson(response, { link: `${server.origin}/aio-content-operations-guide/` }, 201);
+        sendJson(response, { id: 123, link: `${server.origin}/aio-content-operations-guide/` }, 201);
         return;
       }
 
@@ -568,7 +568,7 @@ describe("WordPress REST API contract", () => {
           status: "draft",
         });
         expect(request.json).not.toHaveProperty("featured_media");
-        sendJson(response, { link: `${server.origin}/post-without-featured-media/` }, 201);
+        sendJson(response, { id: 124, link: `${server.origin}/post-without-featured-media/` }, 201);
         return;
       }
 
