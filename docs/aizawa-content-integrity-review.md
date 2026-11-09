@@ -249,7 +249,28 @@ E2Eで警告表示、追加指示、読者層・構成、現在の一次情報�
 6. 再作成する場合は全文生成であることを理解し、保持したい編集意図を追加指示へ書く。
 7. WordPress投稿前に、公開用HTMLと投稿ステータスを人が最終確認する。
 
-## 7. 相沢様への回答案
+## 7. 実装・検証記録
+
+- Review PR: https://github.com/kotakase2022-jpg/aio/pull/42
+- 基準コミット: `8c2a9b5a584ede25d94d2747550cc692db4d6f90`
+- 初回実装コミット: `ba93f6d7860acbf800c35c42a4dd45e84c448ebe`
+- CodeRabbit指摘対応コミット: `0304a04` (`fix: address content integrity review findings`)
+- 修正前focused reproduction: 13 failed / 40 passed
+- CodeRabbit指摘の追加reproduction: 8 failed / 99 passed
+- 修正後focused: 107 / 107 passed
+- `npm run quality`: PASS
+  - test integrity: 55 files
+  - unit / integration: 51 files / 456 tests
+  - contract: 4 files / 15 tests
+  - coverage: statements 87.32%、branches 77.36%、functions 92.64%、lines 87.80%
+  - Chromium PC E2E: 52 / 52
+  - Next.js 16.3.2 build: PASS、19 routes
+- 実OpenAI structured generation: 1 / 1 PASS。デルタ相当BtoB教科書型、デルタ相当BtoBケース型、アニハ相当BtoC FAQ型を、同じ契約テスト内で確認した。
+- GitHub Actions `quality-gate`: 初回実装コミットでPASS。CodeRabbit指摘対応後の再実行結果はPR #42を正とする。
+
+CodeRabbit初回レビューでは、旧FAQ除去によるCTA消失、取得不可URLの公開出典復活、執筆者欄数値の誤検出、ルート相対リンクの誤判定、不正URLの失敗件数欠落、`form`・記事内`header`の過剰除去、本文不足時の案内文テスト不足、画像再作成のBtoB固定を指摘された。8件を再現テストで確認し、すべて実装修正した。Docstring coverage警告は、70関数へ説明コメントを機械追加すると既存方針に反して可読性を下げるため、必須品質ゲートのtypecheck、lint、test、coverage、E2E、buildを優先し、非機能警告として記録する。
+
+## 8. 相沢様への回答案
 
 相沢様、ご検証と具体的なご指摘をありがとうございます。今回、アニハ様とデルタ様の保存済み生成ログを読み取りで照合し、FAQ重複、文字化けした取得本文、数値・条件の扱い、評価点と公開安全性の混同、BtoC/BtoBおよび記事構成の反映、公開HTMLへの内部メモ、新規生成と再作成の違いを確認しました。
 

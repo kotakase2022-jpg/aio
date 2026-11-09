@@ -4,198 +4,226 @@
 
 - Current owner: Codex
 - Next owner: Claude Code
-- Loop: 7
-- Loop number inferred from: Loop 6 completed its production audit and returned the repository for a new user-requested Codex audit. This viewport regression fix therefore starts Loop 7.
+- Loop: 9
+- Loop number inferred from: 作業ブランチが`codex/loop9-aizawa-content-integrity`であり、前回handoffはLoop 7の完了状態のまま更新されていなかった。今回の相沢様検証対応を独立したLoop 9として扱う。
 - Phase: Handoff
-- Last updated: 2026-08-25 21:46 +09:00
+- Last updated: 2026-11-09 21:16 +09:00
 
 ## 1. Current Goal
 
 今回の目的：
 
-- 要求仕様、主要画面、API、DB、認証、外部連携を、静的確認だけでなく機械テスト、live contract、本番PCブラウザ操作で再監査する。
-- 監査で発見した左入力ウィザード下部の操作不能を最小差分で修正し、再発防止E2E、保護PR、CI、自動レビュー、本番再検証まで完了する。
+- 相沢様の検証資料と保存済み実ログを照合し、FAQ重複、文字化け、根拠不明の数値、条件の一般化、制作過程文言、読者層・記事構成、再作成仕様を再現・切り分けする。
+- 読者向け最終HTMLを基準に、不具合を防止または公開前に検出できるよう最小差分で改修する。
+- fixture、単体・結合・契約・PC Chromium E2E、実OpenAI検証、CI、CodeRabbitレビューを通したPRをClaude Codeへ引き継ぐ。
+- 今回は本番デプロイ、既存記事の一括更新、本番WordPress投稿、相沢様への送信を行わない。
 
 ## 2. Current Branch / Commit / PR
 
-- Branch: `codex/loop7-final-production-handoff` (documentation-only protected PR branch)
-- Latest production/main commit: `742370efe44ec292d6879c9c4315be5f51fb45bb`
-- Last known good commit: `742370efe44ec292d6879c9c4315be5f51fb45bb`
-- Implementation PR: https://github.com/kotakase2022-jpg/aio/pull/18 (`MERGED`)
-- Final handoff PR: https://github.com/kotakase2022-jpg/aio/pull/19
-- CodeRabbit OSS review status: completed; no actionable comments; merge risk minimal
-- Production URL: https://aio-article-generator.vercel.app
-- Production deployment: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt` (`READY`)
-- Unique deployment URL: https://aio-article-generator-po9ft9l40-sl2026.vercel.app
-- Vercel inspector: https://vercel.com/sl2026/aio-article-generator/HaGiMSgjDJ4ygs757JvsnNy7n5Pt
+- Branch: `codex/loop9-aizawa-content-integrity`
+- Latest implementation commit: `0304a04` (`fix: address content integrity review findings`)
+- Initial implementation commit: `ba93f6d7860acbf800c35c42a4dd45e84c448ebe` (`fix: enforce article content integrity`)
+- Last known good commit: `0304a04`
+- Baseline commit: `8c2a9b5a584ede25d94d2747550cc692db4d6f90`
+- PR: https://github.com/kotakase2022-jpg/aio/pull/42
+- CodeRabbit OSS review status: initial review complete; 7 inline findings and 1 outside-diff finding were reproduced and fixed in `0304a04`; follow-up review runs after push
+- Required GitHub Actions: PASS, run `42611596371`, job `129141104934`, 4m33s
+- Production URL: https://aio-article-generator.vercel.app/ (今回の差分は未反映)
 
 ## 3. What Was Done
 
 今回完了したこと：
 
-- README、要求監査文書、`AGENTS.md`、`CLAUDE.md`、前回handoff、package scripts、route、migration、環境変数名、認証、主要E2E、直近Git差分/履歴、Issue/PR状況を確認した。
-- `npm.cmd run quality`を修正前の`main`で実行し、typecheck、lint、test integrity、単体/結合、契約、coverage、PC Chromium E2E、Next.js buildの全成功を確認した。
-- live OpenAI Responses APIの構造化生成1/1成功と、live Supabaseの使い捨てCRUD/Storage 2/2成功・cleanupを確認した。
-- WordPress live readinessはsandbox credentialsと全安全フラグ不足のため、外部通信前にfail closedとなることを確認した。
-- 本番1440x1000の実ブラウザで、認証済み初期表示、6段階入力ウィザード、必須制御、戻る/次へ、画像トーン3方式、生成ログ、保存済みドラフト復元、プレビュー、全画面プレビュー、編集タブを操作した。console errorは0件だった。
-- 保存済みログから高さのある一次情報ステップを復元すると、左ウィザードの`保存・承認へ`と`WordPressへ`が画面下へはみ出す不具合を再現した。1440x1000で`保存・承認へ`の下端がviewportより下になり、実クリック不能だった。
-- 修正前コードへ先にE2Eを追加し、`toBeInViewport`失敗を確認した。
-- 入力パネルの最大高を`calc(100vh - 390px)`から`calc(100vh - 470px)`、最小高を`320px`から`240px`へ変更した。長い入力は既存の内部スクロールで操作可能なままにした。
-- 1440x1000と1440x768の両方で、2つの下部ショートカット全体がviewport内に収まる回帰E2Eを追加した。
-- 修正後のfocused E2E、typecheck、lint、full qualityを再実行し、全成功を確認した。
-- PR #18を作成し、required CI成功、CodeRabbitのactionable commentなし、リポジトリ設定で自動実行されたCursor Bugbot成功を確認した。
-- GitHub Codex reviewの「handoffを今回の修正へ更新する」という指摘に対応して、この文書を更新した。
-- 対応済みレビュー会話を解決し、PR #18が`CLEAN`かつ`MERGEABLE`であることを確認して`main`へマージした。
-- `main`の`742370e`をVercel productionへデプロイし、deployment `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`が`READY`、固定URLへalias済みであることを確認した。
-- 本番PCブラウザで保存済みログを再度開き、一次情報ステップ復元後の実座標を確認した。1440x1000では両リンク下端963px、1440x768では731pxで完全にviewport内だった。
-- 本番で`保存・承認へ`と`WordPressへ`を実クリックし、`#approval`と`#wordpress`へ正常遷移した。内部パネルの長文は既存スクロールで保持され、横overflow 0、console error 0だった。
-- 未認証トップ307、未認証生成ログAPI 401、CSP/HSTS/frame/nosniff/permissions/referrer headers、Vercel error/5xxログ0件を再確認した。
+- `AGENTS.md`、`CLAUDE.md`、旧`AI_HANDOFF.md`、`README.md`、`package.json`、基準コミットとの差分、現在の本番実装との対応を確認した。
+- 相沢様のGoogle Docを確認し、権限内の本番Supabase保存ログを読み取り専用で照合した。対象はデルタのケース型、FAQ型、教科書型の新規・再作成と、アニハの新規・再作成。
+- アニハの楽天系URLとデルタのITmedia URLで、文字化けした取得結果が旧実装では`ok=true`としてAI根拠へ渡り得たことを確認した。
+- 同一質問の回答表現が異なるFAQが本文と末尾に二重表示されること、固定のBtoB指示、採点目的の固定語、内部取得メモが公開HTMLへ混入し得ることを再現した。
+- FAQ配列を公開用FAQの正本にし、本文内の旧FAQを除去して1回だけ描画する冪等な最終HTML組み立てへ変更した。同一質問では後の回答を編集者の確定回答として優先し、最初の表示順を保つ。
+- URL取得をバイト列ベースに変更し、BOM、HTTP charset、HTML metaの優先順位を定義した。UTF-8、Shift_JIS/Windows-31J、EUC-JP、ISO-2022-JP、UTF-16系を扱う。
+- nav、footer、header、aside等を本文抽出前に除外し、一覧、告知、本文不足、記事を分類した。通信成功`ok`と根拠利用可否`evidenceUsable`を分離し、文字化け疑いをAI根拠へ渡さないようにした。
+- SSRF、リダイレクト、タイムアウト、レスポンス容量の既存制限は維持した。参照URLと競合URLは同じ取得処理を使う。
+- 入力短縮処理で数値・期間・単位・条件・例外・出典境界を残しやすくし、省略時に検知できるマーカーを付けた。
+- 生成指示からBtoB固定を外し、互換性のある任意項目`audienceType`と`articleStructure`を追加した。BtoC/BtoBと教科書型/FAQ型/ケース型ごとの生成計画・検証を実装した。
+- FAQは`faq_items`だけに生成し、本文へFAQ章を重ねないようにした。入力にない数値、実績、条件を補完せず、仮想事例は仮定と明示するよう生成契約を強化した。
+- 編集品質と公開前阻害要因を分離した。文字化け、FAQ重複、未裏付け数値、条件一般化、壊れたリンク、内部メモは高い編集品質点で相殺しない。
+- 編集品質は正しい言い換えを語彙の完全一致だけで減点しないよう意味別名を導入し、`現場観察`や`競合記事では`を採点目的で強制しないようにした。
+- 公開用出典を内部取得メモから分離し、実際のアンカー要素、URL正規化、重複排除を検証した。プレビュー、HTML出力、WordPressモック送信で同じ最終HTMLを使う。
+- 再作成は従来どおり「現在のフォーム入力と追加指示による全文生成」であり、編集済み本文を引き継がないことを画面に明示した。現在の稿は完了まで保持し、旧稿はログから確認できる。
+- 相沢様の8項目について現行仕様、原因、対応、検証、制約、操作上の工夫、人の確認事項、安定運用手順、未送信の回答案を`docs/aizawa-content-integrity-review.md`へ記録した。
+- 修正前のfocused reproduction suiteで13件の失敗を確認し、実装修正後に全品質ゲートを成功させた。
+- PR #42を作成し、required GitHub Actionsの成功を確認した。
+- CodeRabbit初回レビューの8指摘をすべて実コードで確認した。修正前は追加reproductionが8 failed / 99 passedだった。
+- FAQ後のCTA・出典注記保持、AI宣言済み取得不可URLの除外、ルート相対リンク、執筆者欄数値、全体`form`と記事内`header`、不正URLの失敗件数、BtoC画像再作成プロンプトを修正した。
+- CodeRabbit対応後にfocused 107/107、対象E2E、full `npm run quality`を再実行し、全成功を確認した。
 
 ## 4. Files Changed
 
 主な変更ファイル：
 
+- `src/lib/draft-html.ts`
+- `src/lib/server/content.ts`
+- `src/lib/server/article-generation.ts`
+- `src/lib/server/article-generation-job-runner.ts`
+- `src/lib/article-quality.ts`
+- `src/lib/publication-quality.ts` (new)
+- `src/lib/source-url.ts`
 - `src/components/aio/article-generator-app.tsx`
+- `src/types/aio.ts`
+- `tests/fixtures/encoded-html.ts` (new)
+- `tests/unit/publication-quality.test.ts` (new)
+- `tests/unit/draft-html.test.ts`
+- `tests/unit/content.test.ts`
+- `tests/unit/article-quality.test.ts`
+- `tests/unit/article-generation.test.ts`
+- `tests/integration/generation-job-runner.integration.test.ts`
+- `tests/integration/wordpress.integration.test.ts`
 - `tests/e2e/aio-workflow.spec.ts`
+- `tests/live/openai.live.test.ts`
+- `docs/aizawa-content-integrity-review.md` (new)
 - `AI_HANDOFF.md`
 
-未追跡の`.claude/`と`output/`はユーザー所有として変更・stageしていない。
+初回コミット`ba93f6d`には計29ファイル、`+2610/-334`の変更がある。CodeRabbit対応コミット`0304a04`は13ファイル、`+385/-86`。未追跡の`output/`はユーザー所有として変更・stageしていない。
 
 ## 5. Current Status
 
 現在の状態：
 
-- Local full quality gate: PASS
-- Focused viewport regression: PASS at 1440x1000 and 1440x768
-- Hosted required CI: PASS, run `32847376596`, job `97800123839`, 4m01s
-- CodeRabbit: PASS; no actionable comments; merge risk minimal
-- Cursor Bugbot: repository setting auto-ran and passed; no finding was reported
-- Critical / High bugs: 0 after the viewport fix
-- PR #18: `MERGED`、merge commit `742370efe44ec292d6879c9c4315be5f51fb45bb`
-- Vercel production: `READY`、canonical alias更新済み
-- Production post-deploy viewport regression: PASS at 1440x1000 and 1440x768
-- Production shortcut clicks: PASS (`#approval` / `#wordpress`)
-- Production horizontal overflow: 0
-- Production browser console errors: 0
-- Production Vercel error / 5xx logs after smoke: 0
+- Focused pre-fix reproduction: expected FAIL、13 failed / 40 passed
+- Local full `npm run quality`: PASS
+- Test integrity: PASS、55 files
+- Unit/integration: PASS、51 files / 456 tests
+- Contract: PASS、4 files / 15 tests
+- Coverage: PASS、statements 87.32%、branches 77.36%、functions 92.64%、lines 87.80%
+- Chromium PC E2E: PASS、52/52
+- Next.js 16.3.2 production build: PASS、19 routes
+- Live OpenAI structured generation: PASS、1/1、143.77秒
+- GitHub required CI: PASS
+- PR #42: OPEN、MERGEABLE
+- CodeRabbit initial review: PASS check with Moderate merge risk、7 inline + 1 outside-diff actionable finding。全件`0304a04`で対応済み。
+- CodeRabbit follow-up review: PR #42の最新checkを確認してからmerge判断する。
+- Production deployment: NOT RUN（今回の明示スコープ外）
+- Production Supabase inspection: read-only only。書き込み・削除なし。
+- Production WordPress posting: NOT RUN
 
 ## 6. Known Issues
 
 既知の問題：
 
-- WordPress live post/media/deleteは`UNVERIFIED`。使い捨てsandbox credentialsと全安全フラグがないためlive requestを送信していない。deterministic integration/E2E mockはPASS。
-- 共有アクセスコードによる簡易認証であり、ユーザー別・tenant別の認可モデルではない。これは現在の明示仕様。
-- OpenAIの遅延、文面、画像品質は確率的。今回のlive structured generationは成功したが、将来の外部API状態は保証できない。
-- 2026-07-02の旧生成ログ1件には保存済み入力として文字化けした`?`が残る。現行runtimeのUnicode不具合ではなく、元データを推測修復しない方針で未変更。
+- FAQの意味が同じでも語彙が大きく異なる場合、完全な意味重複は機械判定できない。
+- 数値・条件・根拠対応の公開前チェックは保守的なヒューリスティックであり、真偽そのものは一次資料と担当者の確認が必要。
+- JavaScript実行後にのみ本文が現れるページ、画像のみ、ログイン必須ページは手動貼り付けまたはファイル添付が必要。
+- AIが`sources`を空で返した旧ドラフトは、互換性維持のため利用可能な取得URLを出典候補として表示する場合がある。
+- 既存保存ドラフトを一括移行していない。表示・保存・公開用HTMLの組み立て時に正規化する。
+- OpenAI生成は確率的。同一入力でも文面差は残り、92点と78点の2回だけで新規生成優位とは判断できない。
+- 再作成は編集済み本文を基にした部分修正ではない。必要な編集意図は追加指示へ書き、旧稿をログで保持する。
+- GitHub push時にdefault branchの依存関係アラート92件（critical 10 / high 29 / moderate 41 / low 12）が表示された。今回の差分とは独立した既存リスクであり、別PRの依存監査が必要。
+- GitHub上のCodex reviewはアカウント使用上限で実行失敗した。標準レビューはCodeRabbitであり、required CIには影響しない。
 
 ## 7. CodeRabbit Review
 
 CodeRabbit OSSの指摘と対応状況：
 
-- Review status: PR #18 completed。
+- Review status: 初回レビュー完了。対応コミット`0304a04`をpush後、PR #42でfollow-up reviewを確認する。
 - Critical findings: なし。
-- Resolved findings: actionable commentsなし。
+- Resolved findings: 旧FAQが後続CTAまで消す問題、取得不可URLがAI宣言ソースから公開出典へ戻る問題、執筆者欄数値の誤検出、ルート相対リンク誤判定、不正URL失敗件数欠落、全体`form`・記事内`header`過剰除去、本文不足案内テスト不足、画像再作成BtoB固定の8件。
 - Deferred findings: なし。
-- False positives / not applicable: touched functionのdocstring coverage 0%という補助warning。今回の差分はJSXのclass変更と既存Playwright test内のassertionであり、新規公開関数はない。不要なdocstring追加は行わず、CodeRabbit自身の`No actionable comments`判定を採用した。
+- False positives / not applicable: Docstring coverage 0%警告。今回変更した70関数へ一律docstringを追加することは、説明不要な関数への冗長コメントを避けるリポジトリ方針に反する。required CIのlint、typecheck、test、coverage、E2E、buildは全成功しているため、非機能の補助警告として記録する。CodeRabbit sandboxのESLint install timeoutはGitHub Actionsとローカルlint成功で代替確認済み。
 
 ## 8. Optional Bugbot Findings
 
 Cursor Bugbotの任意確認：
 
-- Status: Run automatically by repository configuration on PR #18; Codexからは追加実行していない。
-- Findings: なし、check PASS（2m58s）。
-- Actions taken: 対応不要。
+- Status: Not run
+- Findings: なし。
+- Actions taken: CodeRabbitを標準レビューとして使用しており、追加の高リスク指摘やユーザー指示がないため実行していない。
 
 ## 9. Verification Results
 
 実行した確認コマンドと結果：
 
 ```bash
-npx.cmd playwright test tests/e2e/aio-workflow.spec.ts --grep "generation logs show previous output"
+npx.cmd vitest run tests/unit/draft-html.test.ts tests/unit/content.test.ts tests/unit/article-quality.test.ts tests/unit/publication-quality.test.ts tests/unit/article-generation.test.ts
+npx.cmd vitest run tests/unit/draft-html.test.ts tests/unit/publication-quality.test.ts tests/unit/content.test.ts tests/unit/article-generation.test.ts tests/integration/generation-job-runner.integration.test.ts
+npx.cmd playwright test tests/e2e/aio-workflow.spec.ts --grep "bulk image regeneration preserves"
 npm.cmd run typecheck
 npm.cmd run lint
 npm.cmd run quality
 npm.cmd run test:live:openai
-npm.cmd run test:live:supabase
-npm.cmd run test:live:readiness:wordpress
-gh pr checks 18 --watch --interval 10
-npx.cmd vercel deploy --prod --yes --scope sl2026
-npx.cmd vercel inspect https://aio-article-generator-po9ft9l40-sl2026.vercel.app --scope sl2026
-curl.exe -sSI https://aio-article-generator.vercel.app/
-curl.exe -sS -D - https://aio-article-generator.vercel.app/api/generation-logs -o NUL
-npx.cmd vercel logs dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt --level error --since 15m --limit 100 --scope sl2026
-npx.cmd vercel logs dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt --status-code 5xx --since 15m --limit 100 --scope sl2026
+git diff --check
+gh pr checks 42 --watch --interval 10
 ```
 
 結果：
 
-- Regression before fix: expected FAIL; `保存・承認へ` viewport ratio 0。
-- Regression after fix: PASS; 1440x1000 and 1440x768。
+- Focused reproduction before implementation: EXPECTED FAIL、13 failed / 40 passed。
+- Focused tests after initial implementation: PASS。
+- CodeRabbit reproduction before follow-up fixes: EXPECTED FAIL、8 failed / 99 passed。
+- CodeRabbit reproduction after fixes: PASS、107/107。
+- Focused BtoC image regeneration E2E: PASS、1/1。
 - Typecheck / lint: PASS。
-- Test integrity: PASS、54 files。
-- Unit/integration: PASS、50 files / 414 tests。
+- Test integrity: PASS、55 files。
+- Unit/integration: PASS、51 files / 456 tests。
 - Contract: PASS、4 files / 15 tests。
-- Coverage: PASS、statements 86.85%、branches 76.53%、functions 91.55%、lines 87.31%。
+- Coverage: PASS、statements 87.32%、branches 77.36%、functions 92.64%、lines 87.80%。
 - Chromium PC E2E: PASS、52/52。
-- Next.js 16.3.2 production build: PASS、19 routes。
-- Live OpenAI: PASS、1/1、約142秒。
-- Live Supabase: PASS、2/2、cleanup済み。
-- Live WordPress readiness: EXPECTED FAIL CLOSED、外部requestなし。
-- GitHub required CI: PASS。
-- PR #18: MERGED、merge commit `742370e`。
-- Vercel production build/deploy: PASS、`dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt` READY。
-- Production unauthenticated root: `307` to `/demo-login?next=%2F`。
-- Production unauthenticated `/api/generation-logs`: `401`。
-- Production CSP/HSTS/X-Frame-Options/nosniff/Permissions-Policy/Referrer-Policy: PASS。
-- Production 1440x1000: wizard bottom 963px、approval/WordPress bottom 963px、horizontal overflow 0。
-- Production 1440x768: wizard bottom 731px、approval/WordPress bottom 731px、horizontal overflow 0。
-- Production shortcut clicks and section navigation: PASS。
-- Production browser console: 0件。
-- Production Vercel runtime error / 5xx logs: 0件。
+- Next.js build: PASS、19 routes。
+- Live OpenAI: PASS、1/1。デルタ相当BtoB教科書型、デルタ相当BtoBケース型、アニハ相当BtoC FAQ型を1契約テスト内で検証。生産データ書き込みなし。
+- GitHub Actions quality-gate: PASS、4m33s。
+- Git hooks: pre-commit / pre-pushともPASS。
+- `git diff --check`: PASS。
+
+旧テストのうちFAQを2回表示する期待値と固定語を必須とする期待値は、今回の受入仕様と矛盾するため是正した。テストの削除、skip、判定緩和は行っていない。
 
 ## 10. Next Recommended Action
 
 次にClaude Codeが最初にやるべきこと：
 
-1. PR #18の入力パネル高さ変更とviewport E2Eを独立レビューする。
-2. `AI_HANDOFF.md`のmerge/deployment/production browser結果と実際のGit/Vercel状態が一致するか確認する。
-3. `npm.cmd run quality`を再実行し、差分がなければコードを変更せずレビュー結果を記録する。
-4. WordPress live契約が必要なら、使い捨てsandboxと全安全変数を用意してから実行する。本番WordPressでは実行しない。
+1. PR #42のCodeRabbit follow-up結果と未解決コメントを確認する。
+2. `src/lib/draft-html.ts`のFAQ正本化・冪等性と、`src/lib/server/content.ts`の文字コード優先順位・SSRF制約維持を独立レビューする。
+3. `src/lib/publication-quality.ts`の数値根拠・条件一般化・リンク検出に過不足がないかfixtureと合わせて確認する。
+4. `src/lib/server/article-generation.ts`で読者層・構成・根拠条件が新規生成と再作成の両方へ渡ることを確認する。
+5. `npm.cmd run quality`を再実行し、差分がなければレビュー結果をhandoffへ追記する。
+6. 承認前にPRをmergeしたり、本番デプロイしたりしない。
 
 ## 11. Suggested Review Scope for Claude Code
 
 Claude Codeに重点レビューしてほしい範囲：
 
-- `src/components/aio/article-generator-app.tsx`: sticky fieldset、入力パネル内部スクロール、下部ショートカットの位置関係。
-- `tests/e2e/aio-workflow.spec.ts`: 保存済みログから一次情報ステップを復元した後の1440x1000/768 viewport assertion。
-- 参照情報、一次情報、画像トーンの長いカード内で、内部スクロールと戻る/次へが維持されること。
+- FAQ: 同一質問・異回答、編集回答の優先、保存復元、繰り返しHTML組み立て、本文の正当な非FAQ見出しを誤削除しないこと。
+- URL: BOM/HTTP/meta矛盾時の優先順位、Windows-31J/EUC-JP、一覧・短文・ノイズ、文字化けを根拠へ戻さないこと。
+- Publication gate: 未裏付け数値、`約`だけの数値、条件一般化、内部メモ、実リンク、出典重複を編集点と独立して扱うこと。
+- Audience/structure: BtoC/BtoB、教科書/FAQ/ケースが生成計画と評価へ伝播し、旧保存データが`auto`で動くこと。
+- Regeneration: 現在フォームと追加指示を使う全文生成で、編集本文を黙って引き継がないこと。
+- Public HTML: preview/export/WordPress mockの一致と、source/internal noteの分離。
 
 ## 12. Risk Notes
 
 リスク・人間確認が必要な事項：
 
-- 最終判定はWordPress live契約だけ`UNVERIFIED`のため`CONDITIONAL PASS`予定。それ以外の確認可能な要求はPASS。
-- WordPress実サイトの投稿、media upload、deleteはデータ破壊リスクがあるため、通常の本番資格情報では検証しない。
-- 監査中のOpenAI/Supabase操作はlive環境で実行した。Supabase/Storageの使い捨てデータはcleanup済み。
-- 本番のviewport修正は実座標と実クリックまで確認済み。将来ウィザード上部カードの高さを変更する場合は、1440x768/1000の回帰E2Eを維持する。
+- 公開前に数値、期間、単位、対象、条件、例外、出典を一次資料と照合する。
+- 動物医療、金融、法令等の専門情報は担当者・有資格者が確認する。
+- 文字化けまたは`evidenceUsable=false`のURLは根拠として使わず、原文を手動入力する。
+- FAQの意味重複、仮想事例の実績誤認、本文の主張と出典の対応は人が最終確認する。
+- 本番保存ログは調査時に読み取りのみで使用した。既存記事、Supabase本番データ、WordPressを変更していない。
+- このPRは本番未反映。承認後に別工程でmerge/deploy/post-deploy smokeが必要。
 
 ## 13. Do Not Touch
 
 触らない方がよい領域：
 
 - `.env.local`、API keys、Supabase/WordPress credentials、cookies、tokens/hashesを表示・commitしない。
-- 未追跡の`.claude/`と`output/`を削除・stage・変更しない。
-- 認証、SSRF、upload validation、HTML sanitization、image rollback/concurrency、migration/test-integrity checksを弱めない。
-- disposable sandboxと全確認フラグなしにWordPress live post/media/deleteを実行しない。
-- `main`への直接push、force push、branch protection bypassをしない。
+- 未追跡の`output/`を削除・stage・変更しない。
+- 認証、SSRF、redirect/timeout/size limits、upload validation、HTML sanitizationを弱めない。
+- 本番Supabaseへの書き込み、本番WordPress投稿、既存記事一括変更を承認なしで行わない。
+- `main`への直接push、force push、branch protection bypass、PR #42の無断mergeを行わない。
 
 ## 14. Notes for Claude Code
 
 Claude Codeへの補足：
 
+- 詳細調査報告と相沢様への未送信回答案は`docs/aizawa-content-integrity-review.md`にある。
 - Windows PowerShellでは`npm.cmd` / `npx.cmd`を使用する。
 - CodeRabbit OSSが標準レビュー。Cursor Bugbotは任意・予備。
-- Vercel CLIは`--scope sl2026`が必要。
-- Production: https://aio-article-generator.vercel.app
-- Supabase project: `npdyfhqugniuxfxpgngh`。
 - `AGENTS.md` / `CLAUDE.md`の運用指示は今回変更不要。
+- 本番Vercelコードは調査開始時に`742370e`相当、基準`8c2a9b5`との差分は文書のみで、対象runtimeに機能差はなかった。
+- 保存ログ上の生成時自己評価と編集画面の品質点は別経路。比較時は入力・取得本文・モデル・プロンプト版・評価対象をそろえる。
