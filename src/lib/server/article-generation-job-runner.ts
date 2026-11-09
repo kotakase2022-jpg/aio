@@ -198,6 +198,8 @@ async function fetchInputs(inputs: KeyValueInput[], files: AttachedFileInput[] =
         title: "手動入力テキスト",
         text: item.text.trim(),
         ok: true,
+        evidenceUsable: true,
+        pageKind: "unknown",
         sourceType: "manual",
       });
     }
@@ -210,6 +212,8 @@ async function fetchInputs(inputs: KeyValueInput[], files: AttachedFileInput[] =
         title: file.name,
         text: file.text.trim(),
         ok: true,
+        evidenceUsable: true,
+        pageKind: "unknown",
         sourceType: "file",
         fileName: file.name,
         fileType: file.type,
@@ -234,11 +238,22 @@ async function fetchInputs(inputs: KeyValueInput[], files: AttachedFileInput[] =
 }
 
 function summarizeFetch(results: FetchResult[], label: string) {
-  const urlResults = results.filter((result) => result.url !== "manual-text");
+  const urlResults = results.filter(
+    (result) => result.sourceType === "url" || /^https?:\/\//i.test(result.url),
+  );
   const failed = urlResults.filter((result) => !result.ok);
+  const needsManualSupport = urlResults.filter(
+    (result) => result.ok && result.evidenceUsable === false,
+  );
+  const usable = urlResults.length - failed.length - needsManualSupport.length;
   if (urlResults.length === 0) return `${label}なし`;
-  if (failed.length === 0) return `${urlResults.length}件取得`;
-  return `${urlResults.length - failed.length}件取得・${failed.length}件失敗`;
+  return [
+    `${usable}件を記事根拠として取得`,
+    needsManualSupport.length > 0 ? `${needsManualSupport.length}件は手動補足が必要` : "",
+    failed.length > 0 ? `${failed.length}件失敗` : "",
+  ]
+    .filter(Boolean)
+    .join("・");
 }
 
 function injectImages(html: string, images: ArticleImage[]) {

@@ -23,7 +23,7 @@ describe("article image helpers", () => {
     const prompt = buildProductionImagePrompt("Base concept", "featured");
 
     expect(prompt).toContain("Base concept");
-    expect(prompt).toContain("premium Japanese B2B");
+    expect(prompt).toContain("premium Japanese editorial");
     expect(prompt).toContain("Do not include readable text");
   });
 

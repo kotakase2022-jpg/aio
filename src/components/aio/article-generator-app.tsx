@@ -60,6 +60,7 @@ import {
 } from "@/lib/primary-information";
 import { qualityCheckEditGuidance } from "@/lib/quality-edit-guidance";
 import { qualityRegenerationAction } from "@/lib/quality-regeneration-action";
+import { canonicalSourceUrlKey, normalizeSourceUrl } from "@/lib/source-url";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import {
   ARTICLE_ATTACHMENT_ACCEPT,
@@ -70,10 +71,12 @@ import {
 import { cn, joinCsv, splitCsv } from "@/lib/utils";
 import type {
   AttachedFileInput,
+  ArticleStructure,
   ArticleDraft,
   ArticleFormPayload,
   ArticleGenerationResult,
   ArticleImage,
+  AudienceType,
   AuthorInput,
   CompetitorResearchResult,
   FetchResult,
@@ -174,6 +177,8 @@ export function ArticleGeneratorApp() {
   const [referenceFiles, setReferenceFiles] = useState<AttachedFileInput[]>([]);
   const [competitorFiles, setCompetitorFiles] = useState<AttachedFileInput[]>([]);
   const [theme, setTheme] = useState("");
+  const [audienceType, setAudienceType] = useState<AudienceType>("auto");
+  const [articleStructure, setArticleStructure] = useState<ArticleStructure>("auto");
   const [primaryInfoTypes, setPrimaryInfoTypes] = useState<PrimaryInformationType[]>([]);
   const [primaryInfo, setPrimaryInfo] = useState("");
   const [closingText, setClosingText] = useState("");
@@ -265,6 +270,8 @@ export function ArticleGeneratorApp() {
       referenceFiles,
       competitorFiles,
       theme,
+      audienceType,
+      articleStructure,
       primaryInfoTypes,
       primaryInfo,
       closingText,
@@ -275,6 +282,8 @@ export function ArticleGeneratorApp() {
     }),
     [
       author,
+      articleStructure,
+      audienceType,
       closingText,
       competitorFiles,
       competitors,
@@ -678,6 +687,8 @@ export function ArticleGeneratorApp() {
     setReferenceFiles(input.referenceFiles ?? []);
     setCompetitorFiles(input.competitorFiles ?? []);
     setTheme(input.theme ?? "");
+    setAudienceType(input.audienceType ?? "auto");
+    setArticleStructure(input.articleStructure ?? "auto");
     setPrimaryInfoTypes(restoredPrimaryInfoTypes);
     setPrimaryInfo(input.primaryInfo ?? "");
     setClosingText(input.closingText ?? "");
@@ -1657,6 +1668,40 @@ export function ArticleGeneratorApp() {
                   placeholder="複数キーワード、想定読者、検索意図、記事の狙い"
                   className="min-h-32"
                 />
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="読者区分">
+                    <select
+                      data-testid="audience-type-select"
+                      aria-label="記事の読者区分"
+                      value={audienceType}
+                      onChange={(event) => setAudienceType(event.target.value as AudienceType)}
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    >
+                      <option value="auto">入力内容から自動判定</option>
+                      <option value="btoc">一般消費者向け（BtoC）</option>
+                      <option value="btob">事業者・経営者向け（BtoB）</option>
+                    </select>
+                  </Field>
+                  <Field label="記事構成">
+                    <select
+                      data-testid="article-structure-select"
+                      aria-label="記事構成"
+                      value={articleStructure}
+                      onChange={(event) =>
+                        setArticleStructure(event.target.value as ArticleStructure)
+                      }
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    >
+                      <option value="auto">入力内容から自動判定</option>
+                      <option value="textbook">教科書型</option>
+                      <option value="faq">FAQ型</option>
+                      <option value="case">ケース型</option>
+                    </select>
+                  </Field>
+                </div>
+                <p className="text-xs leading-5 text-slate-500">
+                  読者区分は語彙と判断材料、記事構成は本文の展開方法に反映します。
+                </p>
                 {themeCandidateError ? (
                   <div
                     data-testid="theme-candidates-error"
@@ -2663,8 +2708,13 @@ function UploadRow({
 
 function FetchFailures({ results }: { results: FetchResult[] }) {
   const failures = results.filter((result) => !result.ok && result.reason);
-  const notes = results.filter((result) => result.ok && result.reason);
-  if (failures.length === 0 && notes.length === 0) return null;
+  const unusableEvidence = results.filter(
+    (result) => result.ok && result.evidenceUsable === false,
+  );
+  const notes = results.filter(
+    (result) => result.ok && result.evidenceUsable !== false && result.reason,
+  );
+  if (failures.length === 0 && unusableEvidence.length === 0 && notes.length === 0) return null;
   return (
     <div className="space-y-2">
       {failures.length > 0 ? (
@@ -2677,6 +2727,24 @@ function FetchFailures({ results }: { results: FetchResult[] }) {
             >
               <span className="font-semibold">{failure.url}</span>:{" "}
               {formatFetchReason(failure.reason)}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {unusableEvidence.length > 0 ? (
+        <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-semibold text-amber-900">
+            URL取得成功・記事根拠には未使用
+          </p>
+          <p className="text-xs leading-5 text-amber-900">
+            ページ自体には接続できましたが、本文として利用できる根拠を確認できませんでした。該当入力へ戻り、必要な本文を手動テキストで補ってください。
+          </p>
+          {unusableEvidence.map((result) => (
+            <div
+              key={`${result.url}-${result.reason}`}
+              className="text-xs leading-5 text-amber-900"
+            >
+              <span className="font-semibold">{result.url}</span>: {formatFetchReason(result.reason)}
             </div>
           ))}
         </div>
@@ -2708,7 +2776,9 @@ function FetchResultAlerts({
   const referenceNotices = referenceResults.filter((result) => result.reason);
   const competitorNotices = competitorResults.filter((result) => result.reason);
   if (referenceNotices.length === 0 && competitorNotices.length === 0) return null;
-  const hasFailures = [...referenceNotices, ...competitorNotices].some((result) => !result.ok);
+  const hasFailures = [...referenceNotices, ...competitorNotices].some(
+    (result) => !result.ok || result.evidenceUsable === false,
+  );
 
   return (
     <Card
@@ -2719,7 +2789,7 @@ function FetchResultAlerts({
         <CardTitle>URL取得結果</CardTitle>
         <CardDescription>
           {hasFailures
-            ? "取得できなかったURLは、該当入力へ戻って手動テキストで補えます。"
+            ? "取得失敗、または記事根拠として利用できなかったURLは、該当入力へ戻って手動テキストで補えます。"
             : "URLは取得できました。本文抽出時の補足情報を確認できます。"}
         </CardDescription>
       </CardHeader>
@@ -2932,6 +3002,8 @@ function ArticlePreview({
         sourceUrls: collectDraftSourceUrls(draft),
         competitorTexts: collectDraftCompetitorTexts(draft),
         targetWordCount: draft.inputPayload.wordCount,
+        audienceType: draft.inputPayload.audienceType,
+        articleStructure: draft.inputPayload.articleStructure,
       }),
     [draft],
   );
@@ -3005,6 +3077,7 @@ function ArticlePreview({
     () => [...failedQualityChecks, ...passedQualityChecks],
     [failedQualityChecks, passedQualityChecks],
   );
+  const publicationReadiness = qualityEvaluation.publicationReadiness;
   const [copyStatus, setCopyStatus] = useState<{
     message: string;
     tone: "success" | "error";
@@ -3143,6 +3216,9 @@ function ArticlePreview({
               <li key={item}>{item}</li>
             ))}
           </ul>
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            生成時点のAI出力に対する自己評価です。編集後には更新されず、公開可否を保証しません。
+          </p>
         </InfoPanel>
         <InfoPanel
           title="編集品質チェック"
@@ -3174,7 +3250,7 @@ function ArticlePreview({
           >
             {failedQualityChecks.length
               ? `改善優先: ${failedQualityChecks.length}件。未達項目を先に表示しています。`
-              : "全チェックを満たしています。公開前の最終確認に進めます。"}
+              : "編集品質のチェックを満たしています。公開前チェックは別に確認してください。"}
           </div>
           <div className="mt-3 space-y-2 text-xs leading-5">
             {orderedQualityChecks.map((check) => (
@@ -3213,6 +3289,47 @@ function ArticlePreview({
               </div>
             ))}
           </div>
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            現在のタイトル・本文・FAQ・出典から組み立てた最終HTMLを対象に、編集のたび再計算します。
+          </p>
+        </InfoPanel>
+        <InfoPanel title="公開前チェック">
+          <div
+            data-testid="publication-readiness-summary"
+            data-status={publicationReadiness?.publishReady ? "ready" : "review-required"}
+            className={cn(
+              "rounded-md border px-3 py-2 text-sm font-semibold",
+              publicationReadiness?.publishReady
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-rose-200 bg-rose-50 text-rose-900",
+            )}
+          >
+            {publicationReadiness?.publishReady
+              ? "機械検査で公開阻害要因は見つかりませんでした。"
+              : `要確認: ${publicationReadiness?.issues.length ?? 0}件。編集品質スコアでは相殺されません。`}
+          </div>
+          {publicationReadiness?.issues.length ? (
+            <div className="mt-3 space-y-2 text-xs leading-5">
+              {publicationReadiness.issues.map((issue, index) => (
+                <div
+                  key={`${issue.id}-${index}`}
+                  data-testid="publication-readiness-issue"
+                  className={cn(
+                    "rounded-md border px-3 py-2",
+                    issue.severity === "blocker"
+                      ? "border-rose-200 bg-rose-50 text-rose-900"
+                      : "border-amber-200 bg-amber-50 text-amber-900",
+                  )}
+                >
+                  <div className="font-semibold">{issue.label}</div>
+                  <div className="mt-0.5">{issue.detail}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            FAQ重複、文字化け、未裏付け数値、条件の一般化、リンク、制作過程の文言を確認します。最終判断は編集者が行ってください。
+          </p>
         </InfoPanel>
         <InfoPanel title="出典URL">
           <div className="space-y-2 text-sm">
@@ -3350,6 +3467,9 @@ function ArticleRegenerationDialog({
           </Button>
         </div>
         <div className="space-y-4 px-6 py-5">
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
+            再作成は、現在のフォーム入力と追加指示を使って記事全文を生成し直します。編集済み本文は新しい本文へ引き継がれません。現在のドラフトは生成完了まで保持され、保存済みの生成ログから再確認できます。
+          </div>
           <Field label="再作成方針">
             <Textarea
               data-testid="article-regeneration-instruction"
@@ -3758,7 +3878,9 @@ function hydrateDraftFromGenerationJob(job: GenerationJob) {
 function collectDraftReferenceTexts(draft: ArticleDraft) {
   return Array.from(
     new Set([
-      ...draft.fetchedReferences.map((item) => item.text ?? ""),
+      ...draft.fetchedReferences
+        .filter((item) => item.evidenceUsable !== false)
+        .map((item) => item.text ?? ""),
       ...draft.inputPayload.references.map((item) => item.text ?? ""),
       ...(draft.inputPayload.referenceFiles ?? []).map((item) => item.text ?? ""),
     ]),
@@ -3766,14 +3888,35 @@ function collectDraftReferenceTexts(draft: ArticleDraft) {
 }
 
 function collectDraftSourceUrls(draft: ArticleDraft) {
+  const declaredSourceUrls = draft.aiResult.sources.map((item) => item.url).filter((url) => url.trim());
+  if (declaredSourceUrls.length > 0) {
+    return Array.from(new Set(declaredSourceUrls));
+  }
+
+  const fetchedSources = [...draft.fetchedReferences, ...draft.fetchedCompetitors];
+  const unusableSourceKeys = new Set(
+    fetchedSources
+      .filter((item) => !item.ok || item.evidenceUsable === false)
+      .map((item) => canonicalSourceUrlKey(normalizeSourceUrl(item.url)))
+      .filter(Boolean),
+  );
+
   return Array.from(
     new Set([
-      ...draft.fetchedReferences.map((item) => item.url),
-      ...draft.inputPayload.references.map((item) => item.url ?? ""),
-      ...draft.fetchedCompetitors.map((item) => item.url),
-      ...draft.inputPayload.competitors.map((item) => item.url ?? ""),
+      ...fetchedSources
+        .filter((item) => item.ok && item.evidenceUsable !== false)
+        .map((item) => item.url),
+      ...draft.inputPayload.references
+        .map((item) => item.url ?? "")
+        .filter(
+          (url) => !unusableSourceKeys.has(canonicalSourceUrlKey(normalizeSourceUrl(url))),
+        ),
+      ...draft.inputPayload.competitors
+        .map((item) => item.url ?? "")
+        .filter(
+          (url) => !unusableSourceKeys.has(canonicalSourceUrlKey(normalizeSourceUrl(url))),
+        ),
       ...(draft.competitorResearch?.insights ?? []).map((item) => item.url),
-      ...draft.aiResult.sources.map((item) => item.url),
     ]),
   ).filter((url) => url.trim());
 }
@@ -3781,7 +3924,9 @@ function collectDraftSourceUrls(draft: ArticleDraft) {
 function collectDraftCompetitorTexts(draft: ArticleDraft) {
   return Array.from(
     new Set([
-      ...draft.fetchedCompetitors.map((item) => item.text ?? ""),
+      ...draft.fetchedCompetitors
+        .filter((item) => item.evidenceUsable !== false)
+        .map((item) => item.text ?? ""),
       ...draft.inputPayload.competitors.map((item) => item.text ?? ""),
       ...(draft.inputPayload.competitorFiles ?? []).map((item) => item.text ?? ""),
       ...(draft.competitorResearch ? collectCompetitorResearchTexts(draft.competitorResearch) : []),
@@ -3819,6 +3964,11 @@ function buildQualityRegenerationInstruction(evaluation: ArticleQualityEvaluatio
     improvements.length > 0
       ? `改善が必要な項目:\n${improvements.join("\n")}`
       : "現在の品質は高めですが、さらに現場感、具体性、独自の視点を強めてください。",
+    evaluation.publicationReadiness?.issues.length
+      ? `公開前に解消すべき問題:\n${evaluation.publicationReadiness.issues
+          .map((issue) => `- ${issue.label}: ${issue.detail}`)
+          .join("\n")}`
+      : "公開前の機械チェックでは阻害要因は見つかっていません。",
   ].join("\n\n");
 }
 
@@ -3858,6 +4008,7 @@ function combineQualityEvaluations(
       ...metaDescriptionEvaluation.improvements,
       ...imageAltEvaluation.improvements,
     ]),
+    publicationReadiness: bodyEvaluation.publicationReadiness,
   };
 }
 

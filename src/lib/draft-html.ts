@@ -1,11 +1,10 @@
 import type { ArticleDraft, ArticleImage, AuthorInput, FaqItem } from "@/types/aio";
 import { sanitizeArticleHtml } from "@/lib/article-html";
 import {
-  articleContainsCanonicalSourceUrl,
+  articleContainsCanonicalSourceLink,
   canonicalSourceUrlKey,
   decodeHtmlAmpersands,
   normalizeSourceUrl,
-  sourceUrlCandidates,
 } from "@/lib/source-url";
 
 type BuildDraftArticleHtmlOptions = {
@@ -18,10 +17,28 @@ export function buildDraftArticleHtml(
   draft: ArticleDraft,
   options: BuildDraftArticleHtmlOptions = {},
 ) {
-  const withImages = replaceDraftImageReferences(draft.editedBodyHtml, draft.images, options);
+  const publicBody = removeInternalProcessNotes(draft.editedBodyHtml);
+  const withImages = replaceDraftImageReferences(publicBody, draft.images, options);
   const withFaq = appendFaqBlockWhenNeeded(withImages, draft.faqItems);
   const withAuthor = appendAuthorBlockWhenNeeded(withFaq, draft.author, options);
   return sanitizeArticleHtml(appendSourceBlockWhenNeeded(withAuthor, draft));
+}
+
+function removeInternalProcessNotes(html: string) {
+  const notes = [
+    "競合URLから本文を取得しました",
+    "参照URLから本文を取得しました",
+    "入力フォームの参照情報です",
+    "入力フォームの競合情報です",
+    "AI競合調査で参照した競合情報です",
+  ];
+  const notePattern = notes.map(escapeRegExp).join("|");
+  const withoutNotes = html.replace(new RegExp(`(?:${notePattern})[。．.]?`, "g"), "");
+
+  return withoutNotes.replace(
+    /<(p|li)\b([^>]*)>\s*(?:<br\s*\/?>\s*)*<\/\1>/gi,
+    "",
+  );
 }
 
 export function replaceDraftImageReferences(
@@ -47,40 +64,55 @@ export function replaceDraftImageReferences(
 }
 
 export function appendFaqBlockWhenNeeded(html: string, faqItems: FaqItem[]) {
-  const items = faqItems
-    .map((item) => ({
-      question: item.question.trim(),
-      answer: item.answer.trim(),
-    }))
-    .filter((item) => item.question || item.answer);
-
-  const withoutManagedFaq = removeManagedFaqBlock(html);
+  const items = canonicalizeFaqItems(faqItems);
+  const withoutManagedFaq = removeGeneratedFaqBlocks(removeManagedFaqBlock(html));
   if (items.length === 0) {
     return withoutManagedFaq;
   }
 
-  const text = normalizeText(stripHtmlText(withoutManagedFaq));
-  const itemsMissingFromBody = items.filter((item) => !faqItemAlreadyVisible(item, text));
-
-  if (itemsMissingFromBody.length === 0) {
-    return withoutManagedFaq;
-  }
-
-  return `${withoutManagedFaq}\n${buildFaqBlockHtml(itemsMissingFromBody)}`;
+  return joinHtmlBlocks(withoutManagedFaq, buildFaqBlockHtml(items));
 }
 
-function faqItemAlreadyVisible(
-  item: { question: string; answer: string },
-  normalizedBodyText: string,
-) {
-  const questionVisible = item.question
-    ? normalizedBodyText.includes(normalizeText(item.question))
-    : true;
-  const answerVisible = item.answer
-    ? normalizedBodyText.includes(normalizeText(item.answer))
-    : true;
+function canonicalizeFaqItems(faqItems: FaqItem[]) {
+  const items: Array<{ question: string; answer: string }> = [];
+  const indexByQuestion = new Map<string, number>();
 
-  return questionVisible && answerVisible;
+  for (const item of faqItems) {
+    const question = faqPlainText(item.question);
+    const answer = faqPlainText(item.answer);
+    if (!question && !answer) {
+      continue;
+    }
+
+    const key = normalizeFaqQuestion(question) || `answer:${normalizeFaqQuestion(answer)}`;
+    const existingIndex = indexByQuestion.get(key);
+    if (existingIndex === undefined) {
+      indexByQuestion.set(key, items.length);
+      items.push({ question, answer });
+      continue;
+    }
+
+    // Later entries represent the editor's latest decision while the first position
+    // remains stable, so repeated save/restore cycles do not reorder the FAQ.
+    items[existingIndex] = { question, answer };
+  }
+
+  return items;
+}
+
+function normalizeFaqQuestion(value: string) {
+  return decodeBasicHtmlEntities(stripHtmlText(value))
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]+/gu, "");
+}
+
+function faqPlainText(value: string) {
+  return decodeBasicHtmlEntities(
+    value.replace(/<\/?(?:a|b|br|code|em|i|span|strong)\b[^>]*>/gi, " "),
+  )
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function appendSourceBlockWhenNeeded(html: string, draft: ArticleDraft) {
@@ -96,7 +128,7 @@ export function appendSourceBlockWhenNeeded(html: string, draft: ArticleDraft) {
     return withoutManagedSources;
   }
 
-  return `${withoutManagedSources}\n${buildSourceBlockHtml(missingSources)}`;
+  return joinHtmlBlocks(withoutManagedSources, buildSourceBlockHtml(missingSources));
 }
 
 export function appendAuthorBlockWhenNeeded(
@@ -277,6 +309,87 @@ function removeManagedFaqBlock(html: string) {
   return removeSectionsByClass(html, "aio-faq-block");
 }
 
+function removeGeneratedFaqBlocks(html: string) {
+  const ranges: Array<{ start: number; end: number }> = [];
+  const headingPattern = /<h([1-6])\b[^>]*>[\s\S]*?<\/h\1>/gi;
+  let headingMatch: RegExpExecArray | null;
+
+  while ((headingMatch = headingPattern.exec(html))) {
+    if (!isFaqSectionHeading(headingMatch[0])) {
+      continue;
+    }
+
+    const sectionRange = enclosingFaqSectionRange(html, headingMatch.index, headingMatch[0]);
+    if (sectionRange) {
+      ranges.push(sectionRange);
+      headingPattern.lastIndex = sectionRange.end;
+      continue;
+    }
+
+    const level = Number(headingMatch[1]);
+    const end = findNextHeadingBoundary(html, headingPattern.lastIndex, level);
+    ranges.push({ start: headingMatch.index, end });
+    headingPattern.lastIndex = end;
+  }
+
+  return ranges
+    .reverse()
+    .reduce(
+      (currentHtml, range) =>
+        `${currentHtml.slice(0, range.start)}${currentHtml.slice(range.end)}`,
+      html,
+    )
+    .trim();
+}
+
+function isFaqSectionHeading(headingHtml: string) {
+  const value = decodeBasicHtmlEntities(stripHtmlText(headingHtml))
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s:：()（）【】\[\]・。、]+/g, "");
+
+  return /^(?:faq(?:よくある(?:ご)?質問)?|よくある(?:ご)?質問|q&a|質問と回答)$/.test(value);
+}
+
+function enclosingFaqSectionRange(html: string, headingStart: number, headingHtml: string) {
+  const sectionStartPattern = /<section\b[^>]*>/gi;
+  let match: RegExpExecArray | null;
+  let candidate: { start: number; contentStart: number; end: number } | null = null;
+
+  while ((match = sectionStartPattern.exec(html)) && match.index < headingStart) {
+    const end = findSectionEnd(html, sectionStartPattern.lastIndex);
+    if (end && end > headingStart) {
+      candidate = { start: match.index, contentStart: sectionStartPattern.lastIndex, end };
+    }
+  }
+
+  if (!candidate) {
+    return null;
+  }
+
+  const beforeHeading = html.slice(candidate.contentStart, headingStart);
+  if (stripHtmlText(beforeHeading).trim()) {
+    return null;
+  }
+
+  const firstHeading = html.slice(candidate.contentStart, candidate.end).match(/<h[1-6]\b[^>]*>[\s\S]*?<\/h[1-6]>/i)?.[0];
+  return firstHeading === headingHtml ? { start: candidate.start, end: candidate.end } : null;
+}
+
+function findNextHeadingBoundary(html: string, fromIndex: number, currentLevel: number) {
+  const nextHeadingPattern = /<h([1-6])\b[^>]*>/gi;
+  nextHeadingPattern.lastIndex = fromIndex;
+  let match: RegExpExecArray | null;
+
+  while ((match = nextHeadingPattern.exec(html))) {
+    if (Number(match[1]) <= currentLevel) {
+      return match.index;
+    }
+  }
+
+  return html.length;
+}
+
 function removeManagedSourceBlock(html: string) {
   return removeSectionsByClass(html, "aio-source-block");
 }
@@ -351,38 +464,66 @@ function findUnclosedManagedSectionEnd(html: string, fromIndex: number) {
 
 function collectRenderableSources(draft: ArticleDraft) {
   const seen = new Set<string>();
-  return [
-    ...draft.aiResult.sources.map((source) => ({
+  const unusableFetchedSourceKeys = new Set(
+    [...draft.fetchedReferences, ...draft.fetchedCompetitors]
+      .filter((source) => !source.ok || source.evidenceUsable === false)
+      .map((source) => canonicalSourceUrlKey(normalizeSourceUrl(source.url)))
+      .filter(Boolean),
+  );
+  const declaredSources = draft.aiResult.sources.map((source) => ({
       url: normalizeSourceUrl(source.url),
       title: source.title.trim(),
-      usageNotes: source.usage_notes.trim(),
-    })),
-    ...draft.fetchedReferences.map((source) => ({
+      usageNotes: publicSourceNote(source.usage_notes),
+    }));
+  const legacyFallbackSources = [
+    ...draft.fetchedReferences
+      .filter((source) => source.ok && source.evidenceUsable !== false)
+      .map((source) => ({
       url: normalizeSourceUrl(source.url),
       title: source.title?.trim() || source.url.trim(),
-      usageNotes: source.ok ? "参照URLから本文を取得しました。" : source.reason?.trim() || "",
+      usageNotes: "",
     })),
-    ...draft.inputPayload.references.map((source) => ({
+    ...draft.inputPayload.references
+      .filter(
+        (source) =>
+          !unusableFetchedSourceKeys.has(
+            canonicalSourceUrlKey(normalizeSourceUrl(source.url ?? "")),
+          ),
+      )
+      .map((source) => ({
       url: normalizeSourceUrl(source.url ?? ""),
       title: source.url?.trim() || "",
-      usageNotes: source.text?.trim() ? "入力フォームの参照情報です。" : "",
+      usageNotes: "",
     })),
-    ...draft.fetchedCompetitors.map((source) => ({
+    ...draft.fetchedCompetitors
+      .filter((source) => source.ok && source.evidenceUsable !== false)
+      .map((source) => ({
       url: normalizeSourceUrl(source.url),
       title: source.title?.trim() || source.url.trim(),
-      usageNotes: source.ok ? "競合URLから本文を取得しました。" : source.reason?.trim() || "",
+      usageNotes: "",
     })),
-    ...draft.inputPayload.competitors.map((source) => ({
+    ...draft.inputPayload.competitors
+      .filter(
+        (source) =>
+          !unusableFetchedSourceKeys.has(
+            canonicalSourceUrlKey(normalizeSourceUrl(source.url ?? "")),
+          ),
+      )
+      .map((source) => ({
       url: normalizeSourceUrl(source.url ?? ""),
       title: source.url?.trim() || "",
-      usageNotes: source.text?.trim() ? "入力フォームの競合情報です。" : "",
+      usageNotes: "",
     })),
     ...(draft.competitorResearch?.insights ?? []).map((source) => ({
       url: normalizeSourceUrl(source.url),
       title: source.title.trim() || source.url.trim(),
-      usageNotes: "AI競合調査で参照した競合情報です。",
+      usageNotes: "",
     })),
-  ]
+  ];
+
+  // New drafts declare only sources that support published claims. Older drafts may not
+  // have that field populated, so keep their historical URL fallback for compatibility.
+  return (declaredSources.some((source) => source.url) ? declaredSources : legacyFallbackSources)
     .filter((source) => {
       const sourceKey = canonicalSourceUrlKey(source.url);
       if (!source.url || seen.has(sourceKey)) {
@@ -394,14 +535,20 @@ function collectRenderableSources(draft: ArticleDraft) {
     .slice(0, 8);
 }
 
-function sourceUrlAlreadyVisible(url: string, html: string) {
-  const normalizedHtml = decodeHtmlAmpersands(html);
-  const candidates = sourceUrlCandidates(url);
-  if (candidates.some((candidate) => normalizedHtml.includes(candidate))) {
-    return true;
+function publicSourceNote(value: string) {
+  const note = value.trim();
+  if (
+    /(?:参照|競合)URLから本文を取得しました|入力フォームの(?:参照|競合)情報です|AI競合調査で参照した競合情報です/.test(
+      note,
+    )
+  ) {
+    return "";
   }
+  return note;
+}
 
-  return articleContainsCanonicalSourceUrl(url, normalizedHtml);
+function sourceUrlAlreadyVisible(url: string, html: string) {
+  return articleContainsCanonicalSourceLink(url, html);
 }
 
 function replaceImageReference(html: string, from: string, to: string, altText: string) {
@@ -444,6 +591,20 @@ function stripHtmlText(html: string) {
 
 function normalizeText(value: string) {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function decodeBasicHtmlEntities(value: string) {
+  return value
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;|&#38;|&#038;/gi, "&")
+    .replace(/&lt;|&#60;/gi, "<")
+    .replace(/&gt;|&#62;/gi, ">")
+    .replace(/&quot;|&#34;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'");
+}
+
+function joinHtmlBlocks(...blocks: string[]) {
+  return blocks.map((block) => block.trim()).filter(Boolean).join("\n");
 }
 
 function escapeHtml(value: string) {

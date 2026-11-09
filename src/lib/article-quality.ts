@@ -1,10 +1,13 @@
 import {
-  articleContainsCanonicalSourceUrl,
-  decodeHtmlAmpersands,
+  articleContainsCanonicalSourceLink,
   normalizeSourceUrls,
-  sourceUrlCandidates,
 } from "@/lib/source-url";
 import { englishTokenAppearsInText } from "@/lib/english-token";
+import {
+  evaluatePublicationReadiness,
+  type PublicationReadiness,
+} from "@/lib/publication-quality";
+import type { ArticleStructure, AudienceType } from "@/types/aio";
 
 export type ArticleQualityCheck = {
   id: string;
@@ -18,6 +21,7 @@ export type ArticleQualityEvaluation = {
   checks: ArticleQualityCheck[];
   strengths: string[];
   improvements: string[];
+  publicationReadiness?: PublicationReadiness;
 };
 
 export type ArticleQualityContext = {
@@ -30,6 +34,8 @@ export type ArticleQualityContext = {
   sourceUrls?: string[];
   competitorTexts?: string[];
   targetWordCount?: number;
+  audienceType?: AudienceType;
+  articleStructure?: ArticleStructure;
 };
 
 const genericPhrases = [
@@ -308,7 +314,7 @@ const primaryInfoStopWords = new Set([
 ]);
 
 const firstPartyAttributionPattern =
-  /(当社|弊社|自社|支援現場|現場|相談|ヒアリング|経験|観察|実務|お客様|クライアント|\bour\b|\bwe\b|field support|support team|client|customer|observed|observation|experience)/i;
+  /(当社|弊社|自社|当院|弊院|支援現場|現場|相談|ヒアリング|経験|観察|実務|お客様|クライアント|\bour\b|\bwe\b|field support|support team|client|customer|observed|observation|experience)/i;
 
 const ctaStopWords = new Set([
   ...primaryInfoStopWords,
@@ -444,6 +450,20 @@ const competitorStopWords = new Set([
 const competitivePositioningPattern =
   /(競合|他社|比較|差別化|上位記事|競合記事|競合LP|\bLP\b|不足|一方|対して|対比|独自|比較軸|勝ち筋|訴求|competitor|competition|differentiation|compared|whereas|positioning)/i;
 
+const nonConceptTermPattern =
+  /^(?:真っ先|尋ねられた|尋ねられる|尋ねる|聞かれた|聞かれる|多い|多く|まず|次に|最初|最後|重要|説明|解説|紹介|考える|考え方|示す|示した|述べる|使う|できる|します|しました|される|された)$/;
+
+const conceptAliasGroups = [
+  ["資金繰り", "キャッシュフロー", "手元資金"],
+  ["問い合わせ", "相談", "質問", "疑問"],
+  ["返済条件", "返済計画", "返済負担"],
+  ["売掛金", "請求債権", "売上債権"],
+  ["歯みがき", "歯磨き", "口腔ケア", "オーラルケア"],
+  ["飼い主", "ペットオーナー"],
+  ["経営者", "事業主", "代表者"],
+  ["一般消費者", "生活者", "一般読者"],
+] as const;
+
 export function evaluateArticleQuality(
   html: string,
   context: ArticleQualityContext = {},
@@ -490,7 +510,7 @@ export function evaluateArticleQuality(
   const sourceUrls = normalizeSourceUrls(context.sourceUrls);
   const requiredSourceUrls = sourceUrls.slice(0, 3);
   const missingSourceUrls = requiredSourceUrls.filter(
-    (url) => !sourceUrlAppearsInArticle(url, html, text),
+    (url) => !sourceUrlAppearsInArticle(url, html),
   );
   const shouldCheckSourceUrls = requiredSourceUrls.length > 0;
   const hasSourceUrlPresence =
@@ -549,9 +569,9 @@ export function evaluateArticleQuality(
   const hasThemeReflection = !shouldCheckTheme || themeHitCount >= themeTargetHits;
   const targetReaderTerms = extractSignalTerms(context.targetReaderText, audienceIntentStopWords);
   const targetReaderHitCount = targetReaderTerms.filter((term) =>
-    termAppearsInText(term, text),
+    conceptAppearsInText(term, text),
   ).length;
-  const targetReaderTargetHits = Math.min(3, Math.max(1, targetReaderTerms.length));
+  const targetReaderTargetHits = Math.min(2, Math.max(1, targetReaderTerms.length));
   const shouldCheckTargetReader = targetReaderTerms.length > 0;
   const hasTargetReaderReflection =
     !shouldCheckTargetReader || targetReaderHitCount >= targetReaderTargetHits;
@@ -565,10 +585,10 @@ export function evaluateArticleQuality(
     !shouldCheckSearchIntent || searchIntentHitCount >= searchIntentTargetHits;
   const primaryInfoTerms = extractPrimaryInfoTerms(context.primaryInfo);
   const primaryInfoHitCount = primaryInfoTerms.filter((term) =>
-    termAppearsInText(term, text),
+    conceptAppearsInText(term, text),
   ).length;
   const primaryInfoOpeningHitCount = primaryInfoTerms.filter((term) =>
-    termAppearsInText(term, openingText),
+    conceptAppearsInText(term, openingText),
   ).length;
   const primaryInfoTargetHits = Math.min(3, Math.max(1, primaryInfoTerms.length));
   const shouldCheckPrimaryInfo = primaryInfoTerms.length > 0;
@@ -590,7 +610,7 @@ export function evaluateArticleQuality(
   const hasCtaReflection = !shouldCheckCta || ctaHitCount >= ctaTargetHits;
   const referenceTerms = extractReferenceTerms(context.referenceTexts);
   const referenceHitCount = referenceTerms.filter((term) =>
-    termAppearsInText(term, text),
+    conceptAppearsInText(term, text),
   ).length;
   const referenceTargetHits = Math.min(4, Math.max(2, referenceTerms.length));
   const shouldCheckReferences = referenceTerms.length >= 2;
@@ -600,7 +620,7 @@ export function evaluateArticleQuality(
     shouldCheckReferences && includesAnyLongVerbatimClause(context.referenceTexts, text);
   const competitorTerms = extractCompetitorTerms(context.competitorTexts);
   const competitorHitCount = competitorTerms.filter((term) =>
-    termAppearsInText(term, text),
+    conceptAppearsInText(term, text),
   ).length;
   const competitorTargetHits = Math.min(4, Math.max(2, competitorTerms.length));
   const shouldCheckCompetitors = competitorTerms.length >= 2;
@@ -609,6 +629,21 @@ export function evaluateArticleQuality(
     (competitorHitCount >= competitorTargetHits && competitivePositioningPattern.test(text));
   const hasCompetitorVerbatimCopy =
     shouldCheckCompetitors && includesAnyLongVerbatimClause(context.competitorTexts, text);
+  const audienceFit = evaluateAudienceFit({
+    audienceType: context.audienceType,
+    targetReaderText: context.targetReaderText,
+    targetReaderReflected: hasTargetReaderReflection,
+    text,
+  });
+  const structureFit = evaluateStructureFit({
+    articleStructure: context.articleStructure,
+    html,
+    text,
+    headings,
+    hasDefinition,
+    hasList,
+    hasTable,
+  });
 
   const checks: ArticleQualityCheck[] = [
     {
@@ -636,7 +671,7 @@ export function evaluateArticleQuality(
         ? "冒頭がテンプレ導入ではなく、具体的な結論・判断から始まっています。"
         : `冒頭に「${genericOpeningHits
             .slice(0, 3)
-            .join("」「")}」型のテンプレ表現があります。背景説明から入らず、読者が最初に判断できる結論、定義、現場観察、条件から書き出すと自然になります。`,
+            .join("」「")}」型のテンプレ表現があります。背景説明から入らず、読者が最初に判断できる結論、定義、入力で確認できる具体的な経験、条件から書き出すと自然になります。`,
     },
     {
       id: "generic-opening-density",
@@ -736,6 +771,8 @@ export function evaluateArticleQuality(
           },
         ]
       : []),
+    ...(audienceFit ? [audienceFit] : []),
+    ...(structureFit ? [structureFit] : []),
     ...(shouldCheckTargetReader
       ? [
           {
@@ -771,8 +808,8 @@ export function evaluateArticleQuality(
             label: "一次情報の反映",
             passed: hasPrimaryInfoReflection,
             detail: hasPrimaryInfoReflection
-              ? "入力された一次情報の固有語彙が、本文内で自社経験として自然に反映されています。"
-              : `一次情報の固有語彙（${primaryInfoTerms.slice(0, 5).join("、")}）を、当社の経験・相談傾向・現場観察として本文に戻すと独自性が上がります。`,
+              ? "入力された一次情報の論点が、本文内で自社経験として自然に反映されています。"
+              : `一次情報の論点（${primaryInfoTerms.slice(0, 5).join("、")}）を、入力で確認できる経験・相談傾向・具体的な観察内容として本文に反映すると独自性が上がります。`,
           },
           {
             id: "primary-info-opening-placement",
@@ -780,14 +817,14 @@ export function evaluateArticleQuality(
             passed: hasPrimaryInfoOpeningPlacement,
             detail: hasPrimaryInfoOpeningPlacement
               ? "一次情報が冒頭の結論・判断材料にも入り、記事の独自性が早い段階で伝わります。"
-              : `一次情報の固有語彙（${primaryInfoTerms.slice(0, 5).join("、")}）を、冒頭の結論や読者の判断材料にも戻してください。本文後半だけで触れると、AIが作った一般論に見えやすくなります。`,
+              : `一次情報の論点（${primaryInfoTerms.slice(0, 5).join("、")}）を、冒頭の結論や読者の判断材料にも反映してください。本文後半だけで触れると、AIが作った一般論に見えやすくなります。`,
           },
           {
             id: "primary-info-digestion",
             label: "一次情報の編集消化",
             passed: !hasPrimaryInfoVerbatimCopy,
             detail: hasPrimaryInfoVerbatimCopy
-              ? "一次情報の入力文が長くそのまま使われています。固有語彙は残しつつ、読者向けの判断材料、例外、注意点に編集して言い換えると取材記事らしくなります。"
+              ? "一次情報の入力文が長くそのまま使われています。事実と条件は保ちつつ、読者向けの判断材料、例外、注意点に編集して言い換えると取材記事らしくなります。"
               : "一次情報は丸写しではなく、記事文脈に合わせて編集されています。",
           },
         ]
@@ -811,8 +848,8 @@ export function evaluateArticleQuality(
             label: "参照情報の具体反映",
             passed: hasReferenceReflection,
             detail: hasReferenceReflection
-              ? "参照情報の固有語彙が本文の定義・判断基準・具体例に反映されています。"
-              : `参照情報の固有語彙（${referenceTerms.slice(0, 5).join("、")}）を、定義・判断基準・具体例・注意点として本文に戻すと、一般論から抜け出せます。`,
+              ? "参照情報の主要な論点が本文の定義・判断基準・具体例に反映されています。"
+              : "参照情報の主要な論点、条件、例外、判断材料を本文に反映してください。入力と同じ単語を無理に使う必要はありません。",
           },
           {
             id: "reference-info-digestion",
@@ -832,7 +869,7 @@ export function evaluateArticleQuality(
             passed: hasCompetitorReflection,
             detail: hasCompetitorReflection
               ? "競合情報の論点が、比較軸や差別化ポイントとして本文に反映されています。"
-              : `競合情報の固有語彙（${competitorTerms.slice(0, 5).join("、")}）を、比較軸・不足論点・差別化ポイントとして本文に戻すと、企画記事としての独自性が上がります。`,
+              : "競合情報から得た読者の疑問、比較軸、不足論点、判断材料を本文に反映してください。入力と同じ言い回しを戻す必要はありません。",
           },
           {
             id: "competitor-insight-digestion",
@@ -944,14 +981,14 @@ export function evaluateArticleQuality(
     },
     {
       id: "numeric-claim-support",
-      label: "数字・実績の根拠づけ",
+      label: "数値説明の文脈",
       passed: hasNumericClaimSupport,
       detail: hasNumericClaimSupport
-        ? "数字や実績らしい表現には、出典、条件、目安、現場観察などの補足があります。"
+        ? "数字の近くに条件や出典の文脈があります。入力根拠との一致は別の公開前チェックで確認します。"
         : `数字や実績らしい表現（例: ${unsupportedNumericClaims
             .slice(0, 3)
             .map((claim) => claim.value)
-            .join("、")}）の近くに、出典、条件、時点、目安、現場観察の補足が不足しています。`,
+            .join("、")}）の近くに、出典、対象、条件、時点の説明が不足しています。「約」「目安」だけでは根拠になりません。`,
     },
     {
       id: "source-awareness",
@@ -994,12 +1031,25 @@ export function evaluateArticleQuality(
       Math.min(mechanicalSequenceHeadingHits, 4) * 2 -
       Math.min(longSentences.length, 4) * 2,
   );
+  const publicationReadiness = evaluatePublicationReadiness(html, {
+    evidenceTexts: uniqueItems([
+      context.primaryInfo ?? "",
+      context.themeText ?? "",
+      context.targetReaderText ?? "",
+      context.searchIntentText ?? "",
+      context.closingText ?? "",
+      ...(context.referenceTexts ?? []),
+      ...(context.competitorTexts ?? []),
+    ]),
+    requiredSourceUrls: context.sourceUrls,
+  });
 
   return {
     score,
     checks,
     strengths: checks.filter((check) => check.passed).map((check) => check.label),
     improvements: failed.map((check) => check.detail),
+    publicationReadiness,
   };
 }
 
@@ -1045,14 +1095,8 @@ function targetLengthRange(targetWordCount: number) {
   };
 }
 
-function sourceUrlAppearsInArticle(url: string, html: string, text: string) {
-  const candidates = sourceUrlCandidates(url);
-  const rawArticle = decodeHtmlAmpersands(html);
-  if (candidates.some((candidate) => rawArticle.includes(candidate) || text.includes(candidate))) {
-    return true;
-  }
-
-  return articleContainsCanonicalSourceUrl(url, `${rawArticle} ${text}`);
+function sourceUrlAppearsInArticle(url: string, html: string) {
+  return articleContainsCanonicalSourceLink(url, html);
 }
 
 function extractPrimaryInfoTerms(primaryInfo?: string) {
@@ -1066,9 +1110,7 @@ function extractReferenceTerms(referenceTexts?: string[]) {
     .join(" ")
     .slice(0, 9000);
 
-  return extractSignalTerms(combined, referenceInfoStopWords).filter(
-    (term) => term.length >= 3 || /[A-Za-z0-9]/.test(term),
-  );
+  return extractSignalTerms(combined, referenceInfoStopWords).filter(isEditorialConceptTerm);
 }
 
 function extractCompetitorTerms(competitorTexts?: string[]) {
@@ -1078,9 +1120,7 @@ function extractCompetitorTerms(competitorTexts?: string[]) {
     .join(" ")
     .slice(0, 9000);
 
-  return extractSignalTerms(combined, competitorStopWords).filter(
-    (term) => term.length >= 3 || /[A-Za-z0-9]/.test(term),
-  );
+  return extractSignalTerms(combined, competitorStopWords).filter(isEditorialConceptTerm);
 }
 
 function extractSignalTerms(value: string | undefined, stopWords: Set<string>) {
@@ -1114,6 +1154,127 @@ function termAppearsInText(term: string, text: string) {
   }
 
   return slidingWindows(term, 4).some((part) => text.includes(part));
+}
+
+function conceptAppearsInText(term: string, text: string) {
+  if (termAppearsInText(term, text)) {
+    return true;
+  }
+
+  const group = conceptAliasGroups.find((aliases) =>
+    aliases.some((alias) => term.includes(alias) || alias.includes(term)),
+  );
+  return Boolean(group?.some((alias) => termAppearsInText(alias, text)));
+}
+
+function isEditorialConceptTerm(term: string) {
+  return (
+    (term.length >= 3 || /[A-Za-z0-9]/.test(term)) &&
+    !nonConceptTermPattern.test(term.normalize("NFKC").toLowerCase())
+  );
+}
+
+function evaluateAudienceFit({
+  audienceType,
+  targetReaderText,
+  targetReaderReflected,
+  text,
+}: {
+  audienceType?: AudienceType;
+  targetReaderText?: string;
+  targetReaderReflected: boolean;
+  text: string;
+}): ArticleQualityCheck | null {
+  if (!audienceType || audienceType === "auto") {
+    return null;
+  }
+
+  if (audienceType === "btoc") {
+    const targetExplicitlyBusiness = /(経営者|事業者|法人|企業|担当者)/.test(targetReaderText ?? "");
+    const unexplainedBusinessFrame =
+      !targetExplicitlyBusiness && /(経営者向け|事業者向け|企業担当者|BtoB)/i.test(text);
+    const passed = targetReaderReflected && !unexplainedBusinessFrame;
+    return {
+      id: "audience-fit-btoc",
+      label: "BtoC読者への適合",
+      passed,
+      detail: passed
+        ? "一般読者の立場と判断に合わせた説明になっています。"
+        : "一般読者が理解できる語彙で、選択肢、注意すべき兆候、次の行動を説明してください。事業者向けの前提を置かないでください。",
+    };
+  }
+
+  const hasBusinessDecisionSupport =
+    /(判断|選択肢|比較|条件|注意|リスク|費用|期間|返済|担当|体制)/.test(text);
+  const passed = targetReaderReflected && hasBusinessDecisionSupport;
+  return {
+    id: "audience-fit-btob",
+    label: "BtoB読者への適合",
+    passed,
+    detail: passed
+      ? "経営者・担当者が判断するための条件や注意点が含まれています。"
+      : "経営者・担当者が選べる選択肢、判断条件、費用・期間、リスク、注意点を示してください。",
+  };
+}
+
+function evaluateStructureFit({
+  articleStructure,
+  html,
+  text,
+  headings,
+  hasDefinition,
+  hasList,
+  hasTable,
+}: {
+  articleStructure?: ArticleStructure;
+  html: string;
+  text: string;
+  headings: string[];
+  hasDefinition: boolean;
+  hasList: boolean;
+  hasTable: boolean;
+}): ArticleQualityCheck | null {
+  if (!articleStructure || articleStructure === "auto") {
+    return null;
+  }
+
+  if (articleStructure === "faq") {
+    const faqItemCount = (html.match(/class=(?:"|')[^"']*\baio-faq-item\b/gi) ?? []).length;
+    return {
+      id: "article-structure-faq",
+      label: "FAQ型への適合",
+      passed: faqItemCount >= 3,
+      detail:
+        faqItemCount >= 3
+          ? "質問と回答が記事の中心としてまとまっています。"
+          : "FAQ型では、読者の具体的な疑問と回答を3組以上そろえ、通常解説へFAQを付け足すだけの構成にしないでください。",
+    };
+  }
+
+  if (articleStructure === "case") {
+    const hasCase = /(ケース|事例|想定例|仮定|ある企業|ある飼い主|具体例)/.test(text);
+    const hasAssumptions = /(前提|条件|状況|背景)/.test(text);
+    const hasDecisionFork = /(選択肢|判断|分かれ目|場合|比較|決め手)/.test(text);
+    const passed = hasCase && hasAssumptions && hasDecisionFork;
+    return {
+      id: "article-structure-case",
+      label: "ケース型への適合",
+      passed,
+      detail: passed
+        ? "具体的な状況、前提条件、選択肢、判断の分かれ目が示されています。"
+        : "ケース型では、状況、前提条件、選択肢、判断の分かれ目を中心に構成してください。仮想事例は仮定と明示してください。",
+    };
+  }
+
+  const passed = hasDefinition && headings.length >= 2 && (hasList || hasTable);
+  return {
+    id: "article-structure-textbook",
+    label: "教科書型への適合",
+    passed,
+    detail: passed
+      ? "概念、選択肢、判断基準、注意点を体系的に追える構成です。"
+      : "教科書型では、概念、選択肢、判断基準、条件・例外、注意点を見出しで体系的に整理してください。",
+  };
 }
 
 function includesLongVerbatimClause(source: string | undefined, targetText: string) {

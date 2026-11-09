@@ -1,4 +1,5 @@
 import { sanitizeArticleHtml } from "@/lib/article-html";
+import { appendFaqBlockWhenNeeded } from "@/lib/draft-html";
 import { articleGenerationSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
 import { evaluateArticleQuality } from "@/lib/article-quality";
@@ -7,9 +8,14 @@ import { evaluateImageAltQuality } from "@/lib/image-alt-quality";
 import { evaluateMetaDescriptionQuality } from "@/lib/meta-description-quality";
 import { primaryInformationLabels } from "@/lib/primary-information";
 import { truncatePromptLine } from "@/lib/prompt-text";
+import { articleContainsCanonicalSourceLink } from "@/lib/source-url";
 import { evaluateTitleQuality } from "@/lib/title-quality";
 import { compactOptionalText, truncateText } from "@/lib/utils";
-import type { ArticleGenerationResult } from "@/types/aio";
+import type {
+  ArticleGenerationResult,
+  ArticleStructure,
+  AudienceType,
+} from "@/types/aio";
 
 export type ArticleGenerationPayload = {
   form: Record<string, unknown>;
@@ -27,15 +33,19 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     fetchedCompetitors: payload.fetchedCompetitors.slice(0, 8).map(compactFetchResult),
     competitorResearch: payload.competitorResearch,
   };
+  const audienceInstruction = buildAudienceInstruction(compactPayload.form.audienceType);
+  const structureInstruction = buildStructureInstruction(compactPayload.form.articleStructure);
 
   const result = await createStructuredResponse<ArticleGenerationResult>({
     schemaName: "aio_article_generation",
     schema: articleGenerationSchema,
     instructions: [
-      "You are an expert Japanese AIO/SEO editor for BtoB content.",
+      "You are an expert Japanese AIO/SEO editor. Match the explicitly requested audience instead of assuming BtoB.",
+      audienceInstruction,
+      structureInstruction,
       "Create original article drafts from the provided reference and competitor material.",
       "Do not copy source phrasing. Do not state uncertain facts as facts.",
-      "The article must be useful for AI answer engines: clear definitions, concise sentences, structured headings, lists, tables, FAQ, and source notes.",
+      "The article must be useful for AI answer engines: clear definitions, concise sentences, structure appropriate to the selected article type, lists or tables when useful, a separately managed FAQ, and source notes.",
       "When using tables, make them useful decision tables. Avoid thin tables with only 項目/内容 or 概要/説明; include comparison axes, conditions, costs, timing, owner/team, caveats, source notes, or field observations.",
       "Treat payload.form.theme as the editorial brief. Reflect its topic, keywords, target reader, search intent, and article goal in the title, opening answer, headings, examples, FAQ, tags, and categories.",
       "When target reader or audience text includes explicit roles or job titles, preserve at least one role phrase in the opening answer and return the same audience signal in at least one heading, example, or FAQ item.",
@@ -52,16 +62,18 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "Avoid commodity content and generic AI-like filler. Do not lean on vague phrases such as 近年, 重要です, 一般的に, 多くの場合, 重要になります, 注目されています, 求められます, 欠かせません, と言えるでしょう, いかがでしょうか, 本記事では, わかりやすく解説, 詳しく解説, を紹介します, 効率化につながります, 品質向上につながります, in this article, this article explains, it is important to, various, many companies, can help, improve efficiency, should consider, recommended to, best practices, streamline, enhance productivity, leverage, today's fast-paced digital landscape, today's digital landscape, today's rapidly evolving landscape, ever-evolving landscape, comprehensive guide, delve into, navigate the complexities, game-changer, unlock the potential, empower businesses, in conclusion, it is worth noting that, or at the end of the day unless they are genuinely necessary and supported by the material.",
       "Avoid verbose AI-like predicates such as することができます, することが可能です, 可能となります, することが重要です, it is important to, in order to, or utilize. Prefer shorter, more concrete verbs such as 確認します, 分けます, 判断します, 減らせます, or できます when accurate.",
       "Avoid unsupported strong claims such as 必ず, 絶対に, 完全に, 誰でも, 唯一, すべて解決, or 確実に unless the source material proves them and the sentence includes conditions or caveats.",
-      "When using numbers, percentages, costs, timing, counts, or performance-like claims, attach a source, condition, date, caveat, estimate, or first-party observation near the number. Do not present unsupported figures as facts.",
+      "When using numbers, percentages, costs, timing, counts, or performance-like claims, use only figures present in payload evidence. Preserve the figure's unit, target, conditions, date, exceptions, and source boundary. If evidence is missing, write 要確認 instead of inventing or generalizing the figure. Adding 約, 目安, or a generic caveat does not create evidence.",
+      "When an input contains an 入力短縮 marker, treat it as incomplete evidence. Use the retained numeric/condition excerpts only with their stated scope, never infer the omitted passage, and mark any unresolved detail as 要確認.",
       "If a number appears because it is part of a keyword or category label, such as a reader segment or service name, make that role explicit near the phrase or attach the source/context that provided it. Do not let keyword numerals read like unsupported research findings.",
       "When reference URLs or source URLs are available, keep the actual URLs visible in body_html as source notes or links so the WordPress draft remains independently checkable after publishing.",
-      "In body_html itself, include at least one <ul> or <ol> and an FAQ section. Do not rely only on separate key_takeaways or faq_items arrays.",
+      "Return in sources only the URLs actually used to support a definition, claim, condition, or comparison in the article. Keep title, URL, and a reader-facing note about what the source supports; never put acquisition status or internal workflow notes in usage_notes.",
+      "Use faq_items as the single canonical FAQ source. Do not include an FAQ, よくある質問, Q&A, or duplicate question-and-answer section inside body_html. The application appends the edited faq_items exactly once for preview and publication.",
       "The first paragraph of body_html must be answer-first and include a definition or decision sentence using a natural Japanese form such as '...とは...を指します' when the topic allows it.",
       "Do not reuse the opening definition as the first H2/H3. After a definition-style opening, make the first heading a different editorial angle such as the reader's first decision, a failure pattern, a comparison axis, or an operational checkpoint.",
       "Write as a human editor who has interviewed the business: each major section should include at least one concrete decision criterion, field example, operational caveat, failure pattern, or source-backed detail.",
       "Avoid thin H2/H3 sections. Every H2/H3 body should include at least two concrete signals such as a number, field observation, decision criterion, failure/risk note, team/cost/timing detail, or source/caveat note.",
       "Across the full article, include at least three different types of editorial evidence: field observations, decision criteria, failure/risk notes, team/cost/timing details, and source/caveat notes.",
-      "Across body_html, use at least three concrete anchor words when natural: 判断基準, 注意点, 失敗例, 現場観察, 出典, 条件, 費用, 期間, 担当. These anchors should introduce actual detail, not labels alone.",
+      "Across body_html, explain concrete decisions, conditions, caveats, examples, costs, timing, responsible parties, and sources when the material supports them. Do not insert phrases such as 現場観察 or 競合記事では merely to satisfy an evaluator; use natural reader-facing attribution.",
       "Before returning JSON, run one silent editorial self-review of selected_title, body_html, headings, faq_items, and meta_description. If any part sounds like commodity AI copy, lacks first-party/source evidence, uses unsupported claims, or opens with generic framing, revise that part before final output.",
       "Make headings editorial and useful, not mechanical keyword strings. Vary sentence rhythm and endings so the body does not read like a template.",
       "Make title candidates specific and editorial. Avoid generic titles such as 重要なポイント, メリット, デメリット, まとめ, 概要, 基本, 活用方法, 注意点, 完全ガイド, 徹底解説, Best Practices, Strategy, Checklist, or Tips unless paired with a concrete reader decision, first-party insight, or comparison axis from the inputs.",
@@ -82,25 +94,28 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     ].join("\n"),
     input: JSON.stringify({
       task:
-        "AIO最適化済みの記事ドラフトを日本語で生成してください。payload.form.regenerationInstruction がある場合は、既存入力を前提にその再作成方針を優先して、構成・本文・タイトル・FAQ・画像プロンプトを再作成してください。冒頭に結論、明確なH2/H3、定義文、箇条書き、必要なら表、FAQを含めてください。想定読者に役割名や職種名がある場合は、冒頭と少なくとも1つの見出し・具体例・FAQにその読者語を自然に戻してください。各H2では、一次情報・参照情報・競合情報から得られる具体例、判断基準、注意点、現場で起きる失敗パターンのいずれかを必ず入れ、薄い1段落だけで終えないでください。根拠が薄い内容は断定しないでください。数字・費用・期間・件数・割合・人数・順位に見える表現は、近くに出典、条件、時点、目安、現場観察、または未確認である旨を添えてください。body_htmlはHTML込みで9000文字以内に収め、JSONを必ず最後まで閉じてください。結び文章が入力されている場合は、記事末尾に自然に反映してください。執筆者情報がある場合は本文末尾に「この記事の執筆者」ブロックを入れてください。payload.form.wordCount をHTMLタグを除いた本文の目標文字数として扱い、目標の90〜110%を狙い、130%を超えないよう本文量を調整してください。FAQ・執筆者・参照元ブロックを除いた主要本文だけでも、2,000字指定なら1,500字前後を下回らないよう、具体例、判断基準、注意点、表の行、現場観察を足してください。payload.form.imageCount が0の場合は image_prompts を空配列にし、1以上の場合は featured から順に指定枚数分だけ返してください。",
+        "AIO最適化済みの記事ドラフトを日本語で生成してください。payload.form.regenerationInstruction がある場合は、現在のフォーム入力とその再作成方針を使って全文を生成し直してください。payload.form.audienceType と payload.form.articleStructure を生成計画に反映してください。想定読者に役割名や職種名がある場合は、自然な言い換えを許容しつつ読者の立場と判断材料を本文へ反映してください。冒頭に結論または定義を置き、構成種別に合うH2/H3、箇条書き、必要な場合のみ表を使ってください。FAQはfaq_itemsだけに返し、body_htmlには入れないでください。各H2では、一次情報・参照情報・競合情報から得られる具体例、判断条件、注意点、失敗パターンのいずれかを入れてください。入力根拠にない数値は作らず、条件・対象・例外を一般化しないでください。body_htmlはHTML込みで9000文字以内に収め、JSONを必ず最後まで閉じてください。結び文章が入力されている場合は記事末尾に自然に反映してください。payload.form.wordCountをHTMLタグを除いた本文の目標文字数として扱い、目標の90〜110%を狙い、130%を超えないよう調整してください。payload.form.imageCountが0の場合はimage_promptsを空配列にし、1以上の場合はfeaturedから順に指定枚数分だけ返してください。",
       payload: compactPayload,
     }),
     timeoutMs: ARTICLE_GENERATION_TIMEOUT_MS,
     maxOutputTokens: 16_000,
   });
+  const normalizedHeadings = result.headings.filter(
+    (heading) => !isManagedFaqHeading(heading.text),
+  );
 
   const sourceUrls = collectSourceUrls(
-    compactPayload.form,
-    compactPayload.fetchedReferences,
-    compactPayload.fetchedCompetitors,
-    compactPayload.competitorResearch,
     result.sources,
   );
   const sanitizedBodyHtml = ensureGeneratedSourceUrls(
-    ensureGeneratedBodyStructure(sanitizeArticleHtml(result.body_html), result),
+    ensureGeneratedBodyStructure(
+      appendFaqBlockWhenNeeded(sanitizeArticleHtml(result.body_html), []),
+      result,
+    ),
     sourceUrls,
   );
-  const qualityEvaluation = evaluateArticleQuality(sanitizedBodyHtml, {
+  const finalHtmlForEvaluation = appendFaqBlockWhenNeeded(sanitizedBodyHtml, result.faq_items);
+  const qualityEvaluation = evaluateArticleQuality(finalHtmlForEvaluation, {
     primaryInfo:
       typeof compactPayload.form.primaryInfo === "string"
         ? compactPayload.form.primaryInfo
@@ -122,6 +137,8 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     ),
     targetWordCount:
       typeof compactPayload.form.wordCount === "number" ? compactPayload.form.wordCount : undefined,
+    audienceType: readAudienceType(compactPayload.form.audienceType),
+    articleStructure: readArticleStructure(compactPayload.form.articleStructure),
   });
   const titleEvaluation = evaluateTitleQuality({
     selectedTitle: result.selected_title,
@@ -171,6 +188,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
 
   return {
     ...result,
+    headings: normalizedHeadings,
     body_html: sanitizedBodyHtml,
     image_prompts: normalizedImagePrompts,
     aio_score_self_evaluation: {
@@ -185,12 +203,12 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       ]).slice(0, 8),
       improvements: uniqueItems([
         ...titleEvaluation.improvements,
+        ...faqEvaluation.improvements,
         ...metaDescriptionEvaluation.improvements,
         ...imageAltEvaluation.improvements,
         ...qualityEvaluation.improvements,
-        ...faqEvaluation.improvements,
         ...result.aio_score_self_evaluation.improvements,
-      ]).slice(0, 8),
+      ]).slice(0, 12),
     },
   } satisfies ArticleGenerationResult;
 }
@@ -224,29 +242,14 @@ function ensureGeneratedBodyStructure(html: string, result: ArticleGenerationRes
     }
   }
 
-  if (!/(FAQ|よくある質問|<h2[^>]*>[^<]*質問|<h3[^>]*>[^<]*質問)/i.test(nextHtml)) {
-    const faqItems = result.faq_items
-      .map((item) => ({
-        question: item.question.trim(),
-        answer: item.answer.trim(),
-      }))
-      .filter((item) => item.question || item.answer)
-      .slice(0, 5);
-
-    if (faqItems.length > 0) {
-      const faqHtml = faqItems
-        .map(
-          (item) =>
-            `<div class="aio-faq-item"><h3>${escapeHtml(item.question || "FAQ")}</h3><p>${escapeHtml(
-              item.answer,
-            )}</p></div>`,
-        )
-        .join("");
-      nextHtml = `${nextHtml}\n<section class="aio-faq-block" aria-label="FAQ"><h2>FAQ</h2>${faqHtml}</section>`;
-    }
-  }
-
   return nextHtml;
+}
+
+function isManagedFaqHeading(value: string) {
+  const normalized = value.normalize("NFKC").trim().toLowerCase();
+  return /^(?:faq|q\s*&\s*a|よくある質問|よくあるご質問|質問と回答)(?:\s|$|[：:・_-])/.test(
+    normalized,
+  );
 }
 
 function ensureGeneratedSourceUrls(html: string, sourceUrls: string[]) {
@@ -255,7 +258,7 @@ function ensureGeneratedSourceUrls(html: string, sourceUrls: string[]) {
     .filter(Boolean)
     .filter(isSafeHttpUrl)
     .slice(0, 8)
-    .filter((url) => !html.includes(url));
+    .filter((url) => !articleContainsCanonicalSourceLink(url, html));
 
   if (missingUrls.length === 0) {
     return html;
@@ -300,9 +303,13 @@ function isSafeHttpUrl(value: string) {
 }
 
 function compactFetchResult(value: Record<string, unknown>) {
+  const evidenceUsable = value.evidenceUsable !== false;
   return {
     ...value,
-    text: typeof value.text === "string" ? truncateText(value.text, 3000) : value.text,
+    text:
+      evidenceUsable && typeof value.text === "string"
+        ? compactEvidenceText(value.text, 3000)
+        : undefined,
     reason: typeof value.reason === "string" ? truncateText(value.reason, 300) : value.reason,
   };
 }
@@ -315,10 +322,14 @@ function compactForm(form: Record<string, unknown>) {
 
   return {
     ...form,
+    references: compactTextInputs(form.references),
+    competitors: compactTextInputs(form.competitors),
     theme: typeof form.theme === "string" ? truncateText(form.theme, 1800) : form.theme,
+    audienceType: readAudienceType(form.audienceType),
+    articleStructure: readArticleStructure(form.articleStructure),
     primaryInfo:
       typeof form.primaryInfo === "string"
-        ? compactOptionalText(form.primaryInfo, 2400)
+        ? compactEvidenceText(form.primaryInfo, 3600)
         : form.primaryInfo,
     primaryInfoTypes: primaryInformationLabels(readStringList(form.primaryInfoTypes)).slice(0, 8),
     closingText:
@@ -354,9 +365,67 @@ function compactFileInput(value: unknown) {
     name: value.name,
     type: value.type,
     ok: value.ok,
-    text: typeof value.text === "string" ? truncateText(value.text, 2200) : undefined,
+    text: typeof value.text === "string" ? compactEvidenceText(value.text, 2600) : undefined,
     error: typeof value.error === "string" ? truncateText(value.error, 220) : undefined,
   };
+}
+
+function compactTextInputs(value: unknown) {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+
+  return value.slice(0, 12).map((item) => {
+    if (!isRecord(item)) {
+      return item;
+    }
+    return {
+      ...item,
+      text: typeof item.text === "string" ? compactEvidenceText(item.text, 3000) : item.text,
+    };
+  });
+}
+
+function compactEvidenceText(value: string, maxLength: number) {
+  const text = value.trim();
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  const labelBudget = 180;
+  const contentBudget = Math.max(600, maxLength - labelBudget);
+  const headLength = Math.floor(contentBudget * 0.4);
+  const evidenceLength = Math.floor(contentBudget * 0.35);
+  const tailLength = contentBudget - headLength - evidenceLength;
+  const middle = text.slice(headLength, Math.max(headLength, text.length - tailLength));
+  const evidenceSentences = middle
+    .split(/(?<=[。！？!?\n])/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .filter((sentence) =>
+      /[0-9０-９]|[%％円日時週月年件社人名回]|条件|場合|対象|例外|のみ|に限|時点|期間|単位|約|目安|成功|実績/.test(
+        sentence,
+      ),
+    )
+    .join("\n");
+  const evidenceExcerpt = (evidenceSentences || middle.slice(0, evidenceLength)).slice(
+    0,
+    evidenceLength,
+  );
+  const omittedLength = Math.max(
+    0,
+    text.length - headLength - tailLength - evidenceExcerpt.length,
+  );
+
+  return [
+    "[冒頭]",
+    text.slice(0, headLength),
+    "[省略区間から保持した数値・条件・例外]",
+    evidenceExcerpt,
+    "[末尾]",
+    text.slice(-tailLength),
+    `[入力短縮: 原文${text.length}文字のうち約${omittedLength}文字を省略。省略部分は推測せず、必要なら要確認とすること。]`,
+  ].join("\n");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -380,7 +449,7 @@ function normalizeImagePrompts(result: ArticleGenerationResult, form: Record<str
       (slot === "featured" ? "Article featured image" : "Article body explanatory image");
     const basePrompt =
       existing?.prompt ||
-      `BtoB article illustration about ${result.selected_title}, clean editorial style`;
+      `Japanese editorial article illustration about ${result.selected_title}, clean professional style`;
 
     return {
       slot,
@@ -388,7 +457,9 @@ function normalizeImagePrompts(result: ArticleGenerationResult, form: Record<str
       prompt: buildPremiumImagePrompt({
         basePrompt,
         articleSummary: result.article_summary,
-        headings: result.headings.map((heading) => heading.text),
+        headings: result.headings
+          .map((heading) => heading.text)
+          .filter((heading) => !isManagedFaqHeading(heading)),
         keyTakeaways: result.key_takeaways,
         purpose,
         selectedTitle: result.selected_title,
@@ -414,7 +485,7 @@ function getVisualToneText(form: Record<string, unknown>) {
     return visualTone.preset;
   }
 
-  return "clean Japanese B2B whitepaper editorial style";
+  return "clean Japanese editorial style appropriate for the selected audience";
 }
 
 function buildPremiumImagePrompt({
@@ -451,10 +522,10 @@ function buildPremiumImagePrompt({
     `Key takeaways to visualize: ${keyTakeaways.slice(0, 3).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
     `Relevant headings: ${headings.slice(0, 4).map((item) => truncatePromptLine(item, 80)).join(" / ")}`,
     slotBrief,
-    "Style direction: premium Japanese B2B SaaS / consulting / financial whitepaper, clean editorial art direction, refined composition, crisp geometry, subtle depth, high-end corporate polish.",
+    "Style direction: premium Japanese editorial art direction appropriate for the requested audience and visual tone, with refined composition, crisp geometry, subtle depth, and polished production quality.",
     "Composition: 3:2 landscape, generous whitespace, one clear focal idea, balanced margins, light background, restrained accent colors, scalable at thumbnail size.",
     "Content: turn the article-specific anchors above into an original diagram-like editorial visual, not a generic AI/business background.",
-    "Use abstract dashboards, process cards, geometric diagrams, data-flow shapes, source/checklist cards, or symbolic business/AI elements as appropriate.",
+    "Use article-appropriate diagrams, process cards, comparison shapes, care or decision flows, source/checklist cards, or concrete symbolic elements as appropriate.",
     "Avoid: readable text, random letters, logos, watermarks, fake brand marks, cluttered dashboards, distorted hands, unnecessary people, clip-art, cheap stock-photo look, dark blurry neon backgrounds.",
   ].join("\n");
 }
@@ -474,27 +545,14 @@ function collectReferenceTexts(
   fetchedReferences: Array<Record<string, unknown>>,
 ) {
   return uniqueItems([
-    ...fetchedReferences.map(readTextField),
+    ...fetchedReferences.filter(isUsableFetchedEvidence).map(readTextField),
     ...readTextFieldList(form.references),
     ...readTextFieldList(form.referenceFiles),
   ]);
 }
 
-function collectSourceUrls(
-  form: Record<string, unknown>,
-  fetchedReferences: Array<Record<string, unknown>>,
-  fetchedCompetitors: Array<Record<string, unknown>>,
-  competitorResearch: unknown,
-  sources: Array<{ url?: string }>,
-) {
-  return uniqueItems([
-    ...fetchedReferences.map(readUrlField),
-    ...readUrlFieldList(form.references),
-    ...fetchedCompetitors.map(readUrlField),
-    ...readUrlFieldList(form.competitors),
-    ...readCompetitorResearchUrls(competitorResearch),
-    ...sources.map((source) => source.url ?? ""),
-  ]);
+function collectSourceUrls(sources: Array<{ url?: string }>) {
+  return uniqueItems(sources.map((source) => source.url ?? ""));
 }
 
 function collectCompetitorTexts(
@@ -503,7 +561,7 @@ function collectCompetitorTexts(
   competitorResearch: unknown,
 ) {
   return uniqueItems([
-    ...fetchedCompetitors.map(readTextField),
+    ...fetchedCompetitors.filter(isUsableFetchedEvidence).map(readTextField),
     ...readTextFieldList(form.competitors),
     ...readTextFieldList(form.competitorFiles),
     ...readCompetitorResearchTexts(competitorResearch),
@@ -521,15 +579,6 @@ function readCompetitorResearchTexts(value: unknown): string[] {
     typeof value.summary === "string" ? value.summary : "",
     ...insights.flatMap(readCompetitorInsightTexts),
   ];
-}
-
-function readCompetitorResearchUrls(value: unknown): string[] {
-  if (!isRecord(value)) {
-    return [];
-  }
-
-  const insights = Array.isArray(value.insights) ? value.insights : [];
-  return insights.map((insight) => (isRecord(insight) && typeof insight.url === "string" ? insight.url : ""));
 }
 
 function readCompetitorInsightTexts(value: unknown): string[] {
@@ -557,22 +606,47 @@ function readTextFieldList(value: unknown) {
   return value.map(readTextField);
 }
 
-function readUrlFieldList(value: unknown) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map(readUrlField);
-}
-
 function readTextField(value: unknown) {
   return isRecord(value) && typeof value.text === "string" ? value.text : "";
 }
 
-function readUrlField(value: unknown) {
-  return isRecord(value) && typeof value.url === "string" ? value.url : "";
+function isUsableFetchedEvidence(value: Record<string, unknown>) {
+  return value.ok !== false && value.evidenceUsable !== false;
 }
 
 function uniqueItems(items: string[]) {
   return Array.from(new Set(items.filter((item) => item.trim())));
+}
+
+function readAudienceType(value: unknown): AudienceType {
+  return value === "btoc" || value === "btob" ? value : "auto";
+}
+
+function readArticleStructure(value: unknown): ArticleStructure {
+  return value === "textbook" || value === "faq" || value === "case" ? value : "auto";
+}
+
+function buildAudienceInstruction(value: unknown) {
+  const audienceType = readAudienceType(value);
+  if (audienceType === "btoc") {
+    return "Audience plan: BtoC. Write for a general consumer in plain Japanese, explain necessary terminology, and give practical choices, warning signs, and next actions without assuming business expertise.";
+  }
+  if (audienceType === "btob") {
+    return "Audience plan: BtoB. Write for business owners or responsible staff and present decision conditions, alternatives, costs/timing when evidenced, risks, and operational cautions.";
+  }
+  return "Audience plan: infer BtoC or BtoB from the supplied target reader and topic. Do not default to BtoB; use vocabulary and decision support appropriate to the inferred reader.";
+}
+
+function buildStructureInstruction(value: unknown) {
+  const structure = readArticleStructure(value);
+  if (structure === "textbook") {
+    return "Structure plan: textbook. Explain the concept, available options, decision criteria, conditions, exceptions, and cautions systematically.";
+  }
+  if (structure === "faq") {
+    return "Structure plan: FAQ. Make faq_items the center of the published article. Keep body_html to a concise answer-first introduction and only the context needed to understand the questions; do not create a second FAQ section in body_html.";
+  }
+  if (structure === "case") {
+    return "Structure plan: case. Organize around a concrete situation, assumptions, options, and decision forks. If the case is not explicitly supplied as a real result, label it clearly as a hypothetical example and never present it as company performance.";
+  }
+  return "Structure plan: infer the most suitable textbook, FAQ, or case structure from the brief. Keep faq_items separate from body_html and do not force every article into the same explanatory template.";
 }

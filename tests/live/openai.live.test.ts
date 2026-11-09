@@ -114,6 +114,8 @@ describe("OpenAI live sandbox contract", () => {
 
 type LiveGenerationSample = {
   name: string;
+  audienceType: NonNullable<ArticleFormPayload["audienceType"]>;
+  articleStructure: NonNullable<ArticleFormPayload["articleStructure"]>;
   theme: string;
   primaryInfo: string;
   referenceUrl: string;
@@ -125,52 +127,58 @@ type LiveGenerationSample = {
 
 const liveGenerationSamples: LiveGenerationSample[] = [
   {
-    name: "one-person contractor workers compensation",
+    name: "delta financing textbook",
+    audienceType: "btob",
+    articleStructure: "textbook",
     theme:
-      "一人親方の労災保険。キーワード: 加入条件、給付基礎日額、費用、補償開始日。想定読者: 建設業の一人親方。",
+      "中小企業の資金調達。キーワード: 資金繰り、融資、ファクタリング、必要書類。想定読者: 資金調達手段を比較する中小企業経営者。",
     primaryInfo:
-      "当社の支援現場では、一人親方から「自分が特別加入の対象か」「給付基礎日額をいくらにすべきか」という相談が多い。LINEで口頭確認だけが残り、帳票不在のまま進むケースもあるため、加入前に業務内容、開始希望日、費用負担者を整理する必要がある。",
-    referenceUrl: "https://sandbox.example.com/reference/oyakata",
-    referenceTitle: "Sandbox one-person contractor reference",
+      "当社への相談では、資金調達手段を金利や入金速度だけで選び、必要書類や返済負担の確認が後回しになるケースがある。最初に資金使途、必要時期、返済原資、売掛金の有無を整理している。",
+    referenceUrl: "https://sandbox.example.com/reference/delta-financing",
+    referenceTitle: "Sandbox Delta financing reference",
     referenceText:
-      "一人親方労災保険では、特別加入、加入条件、給付基礎日額、補償開始日、労働保険事務組合の確認が重要である。未確認の費用や対象範囲は断定せず、事前に参照元と本人の業務実態を照合する必要がある。",
+      "中小企業の資金調達では、融資、ファクタリング、補助金などで対象、必要書類、審査、入金時期、返済または手数料の条件が異なる。個別条件を確認せず一般的な基準として断定してはならない。",
   },
   {
-    name: "SaaS onboarding operations",
+    name: "delta financing case",
+    audienceType: "btob",
+    articleStructure: "case",
     theme:
-      "BtoB SaaSのオンボーディング改善。キーワード: 初期設定、利用定着、管理者教育、解約防止。想定読者: カスタマーサクセス責任者。",
+      "中小企業の資金調達をケース型で解説。キーワード: 運転資金、売掛金、融資、判断条件。想定読者: 入金までの資金繰りに悩む中小企業経営者。",
     primaryInfo:
-      "当社の支援では、初期設定が完了していても管理者教育が薄く、3週目に利用定着が止まる相談が多い。解約理由は機能不足よりも、社内承認フローと運用担当が曖昧なことに寄りやすい。",
-    referenceUrl: "https://sandbox.example.com/reference/saas-onboarding",
-    referenceTitle: "Sandbox SaaS onboarding reference",
+      "当社への相談では、売上は計上済みでも入金前に仕入れや給与の支払いが来る状況がある。実際の支援実績を装わず、仮想事例では資金使途、必要時期、返済原資、売掛金の確度を判断の分かれ目として示している。",
+    referenceUrl: "https://sandbox.example.com/reference/delta-case",
+    referenceTitle: "Sandbox Delta case reference",
     referenceText:
-      "BtoB SaaSのオンボーディングでは、初期設定、管理者教育、利用定着、ヘルススコア、解約防止、社内承認フローを分けて確認する必要がある。",
+      "運転資金の調達方法は、資金使途、必要時期、返済原資、売掛金の有無、必要書類によって選択肢が変わる。仮想事例は仮定と明示し、特定企業の実績として扱わない。",
     competitorText:
-      "競合記事はオンボーディングチェックリストと初期設定手順を中心に解説している。差別化ポイントは、管理者教育、3週目の定着確認、社内承認フローの失敗例である。",
+      "競合記事は資金調達方法の一覧を中心に説明している。差別化ポイントは、具体的な状況、前提条件、選択肢、判断の分かれ目を仮想事例で示すことである。",
     competitorResearch: {
-      summary: "競合は初期設定手順に偏り、利用定着と管理者教育の運用論が薄い。",
-      queries: ["SaaS オンボーディング 初期設定", "SaaS 利用定着 管理者教育"],
+      summary: "競合は方法一覧に偏り、条件ごとの判断の分かれ目が薄い。",
+      queries: ["中小企業 資金調達 方法", "運転資金 売掛金 融資"],
       insights: [
         {
-          url: "https://sandbox.example.com/competitor/saas",
-          title: "競合オンボーディング記事",
-          majorPoints: ["初期設定手順", "チェックリスト"],
-          differentiationPoints: ["管理者教育", "3週目の利用定着", "社内承認フロー"],
-          recommendations: ["競合との差別化として、運用担当と定着確認の失敗例を入れる"],
+          url: "https://sandbox.example.com/competitor/delta",
+          title: "競合資金調達記事",
+          majorPoints: ["資金調達方法一覧", "融資とファクタリング"],
+          differentiationPoints: ["前提条件", "判断の分かれ目", "仮想事例の明示"],
+          recommendations: ["実績と誤認されない仮想事例で選択肢の判断条件を示す"],
         },
       ],
     },
   },
   {
-    name: "AIO content operations",
+    name: "aniha oral care faq",
+    audienceType: "btoc",
+    articleStructure: "faq",
     theme:
-      "BtoBマーケティングチーム向けAIO記事制作フロー。キーワード: 参照情報、一次情報、競合調査、WordPress投稿。",
+      "犬猫のオーラルケアをFAQ型で解説。キーワード: 歯磨き、口臭、口の変化、動物病院への相談。想定読者: 犬猫と暮らす一般の飼い主。",
     primaryInfo:
-      "当社の制作現場では、汎用AIチャットに投げるだけだと参照情報と一次情報が混ざり、承認時に出典確認で戻ることが多い。WordPress投稿前の編集チェックが品質を左右する。",
-    referenceUrl: "https://sandbox.example.com/reference/aio-workflow",
-    referenceTitle: "Sandbox AIO workflow reference",
+      "当院では、飼い主から『歯磨きを嫌がる』『口臭が気になる』『どの変化で受診すべきか』という相談が多い。無理に歯磨きを続けるのではなく、食べ方や口の触られ方の変化を記録して相談材料にしてもらう。",
+    referenceUrl: "https://sandbox.example.com/reference/aniha-oral-care",
+    referenceTitle: "Sandbox Aniha oral care reference",
     referenceText:
-      "AIO記事制作では、参照情報、一次情報、競合調査、構成案、本文HTML、FAQ、メタディスクリプション、WordPress下書き投稿までを分けて管理する必要がある。",
+      "犬猫のオーラルケアでは、歯磨きの方法だけでなく、口臭、食べ方、口を触られる反応などの変化を観察する。診断や受診時期を一律に断定せず、異変が続く場合は獣医師へ相談する。",
   },
 ];
 
@@ -193,9 +201,13 @@ function buildLiveForm(sample: LiveGenerationSample): ArticleFormPayload {
     referenceFiles: [],
     competitorFiles: [],
     theme: sample.theme,
+    audienceType: sample.audienceType,
+    articleStructure: sample.articleStructure,
     primaryInfo: sample.primaryInfo,
     closingText:
-      "詳しい運用設計や記事制作フローの見直しは、問い合わせフォームからご相談ください。",
+      sample.audienceType === "btoc"
+        ? "口の変化が続く場合や判断に迷う場合は、記録した内容を添えて動物病院へ相談してください。"
+        : "自社に合う資金調達条件を整理したい場合は、必要時期と資金使途を添えて問い合わせフォームからご相談ください。",
     author: {
       name: "Live Sandbox Editor",
       title: "AIO Content Reviewer",
@@ -203,7 +215,10 @@ function buildLiveForm(sample: LiveGenerationSample): ArticleFormPayload {
     },
     visualTone: {
       mode: "preset",
-      preset: "シンプルなBtoBホワイトペーパー風",
+      preset:
+        sample.audienceType === "btoc"
+          ? "温かみのある生活者向け編集記事風"
+          : "コンサルティング資料風",
     },
     imageCount: 0,
     wordCount: 2000,

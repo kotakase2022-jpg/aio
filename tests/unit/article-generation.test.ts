@@ -50,7 +50,7 @@ describe("generateAioArticle", () => {
       "inline-1",
       "inline-2",
     ]);
-    expect(result.image_prompts[0].prompt).toContain("premium Japanese B2B");
+    expect(result.image_prompts[0].prompt).toContain("premium Japanese editorial");
     expect(result.image_prompts[0].prompt).toContain("Article summary anchor");
     expect(result.image_prompts[0].prompt).toContain(sampleArticleResult.article_summary);
     expect(result.image_prompts[0].prompt).toContain("Key takeaways to visualize");
@@ -126,8 +126,8 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("absence of AI-like generic phrasing");
     expect(call?.instructions).toContain("0-100 scale");
     expect(call?.instructions).toContain("not 8.6");
-    expect(call?.instructions).toContain("body_html itself");
-    expect(call?.instructions).toContain("FAQ section");
+    expect(call?.instructions).toContain("single canonical FAQ source");
+    expect(call?.instructions).toContain("Do not include an FAQ");
     expect(input.payload.form.primaryInfo?.startsWith(" ")).toBe(false);
     expect(input.payload.form.primaryInfo).toContain("one-person contractors");
     expect(input.payload.form.primaryInfo).toContain("LINE");
@@ -145,7 +145,7 @@ describe("generateAioArticle", () => {
     expect(normalizeSelfEvaluationScore(Number.NaN)).toBe(0);
   });
 
-  test("adds managed takeaway and FAQ blocks when the generated body omits them", async () => {
+  test("keeps FAQ canonical in faq_items while adding the managed takeaway block", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");
     vi.mocked(createStructuredResponse).mockResolvedValueOnce({
@@ -171,10 +171,14 @@ describe("generateAioArticle", () => {
 
     expect(result.body_html).toContain("aio-key-takeaways");
     expect(result.body_html).toContain("<ul>");
-    expect(result.body_html).toContain("aio-faq-block");
+    expect(result.body_html).not.toContain("aio-faq-block");
     expect(result.body_html).toContain("aio-source-block");
     expect(result.body_html).toContain("https://example.com/reference");
-    expect(result.body_html).toContain("一人親方はいつ加入条件を確認すべきですか");
+    expect(result.body_html).not.toContain("一人親方はいつ加入条件を確認すべきですか");
+    expect(result.faq_items[0]).toEqual({
+      question: "一人親方はいつ加入条件を確認すべきですか",
+      answer: "業務開始日と補償開始日の前に、業務実態と費用負担者を確認します。",
+    });
   });
 
   test("treats whitespace-only primary information as missing before article generation", async () => {
@@ -266,7 +270,8 @@ describe("generateAioArticle", () => {
 
     expect(input.payload.form.theme.length).toBeLessThanOrEqual(1813);
     expect(input.payload.form.theme).toContain("[truncated]");
-    expect(input.payload.form.primaryInfo.length).toBeLessThanOrEqual(2413);
+    expect(input.payload.form.primaryInfo.length).toBeLessThanOrEqual(3610);
+    expect(input.payload.form.primaryInfo).toContain("[入力短縮:");
     expect(input.payload.form.closingText.startsWith(" ")).toBe(false);
     expect(input.payload.form.closingText.length).toBeLessThanOrEqual(1013);
     expect(input.payload.form.regenerationInstruction.startsWith(" ")).toBe(false);
@@ -275,11 +280,13 @@ describe("generateAioArticle", () => {
     expect(input.payload.form.author.bio.length).toBeLessThanOrEqual(813);
     expect(input.payload.form.author.imageUrl).toBe("[uploaded author image]");
     expect(input.payload.form.referenceFiles).toHaveLength(8);
-    expect(input.payload.form.referenceFiles[0].text?.length).toBeLessThanOrEqual(2213);
+    expect(input.payload.form.referenceFiles[0].text?.length).toBeLessThanOrEqual(2610);
+    expect(input.payload.form.referenceFiles[0].text).toContain("[入力短縮:");
     expect(input.payload.form.competitorFiles).toHaveLength(8);
     expect(input.payload.form.competitorFiles[0].error?.length).toBeLessThanOrEqual(233);
     expect(input.payload.fetchedReferences).toHaveLength(8);
     expect(input.payload.fetchedReferences[0].text?.length).toBeLessThanOrEqual(3013);
+    expect(input.payload.fetchedReferences[0].text).toContain("[入力短縮:");
     expect(input.payload.fetchedReferences[0].reason?.length).toBeLessThanOrEqual(313);
     expect(input.payload.form.imageCount).toBe(2);
     expect(input.payload.form.wordCount).toBe(3000);
@@ -358,7 +365,7 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("Do not use vague heading patterns");
     expect(call?.instructions).toContain("Avoid thin H2/H3 sections");
     expect(call?.instructions).toContain("at least two concrete signals");
-    expect(call?.instructions).toContain("at least three concrete anchor words");
+    expect(call?.instructions).toContain("at least three different types of editorial evidence");
     expect(call?.instructions).toContain("concrete reader decision");
     expect(call?.instructions).toContain("Treat payload.form.theme as the editorial brief");
     expect(call?.instructions).toContain("preserve at least one role phrase");
@@ -624,8 +631,9 @@ describe("generateAioArticle", () => {
     });
 
     expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
+    expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain("一次情報の論点");
     expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
-      "一次情報の固有語彙",
+      "入力で確認できる経験",
     );
   });
 
@@ -746,7 +754,7 @@ describe("generateAioArticle", () => {
 
     expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
     expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
-      "参照情報の固有語彙",
+      "参照情報の主要な論点",
     );
   });
 
@@ -795,11 +803,11 @@ describe("generateAioArticle", () => {
 
     expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
     expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain(
-      "競合情報の固有語彙",
+      "競合情報から得た読者の疑問",
     );
   });
 
-  test("keeps competitor source URLs visible when the generated body omits them", async () => {
+  test("keeps a declared competitor source URL visible when the generated body omits it", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");
     vi.mocked(createStructuredResponse).mockResolvedValueOnce({
@@ -812,6 +820,14 @@ describe("generateAioArticle", () => {
         <h2>公開前に料金表と承認フローを分けて確認する理由</h2>
         <p>FAQとして、未確認情報は断定せず、参照元と条件を本文に残します。出典: https://example.com/reference</p>
       `,
+      sources: [
+        ...sampleArticleResult.sources,
+        {
+          url: "https://example.com/competitor-source",
+          title: "競合LP",
+          usage_notes: "料金表と導入期間の比較軸を確認した出典。",
+        },
+      ],
       aio_score_self_evaluation: {
         score: 99,
         strengths: ["High claimed score"],
@@ -976,5 +992,163 @@ describe("generateAioArticle", () => {
 
     expect(result.aio_score_self_evaluation.score).toBeLessThan(99);
     expect(result.aio_score_self_evaluation.improvements.join(" ")).toContain("指定された1,000字");
+  });
+
+  test("passes audience, structure, and regeneration direction while keeping FAQ canonical", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      body_html: `${sampleArticleResult.body_html}<h2>FAQ</h2><h3>重複質問ですか？</h3><p>古い回答です。</p>`,
+      headings: [
+        ...sampleArticleResult.headings,
+        { level: "h2" as const, text: "FAQ" },
+      ],
+    });
+
+    const result = await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        audienceType: "btoc",
+        articleStructure: "faq",
+        regenerationInstruction: "一般の飼い主が選べる質問順に全文を再構成する",
+      },
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
+    const input = JSON.parse(String(call?.input)) as {
+      payload: {
+        form: {
+          audienceType?: string;
+          articleStructure?: string;
+          regenerationInstruction?: string;
+        };
+      };
+    };
+    expect(call?.instructions).toContain("Audience plan: BtoC");
+    expect(call?.instructions).toContain("Structure plan: FAQ");
+    expect(input.payload.form).toMatchObject({
+      audienceType: "btoc",
+      articleStructure: "faq",
+      regenerationInstruction: "一般の飼い主が選べる質問順に全文を再構成する",
+    });
+    expect(result.body_html).not.toContain("重複質問ですか");
+    expect(result.headings.map((heading) => heading.text)).not.toContain("FAQ");
+    expect(result.faq_items).toEqual(sampleArticleResult.faq_items);
+  });
+
+  test("does not send mojibake or otherwise unusable fetched text to the model", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce(sampleArticleResult);
+
+    await generateAioArticle({
+      form: sampleFormPayload,
+      fetchedReferences: [
+        {
+          url: "https://example.com/mojibake",
+          ok: true,
+          evidenceUsable: false,
+          text: "譁�蟄励�壊れた文章",
+          reason: "文字化けのため記事根拠には使用しません。",
+        },
+        {
+          url: "https://example.com/usable",
+          ok: true,
+          evidenceUsable: true,
+          text: "犬猫のオーラルケアでは、飼い主が口内の変化を確認します。",
+        },
+      ],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
+    const input = JSON.parse(String(call?.input)) as {
+      payload: { fetchedReferences: Array<Record<string, unknown>> };
+    };
+    expect(input.payload.fetchedReferences[0]).toMatchObject({
+      evidenceUsable: false,
+      reason: "文字化けのため記事根拠には使用しません。",
+    });
+    expect(input.payload.fetchedReferences[0]).not.toHaveProperty("text");
+    expect(input.payload.fetchedReferences[1].text).toContain("犬猫のオーラルケア");
+  });
+
+  test("marks shortened evidence and retains scoped facts from the omitted middle", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce(sampleArticleResult);
+    const longReference = [
+      "背景情報です。".repeat(260),
+      "当社が支援した特定のケースでは、必要書類が揃った場合に30日以内で確認できました。",
+      "補足情報です。".repeat(420),
+      "末尾の例外として、対象外の申請では期間を断定できません。",
+    ].join("");
+
+    await generateAioArticle({
+      form: {
+        ...sampleFormPayload,
+        references: [{ id: "long-reference", text: longReference }],
+      },
+      fetchedReferences: [
+        {
+          url: "manual-text",
+          ok: true,
+          evidenceUsable: true,
+          text: longReference,
+        },
+      ],
+      fetchedCompetitors: [],
+      competitorResearch: null,
+    });
+
+    const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
+    const input = JSON.parse(String(call?.input)) as {
+      payload: {
+        form: { references: Array<{ text: string }> };
+        fetchedReferences: Array<{ text: string }>;
+      };
+    };
+    for (const compacted of [
+      input.payload.form.references[0].text,
+      input.payload.fetchedReferences[0].text,
+    ]) {
+      expect(compacted).toContain("[入力短縮:");
+      expect(compacted).toContain("必要書類が揃った場合に30日以内");
+      expect(compacted).toContain("末尾の例外");
+    }
+    expect(call?.instructions).toContain("入力短縮 marker");
+    expect(call?.instructions).toContain("never infer the omitted passage");
+  });
+
+  test("does not publish an undeclared competitor URL as if it supported the article", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValueOnce(sampleArticleResult);
+
+    const result = await generateAioArticle({
+      form: sampleFormPayload,
+      fetchedReferences: [],
+      fetchedCompetitors: [],
+      competitorResearch: {
+        summary: "比較候補として確認したが、最終記事の根拠には使わなかった。",
+        insights: [
+          {
+            url: "https://example.com/unused-competitor",
+            title: "未使用の競合記事",
+            majorPoints: [],
+            differentiationPoints: [],
+            recommendations: [],
+          },
+        ],
+      },
+    });
+
+    expect(result.body_html).not.toContain("https://example.com/unused-competitor");
+    expect(result.body_html).toContain("https://example.com/reference");
   });
 });

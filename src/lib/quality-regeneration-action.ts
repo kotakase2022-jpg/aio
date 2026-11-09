@@ -14,12 +14,32 @@ export function qualityRegenerationAction(checkId: string) {
     return "画像altを「画像」「hero image」などの汎用説明にせず、記事テーマ、図解内容、読者が見るべき判断軸が分かる短い説明にする。";
   }
 
+  if (checkId === "article-structure-faq") {
+    return "記事の中心を読者の具体的な疑問と回答に組み替え、条件、例外、比較、次の行動まで答えるFAQを3組以上そろえる。本文中に重複FAQは作らない。";
+  }
+
+  if (checkId === "article-structure-case") {
+    return "具体的な状況、前提条件、選択肢、判断の分かれ目を中心に組み替え、仮想事例は実績と誤認されないよう仮定と明示する。";
+  }
+
+  if (checkId === "article-structure-textbook") {
+    return "概念、選択肢、判断基準、条件・例外、注意点を見出しと箇条書きまたは表で体系的に整理する。";
+  }
+
+  if (checkId === "audience-fit-btoc") {
+    return "専門語を一般読者向けに説明し、日常で確認できる変化、選択肢、注意点、相談の目安を示す。";
+  }
+
+  if (checkId === "audience-fit-btob") {
+    return "経営者・担当者が比較できる選択肢、適用条件、費用・期間、リスク、確認事項を示す。";
+  }
+
   if (checkId === "answer-first") {
     return "冒頭400字以内で、結論、定義、読者が最初に判断すべきことを先に示す。";
   }
 
   if (checkId === "generic-opening-frame") {
-    return "冒頭を背景説明から始めず、結論、定義、現場観察、条件のいずれかで書き出す。In today's fast-paced digital landscape、ever-evolving landscape型の英語定型導入も削る。";
+    return "冒頭を背景説明から始めず、結論、定義、入力で確認できる具体的な経験、条件のいずれかで書き出す。In today's fast-paced digital landscape、ever-evolving landscape型の英語定型導入も削る。";
   }
 
   if (checkId === "generic-opening-density") {
@@ -51,11 +71,11 @@ export function qualityRegenerationAction(checkId: string) {
   }
 
   if (checkId === "sentence-frame-variety") {
-    return "結論として、具体的には等の定型文頭を減らし、現場観察、比較、失敗例から段落を始める。";
+    return "結論として、具体的には等の定型文頭を減らし、入力で確認できる具体例、比較、失敗例から段落を始める。";
   }
 
   if (checkId === "numeric-claim-support") {
-    return "数字の近くに、出典、条件、時点、目安、現場観察のいずれかを添える。";
+    return "数字の近くに、入力で確認できる出典、対象、条件、時点を添える。約、目安、条件により等の語だけを足して根拠扱いしない。";
   }
 
   if (checkId === "unsupported-claims") {
@@ -83,7 +103,7 @@ export function qualityRegenerationAction(checkId: string) {
   }
 
   if (checkId === "editorial-evidence") {
-    return "現場観察、判断基準、失敗/リスク、体制・費用・期間、出典注記を複数種類入れる。";
+    return "入力で確認できる具体的な経験、判断基準、失敗/リスク、体制・費用・期間、出典注記を複数種類入れる。";
   }
 
   if (checkId === "section-specificity") {
@@ -107,15 +127,15 @@ export function qualityRegenerationAction(checkId: string) {
   }
 
   if (checkId === "primary-info-reflection") {
-    return "一次情報の固有語彙を、当社の経験、相談傾向、現場観察として冒頭と各H2に戻す。";
+    return "一次情報で確認できる経験、相談傾向、具体的な観察内容、判断基準を、読者向けの自然な表現で冒頭と関連する見出しに反映する。";
   }
 
   if (checkId === "primary-info-opening-placement") {
-    return "一次情報の固有語彙を、冒頭400字以内の結論、定義、読者の判断材料に戻し、後半だけで触れる一般論を避ける。";
+    return "一次情報の主要な論点を、冒頭400字以内の結論、定義、読者の判断材料に反映し、後半だけで触れる一般論を避ける。";
   }
 
   if (checkId === "primary-info-digestion") {
-    return "一次情報を丸写しせず、固有語彙は残して読者向けの判断材料、例外、注意点に言い換える。";
+    return "一次情報を丸写しせず、事実と条件は保って読者向けの判断材料、例外、注意点に言い換える。";
   }
 
   if (checkId === "reference-info-reflection") {

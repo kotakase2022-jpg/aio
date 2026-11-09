@@ -63,6 +63,8 @@ describe("article generation job runner", () => {
         title: "Fetched reference",
         text: "Fetched reference text",
         ok: true,
+        evidenceUsable: true,
+        pageKind: "article",
         sourceType: "url",
       },
       {
@@ -70,6 +72,8 @@ describe("article generation job runner", () => {
         title: "Fetched competitor",
         text: "Fetched competitor text",
         ok: true,
+        evidenceUsable: true,
+        pageKind: "article",
         sourceType: "url",
       },
     ];
@@ -153,8 +157,18 @@ describe("article generation job runner", () => {
     expect(completed?.fetchedReferences).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ url: "https://example.com/reference" }),
-        expect.objectContaining({ url: "manual-text", text: "Manual reference text" }),
-        expect.objectContaining({ url: "file:field-notes.txt", sourceType: "file" }),
+        expect.objectContaining({
+          url: "manual-text",
+          text: "Manual reference text",
+          evidenceUsable: true,
+          pageKind: "unknown",
+        }),
+        expect.objectContaining({
+          url: "file:field-notes.txt",
+          sourceType: "file",
+          evidenceUsable: true,
+          pageKind: "unknown",
+        }),
       ]),
     );
     expect(completed?.fetchedCompetitors).toEqual(
@@ -180,6 +194,18 @@ describe("article generation job runner", () => {
       "https://assets.example.com/featured.png",
     );
     expect(completed?.steps.every((step) => step.status === "done")).toBe(true);
+    expect(completed?.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "fetch_refs",
+          detail: "1件を記事根拠として取得",
+        }),
+        expect.objectContaining({
+          id: "fetch_competitors",
+          detail: "1件を記事根拠として取得",
+        }),
+      ]),
+    );
   });
 
   test("marks the running generation steps as failed when article generation fails", async () => {

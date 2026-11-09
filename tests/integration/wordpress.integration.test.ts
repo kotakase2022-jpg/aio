@@ -264,6 +264,62 @@ describe("WordPress connection and posting", () => {
     expect(postCall?.[2]).toMatchObject({ maxResponseBytes: 10 * 1024 * 1024 });
   });
 
+  test("sends the same canonical FAQ and public sources used by the final HTML renderer", async () => {
+    const { saveWordpressConnection, publishDraftToWordpress } = await import(
+      "@/lib/server/wordpress"
+    );
+    const connection = await saveWordpressConnection({
+      siteUrl: "https://wordpress.example.com",
+      username: "editor",
+      applicationPassword: "secret-app-password",
+    });
+    let postedBody: Record<string, unknown> | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string | URL, init?: RequestInit) => {
+        postedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return Response.json({ link: "https://wordpress.example.com/canonical" }, { status: 201 });
+      }),
+    );
+    const draft = createSampleDraft({
+      status: "approved",
+      categories: [],
+      tags: [],
+      images: [],
+      author: { name: "", title: "", bio: "", imageUrl: "" },
+      editedBodyHtml:
+        "<h2>FAQ</h2><h3>申請条件は？</h3><p>古い回答です。</p><p>参照URLから本文を取得しました。</p>",
+      faqItems: [
+        { question: "申請条件は？", answer: "編集者が確定した回答です。" },
+        { question: "申請条件は？", answer: "最終確認済みの回答です。" },
+      ],
+      aiResult: {
+        ...createSampleDraft().aiResult,
+        sources: [
+          {
+            url: "https://example.com/reference",
+            title: "公開根拠",
+            usage_notes: "判断条件の根拠として使用。",
+          },
+        ],
+      },
+    });
+
+    await publishDraftToWordpress({
+      draft,
+      connectionId: connection.id,
+      status: "draft",
+      origin: "http://localhost",
+    });
+
+    const content = String(postedBody?.content);
+    expect(content.match(/申請条件は？/g)).toHaveLength(1);
+    expect(content).toContain("最終確認済みの回答です。");
+    expect(content).not.toContain("古い回答です。");
+    expect(content).not.toContain("参照URLから本文を取得しました。");
+    expect(content).toContain('href="https://example.com/reference"');
+  });
+
   test("reads a relative local featured image without making a loopback request", async () => {
     const uploadsRoot = path.join(process.cwd(), "public", "uploads");
     await mkdir(uploadsRoot, { recursive: true });

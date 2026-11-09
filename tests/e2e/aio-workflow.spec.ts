@@ -121,6 +121,8 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByTestId("theme-candidate-card-0")).toContainText("反映しました");
   await expect(page.getByTestId("theme-candidate-card-1")).not.toContainText("反映しました");
   await expect(page.getByTestId("theme-textarea")).toHaveValue(/AIO Content Operations Guide/);
+  await page.getByTestId("audience-type-select").selectOption("btob");
+  await page.getByTestId("article-structure-select").selectOption("textbook");
   await page
     .getByTestId("closing-textarea")
     .fill("AIO記事の運用設計について無料相談をご希望の方は、問い合わせフォームからご相談ください。");
@@ -152,6 +154,8 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
     expect.arrayContaining(["criteria-knowhow", "frequent-consultations"]),
   );
   expect(calls.articleClosingText).toContain("無料相談");
+  expect(calls.articleAudienceType).toBe("btob");
+  expect(calls.articleStructure).toBe("textbook");
   expect(calls.articleCompetitorResearchSummary).toBe("Edited competitor summary for E2E");
   expect(calls.articleCompetitorFileNames).toEqual(["competitor.txt"]);
   await expect(
@@ -167,21 +171,24 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByText("編集品質チェック")).toBeVisible();
   await expect(page.getByText("AI風の汎用表現")).toBeVisible();
   await expect(page.getByText("一次情報の反映")).toBeVisible();
-  await expect(page.getByText(/^一次情報の固有語彙/).first()).toBeVisible();
+  await expect(page.getByText(/^一次情報の論点/).first()).toBeVisible();
   await expect(page.getByText("一次情報の冒頭反映")).toBeVisible();
   await expect(page.getByText(/冒頭の結論や読者の判断材料/)).toBeVisible();
   await expect(page.getByText("結び文章/CTAの反映")).toBeVisible();
   await expect(page.getByText(/結び文章\/CTAの固有語彙/)).toBeVisible();
   await page.getByTestId("quality-improve-regenerate-button").click();
   await expect(page.getByRole("dialog", { name: "記事の再作成" })).toBeVisible();
+  await expect(
+    page.getByText(/編集済み本文は新しい本文へ引き継がれません/),
+  ).toBeVisible();
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /編集品質チェックの結果/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
-    /一次情報の固有語彙/,
+    /一次情報の論点/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
-    /修正方針: 一次情報の固有語彙を、当社の経験、相談傾向、現場観察/,
+    /修正方針: 一次情報で確認できる経験、相談傾向、具体的な観察内容/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(/冒頭400字以内/);
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(/一人親方/);
@@ -194,9 +201,9 @@ test("PC browser can complete the core AIO draft workflow with mocked external s
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(/無料相談/);
   await page.getByTestId("article-regeneration-start").click();
   expect(calls.articleGenerationJobs).toBe(2);
-  expect(calls.articleRegenerationInstruction).toContain("一次情報の固有語彙");
+  expect(calls.articleRegenerationInstruction).toContain("一次情報の論点");
   expect(calls.articleRegenerationInstruction).toContain(
-    "修正方針: 一次情報の固有語彙を",
+    "修正方針: 一次情報で確認できる経験",
   );
   expect(calls.articleRegenerationInstruction).toContain("冒頭400字以内");
   expect(calls.articleRegenerationInstruction).toContain("一人親方");
@@ -584,17 +591,16 @@ test("editing the title to a generic label updates the quality checklist", async
   await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
   await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
   await page.getByTestId("draft-preview-tab").click();
+  await expect(page.getByTestId("publication-readiness-summary")).toHaveAttribute(
+    "data-status",
+    "review-required",
+  );
   await expect(
-    page.getByTestId("quality-check-failed").filter({ hasText: "数字・実績の根拠づけ" }),
-  ).toContainText("修正先: 本文HTML。数字の近くに出典");
-  await page
-    .getByTestId("quality-check-failed")
-    .filter({ hasText: "数字・実績の根拠づけ" })
-    .getByTestId("quality-edit-draft-button")
-    .click();
-  await expect(page.getByTestId("draft-body-html-textarea")).toBeVisible();
-  await expect(page.getByTestId("draft-body-html-textarea")).toBeFocused();
-  await page.getByTestId("draft-preview-tab").click();
+    page.getByTestId("publication-readiness-issue").filter({ hasText: "未裏付けの数値" }).first(),
+  ).toContainText("300%");
+  await expect(
+    page.getByTestId("publication-readiness-issue").filter({ hasText: "未裏付けの数値" }).first(),
+  ).toContainText("「約」「目安」だけでは裏付けにならない");
   await expect(page.getByRole("heading", { name: "参照元" })).toBeVisible();
   await expect(page.getByLabel("参照元").getByRole("link", { name: "Reference page" })).toHaveAttribute(
     "href",
@@ -696,7 +702,7 @@ test("editing the title to a generic label updates the quality checklist", async
     /参照元の事実、一次情報、固有名詞、現場例、判断基準/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
-    /修正方針: 数字の近くに、出典、条件、時点、目安、現場観察/,
+    /修正方針: 数字の近くに、入力で確認できる出典、対象、条件、時点/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /修正方針: 表を項目\/内容だけで終えず、判断基準、比較軸、条件/,
@@ -767,7 +773,7 @@ test("source digestion quality checks explain how to edit pasted inputs", async 
   await expect(page.getByText("一次情報の編集消化")).toBeVisible();
   await expect(
     page.getByTestId("quality-check-failed").filter({ hasText: "一次情報の編集消化" }),
-  ).toContainText("修正先: 本文HTML。一次情報の固有語彙を残しつつ");
+  ).toContainText("修正先: 本文HTML。一次情報の事実と条件を保ちつつ");
   await expect(page.getByText("参照情報の編集消化")).toBeVisible();
   await expect(
     page.getByTestId("quality-check-failed").filter({ hasText: "参照情報の編集消化" }),
@@ -787,7 +793,7 @@ test("source digestion quality checks explain how to edit pasted inputs", async 
   await page.getByTestId("draft-preview-tab").click();
   await page.getByTestId("quality-improve-regenerate-button").click();
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
-    /修正方針: 一次情報を丸写しせず、固有語彙は残して読者向けの判断材料/,
+    /修正方針: 一次情報を丸写しせず、事実と条件は保って読者向けの判断材料/,
   );
   await expect(page.getByTestId("article-regeneration-instruction")).toHaveValue(
     /修正方針: 参照情報を丸写しせず、事実関係は保って出典注記/,
@@ -1741,7 +1747,7 @@ test("reference URL fetch failure is visible while manual fallback still generat
   expect(errors()).toEqual([]);
 });
 
-test("successful URL metadata fallback is shown as a note instead of a fetch failure", async ({
+test("a fetched short page is shown as successful transport but unusable article evidence", async ({
   page,
 }) => {
   const errors = collectUnexpectedBrowserErrors(page);
@@ -1753,7 +1759,10 @@ test("successful URL metadata fallback is shown as a note instead of a fetch fai
       title: "Metadata fallback fixture",
       text: "Metadata and heading text extracted from the reference page.",
       ok: true,
-      reason: "本文量が少ないため、メタ情報・見出しを利用しました。",
+      evidenceUsable: false,
+      pageKind: "insufficient" as const,
+      reason:
+        "URL取得には成功しましたが、テーマの根拠として使える本文を十分に抽出できませんでした。本文を手動テキストで補ってください。",
       sourceType: "url" as const,
     },
   ];
@@ -1788,11 +1797,14 @@ test("successful URL metadata fallback is shown as a note instead of a fetch fai
   await page.getByTestId("article-primary-button").click();
 
   const fetchResults = page.getByTestId("fetch-result-alerts");
-  await expect(fetchResults.getByText("URLは取得できました。本文抽出時の補足情報を確認できます。")).toBeVisible();
-  await expect(fetchResults.getByText("取得成功（補足）")).toBeVisible();
-  await expect(fetchResults.getByText("取得できなかったURLは、該当入力へ戻って手動テキストで補えます。")).toBeHidden();
+  await expect(
+    fetchResults.getByText(
+      "取得失敗、または記事根拠として利用できなかったURLは、該当入力へ戻って手動テキストで補えます。",
+    ),
+  ).toBeVisible();
+  await expect(fetchResults.getByText("URL取得成功・記事根拠には未使用")).toBeVisible();
   await expect(fetchResults.getByText(fallbackUrl, { exact: true })).toBeVisible();
-  await expect(fetchResults.getByText("本文量が少ないため、メタ情報・見出しを利用しました。")).toBeVisible();
+  await expect(fetchResults.getByText(/テーマの根拠として使える本文を十分に抽出できませんでした/)).toBeVisible();
   expect(errors()).toEqual([]);
 });
 
@@ -3641,6 +3653,8 @@ async function mockCommonApiRoutes(
     articlePrimaryInfo: "",
     articlePrimaryInfoTypes: [] as string[],
     articleClosingText: "",
+    articleAudienceType: "",
+    articleStructure: "",
     articleRegenerationInstruction: "",
     articleCompetitorResearchSummary: "",
     articleCompetitorFileNames: [] as string[],
@@ -3742,6 +3756,8 @@ async function mockCommonApiRoutes(
         primaryInfo?: string;
         primaryInfoTypes?: string[];
         closingText?: string;
+        audienceType?: string;
+        articleStructure?: string;
         regenerationInstruction?: string;
         competitorFiles?: Array<{ name?: string }>;
       };
@@ -3751,6 +3767,8 @@ async function mockCommonApiRoutes(
     calls.articlePrimaryInfo = body.form?.primaryInfo ?? "";
     calls.articlePrimaryInfoTypes = body.form?.primaryInfoTypes ?? [];
     calls.articleClosingText = body.form?.closingText ?? "";
+    calls.articleAudienceType = body.form?.audienceType ?? "";
+    calls.articleStructure = body.form?.articleStructure ?? "";
     calls.articleRegenerationInstruction = body.form?.regenerationInstruction ?? "";
     calls.articleCompetitorFileNames =
       body.form?.competitorFiles?.map((file) => file.name ?? "") ?? [];

@@ -138,9 +138,17 @@ describe("draft persistence with Supabase", () => {
   test("hydrates drafts and image rows from Supabase without losing edited content", async () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { getDraft } = await import("@/lib/server/drafts");
+    const { buildDraftArticleHtml } = await import("@/lib/draft-html");
     const draft = createSampleDraft({
       id: "draft-supabase-load",
-      editedBodyHtml: "<h2>Edited</h2><p>Human reviewed body.</p>",
+      editedBodyHtml:
+        "<h2>Edited</h2><p>Human reviewed body.</p><h2>FAQ</h2><h3>費用はかかりますか？</h3><p>生成時の古い回答です。</p>",
+      faqItems: [
+        {
+          question: "費用は、かかりますか?",
+          answer: "編集者が確認した最新の回答です。",
+        },
+      ],
       status: "approved",
     });
     const draftRow = {
@@ -196,10 +204,15 @@ describe("draft persistence with Supabase", () => {
 
     expect(hydrated).toMatchObject({
       id: "draft-supabase-load",
-      editedBodyHtml: "<h2>Edited</h2><p>Human reviewed body.</p>",
+      editedBodyHtml: draft.editedBodyHtml,
       status: "approved",
       wordpressPostUrl: undefined,
     });
+    expect(hydrated?.faqItems).toEqual(draft.faqItems);
+    const publishedHtml = buildDraftArticleHtml(hydrated!);
+    expect(publishedHtml.match(/費用は[、,]?かかりますか/g)).toHaveLength(1);
+    expect(publishedHtml).toContain("編集者が確認した最新の回答です。");
+    expect(publishedHtml).not.toContain("生成時の古い回答です。");
     expect(hydrated?.images).toEqual([
       {
         id: "image-row-1",

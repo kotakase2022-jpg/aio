@@ -23,8 +23,28 @@ export function qualityCheckEditGuidance(checkId: string) {
     return "修正先: FAQ質問。テーマ、一次情報、競合差分に基づく具体的な問いにします。";
   }
 
+  if (checkId === "article-structure-faq") {
+    return "修正先: FAQ。記事の中心を読者の具体的な疑問と回答に組み替え、条件、例外、比較、次の行動まで答えるFAQを3組以上そろえます。";
+  }
+
+  if (checkId === "article-structure-case") {
+    return "修正先: 本文HTML。具体的な状況、前提条件、選択肢、判断の分かれ目を中心に組み替え、仮想事例は仮定と明示します。";
+  }
+
+  if (checkId === "article-structure-textbook") {
+    return "修正先: 本文HTML。概念、選択肢、判断基準、条件・例外、注意点を見出しと箇条書きまたは表で体系的に整理します。";
+  }
+
+  if (checkId === "audience-fit-btoc") {
+    return "修正先: 本文HTML。専門語を一般読者向けに説明し、日常で確認できる変化、選択肢、注意点、相談の目安を示します。";
+  }
+
+  if (checkId === "audience-fit-btob") {
+    return "修正先: 本文HTML。経営者・担当者が比較できる選択肢、適用条件、費用・期間、リスク、確認事項を示します。";
+  }
+
   if (checkId === "primary-info-digestion") {
-    return "修正先: 本文HTML。一次情報の固有語彙を残しつつ、読者向けの判断材料や注意点へ言い換えます。";
+    return "修正先: 本文HTML。一次情報の事実と条件を保ちつつ、読者向けの判断材料や注意点へ言い換えます。";
   }
 
   if (checkId === "reference-info-digestion") {
@@ -96,11 +116,11 @@ export function qualityCheckEditGuidance(checkId: string) {
   }
 
   if (checkId === "primary-info-reflection") {
-    return "修正先: 本文HTML。一次情報を、当社の経験、相談傾向、現場観察、支援時の判断基準として本文に戻します。";
+    return "修正先: 本文HTML。一次情報で確認できる経験、相談傾向、具体的な観察内容、支援時の判断基準を本文に反映します。";
   }
 
   if (checkId === "primary-info-opening-placement") {
-    return "修正先: 本文HTML。一次情報の固有語彙を、冒頭の結論・定義・読者の判断材料にも戻します。";
+    return "修正先: 本文HTML。一次情報の主要な論点を、冒頭の結論・定義・読者の判断材料にも反映します。";
   }
 
   if (checkId === "cta-reflection") {
@@ -108,7 +128,7 @@ export function qualityCheckEditGuidance(checkId: string) {
   }
 
   if (checkId === "generic-opening-frame") {
-    return "修正先: 本文HTML。冒頭をテンプレ導入ではなく、結論、定義、現場観察、条件から書き出します。";
+    return "修正先: 本文HTML。冒頭をテンプレ導入ではなく、結論、定義、入力で確認できる具体的な経験、条件から書き出します。";
   }
 
   if (checkId === "generic-opening-density") {
@@ -132,7 +152,7 @@ export function qualityCheckEditGuidance(checkId: string) {
   }
 
   if (checkId === "numeric-claim-support") {
-    return "修正先: 本文HTML。数字の近くに出典、条件、時点、目安、現場観察を補います。";
+    return "修正先: 本文HTML。数字の近くに、入力で確認できる出典、対象、条件、時点を補います。『約』『目安』だけでは根拠になりません。";
   }
 
   if (checkId === "source-url-presence") {
@@ -160,7 +180,7 @@ export function qualityCheckEditGuidance(checkId: string) {
   }
 
   if (checkId === "sentence-frame-variety") {
-    return "修正先: 本文HTML。「結論として」「具体的には」型の文頭を減らし、現場観察、比較、失敗例、例外から自然に書き出します。";
+    return "修正先: 本文HTML。「結論として」「具体的には」型の文頭を減らし、入力で確認できる具体例、比較、失敗例、例外から自然に書き出します。";
   }
 
   if (checkId === "comparison-table") {

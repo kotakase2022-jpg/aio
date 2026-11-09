@@ -74,6 +74,26 @@ describe("evaluateArticleQuality", () => {
     expect(result.score).toBeGreaterThanOrEqual(90);
   });
 
+  test("accepts reader-friendly paraphrases of first-party concepts without exact vocabulary matches", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>犬猫のオーラルケアとは、口の変化を早めに確認する習慣です</h2>
+        <p>結論として、当院ではペットオーナーから口腔ケアの質問を受けることが多く、毎日続けられる方法と受診の目安を先に説明しています。</p>
+        <table><tr><th>判断基準</th><td>口臭、食べ方、嫌がり方の変化を比べます。</td></tr></table>
+        <ul><li>無理に続けず異変を記録します。</li><li>判断に迷う場合は獣医師へ相談します。</li></ul>
+        <h2>自宅で確認する順番</h2><p>ペットオーナーが観察しやすい項目から始めます。</p>
+      `,
+      { primaryInfo: "飼い主から歯磨きの相談を受けることが多い。" },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-reflection", passed: true }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "primary-info-opening-placement", passed: true }),
+    );
+  });
+
   test("recognizes reflected English first-party information", () => {
     const result = evaluateArticleQuality(
       `
@@ -204,7 +224,7 @@ describe("evaluateArticleQuality", () => {
     expect(result.checks).toContainEqual(
       expect.objectContaining({ id: "primary-info-opening-placement", passed: false }),
     );
-    expect(result.improvements.join(" ")).toContain("一次情報の固有語彙");
+    expect(result.improvements.join(" ")).toContain("一次情報の論点");
     expect(result.score).toBeLessThan(100);
   });
 
@@ -228,7 +248,7 @@ describe("evaluateArticleQuality", () => {
     expect(result.checks).toContainEqual(
       expect.objectContaining({ id: "primary-info-reflection", passed: false }),
     );
-    expect(result.improvements.join(" ")).toContain("一次情報の固有語彙");
+    expect(result.improvements.join(" ")).toContain("一次情報の論点");
     expect(result.score).toBeLessThan(100);
   });
 
@@ -696,7 +716,7 @@ describe("evaluateArticleQuality", () => {
     );
   });
 
-  test("recognizes source URLs from fully escaped anchor attributes in quality checks", () => {
+  test("does not treat fully escaped anchor markup as a usable source link", () => {
     const result = evaluateArticleQuality(
       `
         <h2>AIO article draft source handling</h2>
@@ -713,7 +733,10 @@ describe("evaluateArticleQuality", () => {
     );
 
     expect(result.checks).toContainEqual(
-      expect.objectContaining({ id: "source-url-presence", passed: true }),
+      expect.objectContaining({ id: "source-url-presence", passed: false }),
+    );
+    expect(result.publicationReadiness?.issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "missing-source-link" })]),
     );
   });
 
@@ -726,7 +749,7 @@ describe("evaluateArticleQuality", () => {
         <ul><li>失敗例として、出典と自社経験を混ぜて断定するケースがあります。</li><li>注意点は、数字の近くに条件を添えることです。</li></ul>
         <h2>公開前に担当者と出典確認を分ける理由</h2>
         <p>FAQとして、未確認情報は断定せず、出典と条件を本文に残します。</p>
-        <p>出典: https://example.com/reference-a / https://example.com/reference-b / https://example.com/reference-c</p>
+        <p>出典: <a href="https://example.com/reference-a">参照元A</a> / <a href="https://example.com/reference-b">参照元B</a> / <a href="https://example.com/reference-c">参照元C</a></p>
       `,
       {
         sourceUrls: [
@@ -764,7 +787,7 @@ describe("evaluateArticleQuality", () => {
     expect(result.checks).toContainEqual(
       expect.objectContaining({ id: "reference-info-reflection", passed: false }),
     );
-    expect(result.improvements.join(" ")).toContain("参照情報の固有語彙");
+    expect(result.improvements.join(" ")).toContain("参照情報の主要な論点");
     expect(result.score).toBeLessThan(100);
   });
 
@@ -840,7 +863,7 @@ describe("evaluateArticleQuality", () => {
     expect(result.checks).toContainEqual(
       expect.objectContaining({ id: "competitor-insight-reflection", passed: false }),
     );
-    expect(result.improvements.join(" ")).toContain("競合情報の固有語彙");
+    expect(result.improvements.join(" ")).toContain("競合情報から得た読者の疑問");
     expect(result.score).toBeLessThan(100);
   });
 
@@ -1706,6 +1729,128 @@ describe("evaluateArticleQuality", () => {
     );
     expect(result.checks).toContainEqual(
       expect.objectContaining({ id: "search-intent-reflection", passed: true }),
+    );
+  });
+
+  test("accepts semantically equivalent reference concepts without requiring exact wording", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>資金調達とは、手元資金と返済計画を照合して選択肢を決めることです</h2>
+        <p>問い合わせでは、手元資金、返済計画、売上債権を分けて確認します。</p>
+        <ul><li>入金時期を確認する</li><li>返済負担を比較する</li></ul>
+        <h2>経営者が先に確認する判断材料</h2>
+        <p>条件と例外を出典に沿って整理します。</p>
+      `,
+      { referenceTexts: ["資金繰り、返済条件、売掛金の相談が多い。"] },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "reference-info-reflection", passed: true }),
+    );
+  });
+
+  test("evaluates BtoC copy for a general pet owner without imposing a BtoB frame", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>犬猫のオーラルケアとは、飼い主が毎日の口内変化を確認する習慣です</h2>
+        <p>犬猫と暮らす飼い主は、口臭や食べ方の変化を見たら無理に続けず、動物病院へ相談するか判断します。</p>
+        <ul><li>自宅で確認できる変化</li><li>受診を考える兆候</li></ul>
+        <h2>嫌がるときの選択肢</h2><p>道具を変えるか、専門家へ相談します。</p>
+      `,
+      { audienceType: "btoc", targetReaderText: "犬猫と暮らす一般の飼い主" },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "audience-fit-btoc", passed: true }),
+    );
+  });
+
+  test("evaluates BtoB copy by the decision support provided to business owners", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>中小企業の資金調達とは、経営者が条件と返済負担を比較する意思決定です</h2>
+        <p>中小企業の経営者は、必要時期、費用、返済条件、資金繰りへのリスクを並べて判断します。</p>
+        <ul><li>選択肢ごとの条件</li><li>申請前の注意点</li></ul>
+        <h2>担当者と期限を決める</h2><p>必要資料と確認体制を決めます。</p>
+      `,
+      { audienceType: "btob", targetReaderText: "中小企業の経営者" },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "audience-fit-btob", passed: true }),
+    );
+  });
+
+  test("treats a canonical question-led article as a valid FAQ structure", () => {
+    const result = evaluateArticleQuality(
+      `
+        <p>資金調達の判断で先に確認する疑問へ回答します。</p>
+        <section class="aio-faq-block" aria-label="FAQ">
+          <article class="aio-faq-item"><h3>必要書類は何ですか？</h3><p>選択肢ごとに異なります。</p></article>
+          <article class="aio-faq-item"><h3>期間はどう確認しますか？</h3><p>申請条件と期限を照合します。</p></article>
+          <article class="aio-faq-item"><h3>返済条件は何を比べますか？</h3><p>資金繰りへの影響を比べます。</p></article>
+        </section>
+      `,
+      { articleStructure: "faq" },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "article-structure-faq", passed: true }),
+    );
+  });
+
+  test("requires case assumptions and decision forks instead of grading it as a textbook", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>想定例：入金前に仕入資金が必要な企業</h2>
+        <p>この仮定の前提は、売掛金の入金まで時間があり、支払期限が先に来る状況です。</p>
+        <h2>選択肢と判断の分かれ目</h2>
+        <p>費用を優先する場合と、調達までの期間を優先する場合で判断が分かれます。</p>
+      `,
+      { articleStructure: "case" },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "article-structure-case", passed: true }),
+    );
+  });
+
+  test("accepts a systematic definition-and-criteria article as textbook structure", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>資金調達とは、必要資金を外部または内部から確保することを指します</h2>
+        <p>選択肢ごとの条件と例外を整理します。</p>
+        <h2>判断基準と注意点</h2>
+        <ul><li>必要時期</li><li>費用と返済条件</li></ul>
+      `,
+      { articleStructure: "textbook" },
+    );
+
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: "article-structure-textbook", passed: true }),
+    );
+  });
+
+  test("does not let a strong editorial score offset a publication blocker", () => {
+    const result = evaluateArticleQuality(
+      `
+        <h2>AIO記事とは、公開前の根拠と判断条件をAI検索が引用しやすく整理した記事を指します</h2>
+        <p>結論として、編集者は参照元、自社経験、競合差分を分けます。当社の支援記録では12件の相談で、承認担当と出典確認の役割が曖昧でした。</p>
+        <table><tr><th>判断軸</th><th>確認内容</th><th>注意点</th></tr><tr><td>根拠</td><td>参照元と確認時点</td><td>未確認情報を断定しない</td></tr><tr><td>体制</td><td>担当と期限</td><td>修正責任を決める</td></tr></table>
+        <ul><li>失敗例は、自社経験を一般的な基準へ広げることです。</li><li>公開前に条件、例外、出典を照合します。</li></ul>
+        <h2>承認担当が公開前に比較する条件</h2>
+        <p>担当、期間、費用、参照元を比較し、読者が判断できる形へ整えます。</p>
+        <p>競合URLから本文を取得しました。</p>
+      `,
+      {
+        primaryInfo: "当社の支援記録では12件の相談で、承認担当と出典確認の役割が曖昧でした。",
+      },
+    );
+
+    expect(result.score).toBeGreaterThanOrEqual(75);
+    expect(result.publicationReadiness).toMatchObject({ publishReady: false });
+    expect(result.publicationReadiness?.issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "internal-process-note" })]),
     );
   });
 });

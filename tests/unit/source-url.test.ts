@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  articleContainsCanonicalSourceLink,
   articleContainsCanonicalSourceUrl,
   normalizeSourceUrl,
   normalizeSourceUrls,
@@ -69,6 +70,24 @@ describe("source URL helpers", () => {
         "Source: &lt;a href=&quot;https://example.com/reference?page=1&amp;id=primary&quot;&gt;Primary source&lt;/a&gt;",
       ),
     ).toBe(true);
+  });
+
+  test("requires an actual anchor href when checking publishable source links", () => {
+    const url = "https://example.com/reference?id=primary";
+
+    expect(articleContainsCanonicalSourceLink(url, `<p>出典: ${url}</p>`)).toBe(false);
+    expect(
+      articleContainsCanonicalSourceLink(
+        url,
+        '<p><a href="https://www.example.com/reference?id=primary&utm_source=test">参照元</a></p>',
+      ),
+    ).toBe(true);
+    expect(
+      articleContainsCanonicalSourceLink(
+        url,
+        '&lt;a href=&quot;https://example.com/reference?id=primary&quot;&gt;参照元&lt;/a&gt;',
+      ),
+    ).toBe(false);
   });
 
   test("keeps path-only candidates separate from meaningful query URLs", () => {
