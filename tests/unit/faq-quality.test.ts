@@ -2,6 +2,34 @@ import { describe, expect, test } from "vitest";
 import { evaluateFaqQuality } from "@/lib/faq-quality";
 
 describe("evaluateFaqQuality", () => {
+  test("counts canonical rendered FAQ items rather than duplicate editor rows", () => {
+    const question = "Which approval evidence should the editor retain?";
+    const answer = "Keep the source, approval owner, and review timeline together before publication.";
+    const result = evaluateFaqQuality({
+      faqItems: [
+        { question, answer },
+        { question: `<strong>${question}</strong>`, answer },
+        { question: question.replace("?", "？"), answer },
+      ],
+    });
+
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "faq-count", passed: false }));
+  });
+
+  test("evaluates the retained edited answer instead of superseded duplicate answers", () => {
+    const result = evaluateFaqQuality({
+      faqItems: [
+        { question: "Which approval evidence should the editor retain?", answer: "It depends." },
+        {
+          question: "Which approval evidence should the editor retain?",
+          answer: "Keep the source, approval owner, and review timeline together before publication.",
+        },
+      ],
+    });
+
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "faq-answer-specificity", passed: true }));
+  });
+
   test("rewards FAQ items that answer concrete editorial and operational questions", () => {
     const result = evaluateFaqQuality({
       faqItems: [

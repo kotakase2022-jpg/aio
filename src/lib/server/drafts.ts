@@ -1,10 +1,11 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ArticleDraft } from "@/types/aio";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { ApiError } from "@/lib/server/http";
 import { sanitizeForPostgres } from "@/lib/server/postgres-sanitize";
+import { withLocalStoreLock, writeLocalJson } from "@/lib/server/local-store";
 import {
   callSupabaseGateway,
   isSupabaseGatewayConfigured,
@@ -17,39 +18,16 @@ const dataDir = process.env.VERCEL
   : process.env.AIO_LOCAL_DATA_DIR || path.join(process.cwd(), ".data");
 const draftFile = path.join(dataDir, "drafts.json");
 
-export async function saveDraft(draft: ArticleDraft) {
+export async function saveDraft(draft: ArticleDraft, expectedUpdatedAt?: string) {
   const supabase = getSupabaseAdmin();
   if (supabase) {
-    const row = draftToRow(draft);
-    const { error } = await supabase.from("article_drafts").upsert(row);
+    const { error } = await supabase.rpc("aio_save_draft", {
+      draft_row: draftToRow(draft),
+      image_rows: draftToImageRows(draft),
+      expected_updated_at: expectedUpdatedAt ?? null,
+    });
     if (error) {
-      throw new ApiError("下書きの保存に失敗しました。", 500, error.message);
-    }
-
-    if (draft.images.length > 0) {
-      const imageRows = draftToImageRows(draft);
-      const { error: imageError } = await supabase.from("article_images").upsert(imageRows);
-      if (imageError) {
-        throw new ApiError("下書き画像の保存に失敗しました。", 500, imageError.message);
-      }
-
-      const retainedIds = draft.images.map((image) => image.id).join(",");
-      const { error: cleanupError } = await supabase
-        .from("article_images")
-        .delete()
-        .eq("draft_id", draft.id)
-        .not("id", "in", `(${retainedIds})`);
-      if (cleanupError) {
-        throw new ApiError("古い下書き画像の整理に失敗しました。", 500, cleanupError.message);
-      }
-    } else {
-      const { error: deleteError } = await supabase
-        .from("article_images")
-        .delete()
-        .eq("draft_id", draft.id);
-      if (deleteError) {
-        throw new ApiError("古い下書き画像の整理に失敗しました。", 500, deleteError.message);
-      }
+      throw new ApiError("下書きの保存に失敗しました。", error.code === "40001" ? 409 : 500, error.message);
     }
 
     return { draft, storageMode: "supabase" as const };
@@ -59,14 +37,20 @@ export async function saveDraft(draft: ArticleDraft) {
     await callSupabaseGateway("upsert_draft", {
       row: draftToRow(draft),
       images: draftToImageRows(draft),
+      expectedUpdatedAt,
     });
 
     return { draft, storageMode: "supabase-gateway" as const };
   }
 
-  const store = await readLocalDrafts();
-  store[draft.id] = draft;
-  await writeLocalDrafts(store);
+  await withLocalStoreLock(draftFile, async () => {
+    const store = await readLocalDrafts();
+    if (expectedUpdatedAt && store[draft.id]?.updatedAt !== expectedUpdatedAt) {
+      throw new ApiError("ドラフトが更新されました。最新の内容を開き直してください。", 409);
+    }
+    store[draft.id] = draft;
+    await writeLocalJson(draftFile, store);
+  });
   return { draft, storageMode: "local" as const };
 }
 
@@ -135,14 +119,12 @@ async function readLocalDrafts(): Promise<LocalDraftStore> {
   try {
     const content = await readFile(draftFile, "utf8");
     return JSON.parse(content) as LocalDraftStore;
-  } catch {
-    return {};
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return {};
+    }
+    throw error;
   }
-}
-
-async function writeLocalDrafts(store: LocalDraftStore) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(draftFile, JSON.stringify(store, null, 2), "utf8");
 }
 
 function draftToRow(draft: ArticleDraft) {

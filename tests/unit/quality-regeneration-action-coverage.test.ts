@@ -131,7 +131,8 @@ describe("quality regeneration action coverage", () => {
     const action = qualityRegenerationAction("generic-opening-frame");
 
     expect(action).toContain("結論");
-    expect(action).toContain("現場観察");
+    expect(action).toContain("入力で確認できる具体的な経験");
+    expect(action).not.toContain("現場観察");
     expect(action).toContain("today's fast-paced digital landscape");
     expect(action).toContain("ever-evolving landscape");
   });

@@ -24,6 +24,7 @@ import {
   UnsafeOutboundUrlError,
 } from "@/lib/server/safe-http";
 import { inspectImageFile } from "@/lib/server/image-file";
+import { finishWordpressPost, releaseWordpressPost, reserveWordpressPost } from "@/lib/server/wordpress-posts";
 
 type StoredConnection = WordpressConnection & {
   encryptedApplicationPassword: string;
@@ -123,6 +124,9 @@ export async function publishDraftToWordpress({
 
   const password = decryptSecret(connection.encryptedApplicationPassword);
   const authHeader = `Basic ${Buffer.from(`${connection.username}:${password}`).toString("base64")}`;
+  await reserveWordpressPost(draft.id, connection.id, status);
+  let postAttempted = false;
+  try {
 
   const [categoryIds, tagIds] = await Promise.all([
     ensureTerms(connection.siteUrl, authHeader, "categories", draft.categories),
@@ -143,6 +147,7 @@ export async function publishDraftToWordpress({
     );
   }
 
+  postAttempted = true;
   const response = await wordpressApiFetch(
     `${connection.siteUrl}/wp-json/wp/v2/posts`,
     {
@@ -168,17 +173,24 @@ export async function publishDraftToWordpress({
   );
 
   const json = (await response.json().catch(() => ({}))) as {
+    id?: number;
     link?: string;
     message?: string;
     code?: string;
   };
 
   if (!response.ok) {
+    // A server-side post hook can fail after creating the post. Only an explicit
+    // client-error rejection is safe to release for another attempt.
+    postAttempted = response.status >= 500;
     throw new ApiError(
       "WordPress投稿に失敗しました。",
       response.status,
       json.message ?? json.code ?? response.statusText,
     );
+  }
+  if (!Number.isInteger(json.id) || !json.link || typeof json.link !== "string") {
+    throw new ApiError("WordPressの投稿結果を確認できませんでした。", 502);
   }
 
   const updatedDraft: ArticleDraft = {
@@ -187,15 +199,27 @@ export async function publishDraftToWordpress({
     wordpressPostUrl: json.link,
     updatedAt: new Date().toISOString(),
   };
-  await saveDraft(updatedDraft);
-  await saveWordpressPostRecord(draft.id, connection.id, json.link ?? "", status);
+  const warnings: string[] = [];
+  const warn = (label: string, error: unknown) => {
+    warnings.push(`${label}。WordPress投稿は完了しています。再投稿せず投稿URLを確認してください: ${json.link} (${error instanceof Error ? error.message : "Unknown error"})`);
+  };
+  await finishWordpressPost(draft.id, json.link).catch((error: unknown) => warn("投稿結果の永続保存に失敗し、投稿予約は確認待ちです", error));
+  await saveDraft(updatedDraft).catch((error: unknown) => warn("ドラフト状態の保存に失敗しました", error));
   await markGenerationJobWordpressPost({
     draftId: draft.id,
     status,
     postUrl: json.link ?? "",
-  });
+  }).catch((error: unknown) => warn("生成ログの同期に失敗しました", error));
 
-  return { postUrl: json.link ?? "", draft: updatedDraft };
+  return { postUrl: json.link, draft: updatedDraft, warnings };
+  } catch (error) {
+    if (!postAttempted) {
+      await releaseWordpressPost(draft.id);
+      throw error;
+    }
+    throw new ApiError("WordPress投稿結果が不明です。重複投稿を防ぐため再送信を停止しました。", 502,
+      `WordPress管理画面で確認し、管理者が投稿予約を照合してください。${error instanceof Error ? error.message : ""}`);
+  }
 }
 
 function normalizeSiteUrl(value: string) {
@@ -645,42 +669,6 @@ function resolveAssetUrl(url: string, origin: string) {
   }
 
   return url;
-}
-
-async function saveWordpressPostRecord(
-  draftId: string,
-  connectionId: string,
-  postUrl: string,
-  status: "draft" | "publish",
-) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
-    if (isSupabaseGatewayConfigured()) {
-      await callSupabaseGateway("insert_wordpress_post", {
-        row: {
-          draft_id: draftId,
-          connection_id: connectionId,
-          post_url: postUrl,
-          post_status: status,
-        },
-      });
-    }
-    return;
-  }
-
-  const { error } = await supabase.from("wordpress_posts").insert({
-    draft_id: draftId,
-    connection_id: connectionId,
-    post_url: postUrl,
-    post_status: status,
-  });
-  if (error) {
-    throw new ApiError(
-      "WordPress投稿結果の保存に失敗しました。",
-      500,
-      `WordPressへの投稿自体は完了しています。重複投稿を避けるため、投稿URLを確認してください。${error.message ? ` (${error.message})` : ""}`,
-    );
-  }
 }
 
 function wordpressApiFetch(

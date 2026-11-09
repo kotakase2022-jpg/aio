@@ -240,8 +240,23 @@ Fixtures must not contain production data, personal information, API keys, or cu
 
 ## E2E
 
-E2E tests use Playwright Chromium at a PC viewport. They start the app with `next dev` through
-Playwright `webServer` and set safe test environment variables.
+The PC Chromium suite builds and starts an isolated local production server. It never reuses an
+already-running server. `PLAYWRIGHT_BASE_URL` must not point to a deployed application; use
+`E2E_PORT` to select a different local port. OpenAI and persistence credentials are explicitly
+disabled in this server. External service contracts are covered separately.
+
+After an approved release, `node scripts/production-smoke.mjs` checks the canonical production
+URL with a fresh browser session. It checks authentication, read-only logs, and all six input
+steps. The script blocks application mutations, never generates/saves/posts an article, and keeps
+its screenshot under ignored `.verification-files/`. Set `AIO_SMOKE_BASE_URL` to a deployment URL
+in the same project to check it before promotion. This smoke is not a substitute for the full E2E.
+
+`npm run test:live:openai:image` is an opt-in, paid, one-image contract probe using the configured
+image model. It verifies a complete PNG in memory without saving to Storage or the database.
+Run it only with approved API credentials and cost authorization, like the text live probe.
+
+E2E tests use Playwright Chromium at a PC viewport. They build and start the app with
+`next build` / `next start` through Playwright `webServer` and set safe test environment variables.
 
 Install browsers when needed:
 

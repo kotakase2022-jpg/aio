@@ -21,6 +21,7 @@ describe("WordPress post route", () => {
     const draft = createSampleDraft({ status: "approved" });
     vi.mocked(getDraft).mockResolvedValueOnce(draft);
     vi.mocked(publishDraftToWordpress).mockResolvedValueOnce({
+      warnings: [],
       postUrl: "https://wordpress.example.com/post",
       draft: {
         ...draft,

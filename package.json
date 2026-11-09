@@ -20,6 +20,7 @@
     "test:live:readiness:wordpress": "node scripts/check-live-readiness.mjs wordpress",
     "test:live": "npm run test:live:readiness && vitest run --config vitest.live.config.ts",
     "test:live:openai": "npm run test:live:readiness:openai && vitest run --config vitest.live.config.ts tests/live/openai.live.test.ts",
+    "test:live:openai:image": "npm run test:live:readiness:openai && vitest run --config vitest.live.config.ts tests/live/openai-image.live.test.ts",
     "test:live:supabase": "npm run test:live:readiness:supabase && vitest run --config vitest.live.config.ts tests/live/supabase.live.test.ts",
     "test:live:wordpress": "npm run test:live:readiness:wordpress && vitest run --config vitest.live.config.ts tests/live/wordpress.live.test.ts",
     "test:coverage": "vitest run --coverage",
@@ -38,7 +39,7 @@
     "clsx": "^2.1.1",
     "jszip": "^3.10.1",
     "lucide-react": "^1.22.0",
-    "next": "16.3.2",
+    "next": "16.4.5",
     "openai": "^6.45.0",
     "pdfjs-dist": "^6.2.108",
     "react": "19.2.4",
@@ -55,13 +56,13 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/sanitize-html": "^2.16.1",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.12",
     "eslint": "^9",
-    "eslint-config-next": "16.3.2",
+    "eslint-config-next": "16.4.5",
     "husky": "^9.1.7",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.12",
     "wait-on": "^9.0.10"
   }
 }

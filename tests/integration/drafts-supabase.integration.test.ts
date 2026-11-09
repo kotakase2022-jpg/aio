@@ -16,67 +16,49 @@ beforeEach(() => {
 });
 
 describe("draft persistence with Supabase", () => {
-  test("upserts current image rows before removing stale rows", async () => {
+  test("sends draft and image rows in one atomic save request", async () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { saveDraft } = await import("@/lib/server/drafts");
     const draft = createSampleDraft({ id: "draft-supabase-save" });
-    const upsert = vi.fn(async () => ({ error: null }));
-    const cleanupNot = vi.fn(async () => ({ error: null }));
-    const cleanupEq = vi.fn(() => ({ not: cleanupNot }));
-    const deleteImages = vi.fn(() => ({ eq: cleanupEq }));
-    const upsertImages = vi.fn(async () => ({ error: null }));
-    const from = vi.fn((table: string) => {
-      if (table === "article_drafts") {
-        return { upsert };
-      }
-
-      return {
-        delete: deleteImages,
-        upsert: upsertImages,
-      };
-    });
+    const rpc = vi.fn(async () => ({ error: null }));
+    const from = vi.fn();
 
     vi.mocked(getSupabaseAdmin).mockReturnValue({
-      from,
+      from, rpc,
     } as unknown as ReturnType<typeof getSupabaseAdmin>);
 
     const result = await saveDraft(draft);
 
     expect(result).toEqual({ draft, storageMode: "supabase" });
-    expect(from).toHaveBeenCalledWith("article_drafts");
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(from).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("aio_save_draft", {
+      draft_row: expect.objectContaining({
         id: "draft-supabase-save",
         input_payload: draft.inputPayload,
         edited_title: draft.editedTitle,
         generated_image_urls: [transparentPixelDataUrl],
         status: "draft",
       }),
-    );
-    expect(upsertImages).toHaveBeenCalledWith([
-      expect.objectContaining({
+      image_rows: [expect.objectContaining({
         id: draft.images[0].id,
         draft_id: "draft-supabase-save",
         slot: "featured",
         image_url: transparentPixelDataUrl,
         storage_path: "generated/featured.png",
         source: "generated",
-      }),
-    ]);
-    expect(cleanupEq).toHaveBeenCalledWith("draft_id", "draft-supabase-save");
-    expect(cleanupNot).toHaveBeenCalledWith("id", "in", `(${draft.images[0].id})`);
+      })],
+      expected_updated_at: null,
+    });
   });
 
   test("returns Japanese errors when Supabase draft saving fails", async () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { saveDraft } = await import("@/lib/server/drafts");
     const draft = createSampleDraft({ id: "draft-supabase-save-failure" });
-    const from = vi.fn(() => ({
-      upsert: vi.fn(async () => ({ error: { message: "row upsert failed" } })),
-    }));
+    const rpc = vi.fn(async () => ({ error: { message: "row upsert failed" } }));
 
     vi.mocked(getSupabaseAdmin).mockReturnValue({
-      from,
+      rpc,
     } as unknown as ReturnType<typeof getSupabaseAdmin>);
 
     await expect(saveDraft(draft)).rejects.toMatchObject({
@@ -90,22 +72,14 @@ describe("draft persistence with Supabase", () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { saveDraft } = await import("@/lib/server/drafts");
     const draft = createSampleDraft({ id: "draft-supabase-image-failure" });
-    const from = vi.fn((table: string) => {
-      if (table === "article_drafts") {
-        return { upsert: vi.fn(async () => ({ error: null })) };
-      }
-
-      return {
-        upsert: vi.fn(async () => ({ error: { message: "image upsert failed" } })),
-      };
-    });
+    const rpc = vi.fn(async () => ({ error: { message: "image upsert failed" } }));
 
     vi.mocked(getSupabaseAdmin).mockReturnValue({
-      from,
+      rpc,
     } as unknown as ReturnType<typeof getSupabaseAdmin>);
 
     await expect(saveDraft(draft)).rejects.toMatchObject({
-      message: "下書き画像の保存に失敗しました。",
+      message: "下書きの保存に失敗しました。",
       detail: "image upsert failed",
       status: 500,
     });
@@ -115,6 +89,7 @@ describe("draft persistence with Supabase", () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { saveDraft } = await import("@/lib/server/drafts");
     const draft = createSampleDraft({ id: "draft-image-upsert-before-cleanup" });
+    const rpc = vi.fn(async () => ({ error: { message: "upsert failed" } }));
     const deleteImages = vi.fn();
     const from = vi.fn((table: string) => {
       if (table === "article_drafts") {
@@ -127,20 +102,47 @@ describe("draft persistence with Supabase", () => {
     });
     vi.mocked(getSupabaseAdmin).mockReturnValue({
       from,
+      rpc,
     } as unknown as ReturnType<typeof getSupabaseAdmin>);
 
     await expect(saveDraft(draft)).rejects.toMatchObject({
-      message: "下書き画像の保存に失敗しました。",
+      message: "下書きの保存に失敗しました。",
+      detail: "upsert failed",
+      status: 500,
     });
+    expect(from).not.toHaveBeenCalled();
     expect(deleteImages).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("aio_save_draft", {
+      draft_row: expect.objectContaining({
+        id: draft.id,
+        edited_body_html: draft.editedBodyHtml,
+        status: draft.status,
+        generated_image_urls: draft.images.map((image) => image.url),
+      }),
+      image_rows: [expect.objectContaining({
+        id: draft.images[0].id,
+        draft_id: draft.id,
+        slot: draft.images[0].slot,
+        image_url: draft.images[0].url,
+      })],
+      expected_updated_at: null,
+    });
   });
 
   test("hydrates drafts and image rows from Supabase without losing edited content", async () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
     const { getDraft } = await import("@/lib/server/drafts");
+    const { buildDraftArticleHtml } = await import("@/lib/draft-html");
     const draft = createSampleDraft({
       id: "draft-supabase-load",
-      editedBodyHtml: "<h2>Edited</h2><p>Human reviewed body.</p>",
+      editedBodyHtml:
+        "<h2>Edited</h2><p>Human reviewed body.</p><h2>FAQ</h2><h3>費用はかかりますか？</h3><p>生成時の古い回答です。</p>",
+      faqItems: [
+        {
+          question: "費用は、かかりますか?",
+          answer: "編集者が確認した最新の回答です。",
+        },
+      ],
       status: "approved",
     });
     const draftRow = {
@@ -196,10 +198,15 @@ describe("draft persistence with Supabase", () => {
 
     expect(hydrated).toMatchObject({
       id: "draft-supabase-load",
-      editedBodyHtml: "<h2>Edited</h2><p>Human reviewed body.</p>",
+      editedBodyHtml: draft.editedBodyHtml,
       status: "approved",
       wordpressPostUrl: undefined,
     });
+    expect(hydrated?.faqItems).toEqual(draft.faqItems);
+    const publishedHtml = buildDraftArticleHtml(hydrated!);
+    expect(publishedHtml.match(/費用は[、,]?かかりますか/g)).toHaveLength(1);
+    expect(publishedHtml).toContain("編集者が確認した最新の回答です。");
+    expect(publishedHtml).not.toContain("生成時の古い回答です。");
     expect(hydrated?.images).toEqual([
       {
         id: "image-row-1",

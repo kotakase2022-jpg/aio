@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { assertRequiredArticleGenerationInputs } from "@/lib/server/article-form-validation";
+import { articleFormSchema } from "@/lib/server/article-form-schema";
 import { generateAioArticle } from "@/lib/server/article-generation";
 import { errorJson, okJson } from "@/lib/server/http";
 
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   try {
     const payload = schema.parse(await request.json());
     assertRequiredArticleGenerationInputs(payload.form);
-    const result = await generateAioArticle(payload);
+    const result = await generateAioArticle({ ...payload, form: articleFormSchema.parse(payload.form) });
     return okJson({ result });
   } catch (error) {
     return errorJson(error);

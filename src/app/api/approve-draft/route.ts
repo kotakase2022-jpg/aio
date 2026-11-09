@@ -27,8 +27,7 @@ export async function POST(request: Request) {
         status: "approved",
         updatedAt: new Date().toISOString(),
       });
-      await syncGenerationJobDraft(result.draft);
-      return okJson(result);
+      return savedResponse(result);
     }
 
     if (!body.draftId) {
@@ -39,9 +38,16 @@ export async function POST(request: Request) {
       );
     }
     const result = await approveDraft(body.draftId);
-    await syncGenerationJobDraft(result.draft);
-    return okJson(result);
+    return savedResponse(result);
   } catch (error) {
     return errorJson(error);
   }
+}
+
+async function savedResponse(result: Awaited<ReturnType<typeof saveDraft>>) {
+  const warnings: string[] = [];
+  await syncGenerationJobDraft(result.draft).catch((error: unknown) => {
+    warnings.push(`生成ログの同期に失敗しました: ${error instanceof Error ? error.message : "Unknown error"}`);
+  });
+  return okJson({ ...result, warnings });
 }

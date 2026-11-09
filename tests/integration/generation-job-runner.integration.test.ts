@@ -63,6 +63,8 @@ describe("article generation job runner", () => {
         title: "Fetched reference",
         text: "Fetched reference text",
         ok: true,
+        evidenceUsable: true,
+        pageKind: "article",
         sourceType: "url",
       },
       {
@@ -70,6 +72,8 @@ describe("article generation job runner", () => {
         title: "Fetched competitor",
         text: "Fetched competitor text",
         ok: true,
+        evidenceUsable: true,
+        pageKind: "article",
         sourceType: "url",
       },
     ];
@@ -153,8 +157,18 @@ describe("article generation job runner", () => {
     expect(completed?.fetchedReferences).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ url: "https://example.com/reference" }),
-        expect.objectContaining({ url: "manual-text", text: "Manual reference text" }),
-        expect.objectContaining({ url: "file:field-notes.txt", sourceType: "file" }),
+        expect.objectContaining({
+          url: "manual-text",
+          text: "Manual reference text",
+          evidenceUsable: true,
+          pageKind: "unknown",
+        }),
+        expect.objectContaining({
+          url: "file:field-notes.txt",
+          sourceType: "file",
+          evidenceUsable: true,
+          pageKind: "unknown",
+        }),
       ]),
     );
     expect(completed?.fetchedCompetitors).toEqual(
@@ -180,6 +194,18 @@ describe("article generation job runner", () => {
       "https://assets.example.com/featured.png",
     );
     expect(completed?.steps.every((step) => step.status === "done")).toBe(true);
+    expect(completed?.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "fetch_refs",
+          detail: "1件を記事根拠として取得",
+        }),
+        expect.objectContaining({
+          id: "fetch_competitors",
+          detail: "1件を記事根拠として取得",
+        }),
+      ]),
+    );
   });
 
   test("marks the running generation steps as failed when article generation fails", async () => {
@@ -217,6 +243,50 @@ describe("article generation job runner", () => {
         expect.objectContaining({ id: "generate_body", status: "error", detail: "OpenAI timeout" }),
         expect.objectContaining({ id: "generate_meta", status: "error", detail: "OpenAI timeout" }),
         expect.objectContaining({ id: "image_prompts", status: "error", detail: "OpenAI timeout" }),
+      ]),
+    );
+  });
+
+  test("counts a malformed URL as a failed URL fetch in the progress detail", async () => {
+    const { fetchUrlContent } = await import("@/lib/server/content");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    const { createArticleImagesForDraft } = await import("@/lib/server/article-images");
+    const { saveDraft } = await import("@/lib/server/drafts");
+    const { createGenerationJob, getGenerationJob } = await import(
+      "@/lib/server/generation-jobs"
+    );
+    const { runArticleGenerationJob } = await import(
+      "@/lib/server/article-generation-job-runner"
+    );
+
+    vi.mocked(fetchUrlContent).mockRejectedValueOnce(new Error("URL形式が正しくありません。"));
+    vi.mocked(generateAioArticle).mockResolvedValueOnce({
+      ...sampleArticleResult,
+      image_prompts: [],
+    });
+    vi.mocked(createArticleImagesForDraft).mockResolvedValueOnce([]);
+    vi.mocked(saveDraft).mockImplementationOnce(async (draft) => ({
+      draft,
+      storageMode: "local" as const,
+    }));
+    const job = await createGenerationJob({
+      inputPayload: {
+        ...sampleFormPayload,
+        references: [{ id: "invalid-url", url: "example.com/no-scheme", text: "" }],
+        imageCount: 0,
+      },
+    });
+
+    await runArticleGenerationJob(job.id);
+
+    const completed = await getGenerationJob(job.id);
+    expect(completed?.status).toBe("completed");
+    expect(completed?.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "fetch_refs",
+          detail: "0件を記事根拠として取得・1件失敗",
+        }),
       ]),
     );
   });

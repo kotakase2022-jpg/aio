@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 export function normalizeSourceUrl(url: string) {
   const trimmed = normalizeSourceUrlValue(url).replace(/[)）、。,\s]+$/g, "");
   return /^https?:\/\//i.test(trimmed) ? trimmed.replace(/\/$/, "") : "";
@@ -33,6 +35,24 @@ export function canonicalSourceUrlKey(url: string) {
   }
 }
 
+export function unusableFetchedSourceUrlKeys(
+  sources: Array<{ url: string; ok: boolean; evidenceUsable?: boolean }>,
+) {
+  return new Set(
+    sources
+      .filter((source) => !source.ok || source.evidenceUsable === false)
+      .map((source) => canonicalSourceUrlKey(normalizeSourceUrl(source.url)))
+      .filter(Boolean),
+  );
+}
+
+export function isUnusableFetchedSourceUrl(url: string, unusableKeys: Set<string>) {
+  const normalizedUrl = normalizeSourceUrl(url);
+  return Boolean(
+    normalizedUrl && unusableKeys.has(canonicalSourceUrlKey(normalizedUrl)),
+  );
+}
+
 export function sourceUrlCandidates(url: string) {
   try {
     const normalizedUrl = normalizeSourceUrlValue(url);
@@ -64,6 +84,16 @@ export function articleContainsCanonicalSourceUrl(url: string, articleText: stri
   return extractHttpUrls(decodeHtmlUrlDelimiters(articleText)).some(
     (candidate) => canonicalSourceUrlKey(candidate) === expectedKey,
   );
+}
+
+export function articleContainsCanonicalSourceLink(url: string, articleHtml: string) {
+  const expectedKey = canonicalSourceUrlKey(url);
+  const $ = cheerio.load(articleHtml, null, false);
+  $("script, style, noscript, template").remove();
+  return $("a[href]").toArray().some((element) => {
+    const href = ($(element).attr("href") ?? "").trim();
+    return /^https?:\/\//i.test(href) && canonicalSourceUrlKey(href) === expectedKey;
+  });
 }
 
 export function extractHttpUrls(text: string) {

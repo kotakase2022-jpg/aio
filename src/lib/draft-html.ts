@@ -1,11 +1,13 @@
+import * as cheerio from "cheerio";
 import type { ArticleDraft, ArticleImage, AuthorInput, FaqItem } from "@/types/aio";
 import { sanitizeArticleHtml } from "@/lib/article-html";
 import {
-  articleContainsCanonicalSourceUrl,
+  articleContainsCanonicalSourceLink,
   canonicalSourceUrlKey,
   decodeHtmlAmpersands,
+  isUnusableFetchedSourceUrl,
   normalizeSourceUrl,
-  sourceUrlCandidates,
+  unusableFetchedSourceUrlKeys,
 } from "@/lib/source-url";
 
 type BuildDraftArticleHtmlOptions = {
@@ -18,10 +20,30 @@ export function buildDraftArticleHtml(
   draft: ArticleDraft,
   options: BuildDraftArticleHtmlOptions = {},
 ) {
-  const withImages = replaceDraftImageReferences(draft.editedBodyHtml, draft.images, options);
-  const withFaq = appendFaqBlockWhenNeeded(withImages, draft.faqItems);
+  const publicBody = removeInternalProcessNotes(draft.editedBodyHtml);
+  const withImages = replaceDraftImageReferences(publicBody, draft.images, options);
+  const withFaq = appendFaqBlockWhenNeeded(withImages, draft.faqItems, {
+    preserveUnmatchedBodyFaq: true,
+  });
   const withAuthor = appendAuthorBlockWhenNeeded(withFaq, draft.author, options);
   return sanitizeArticleHtml(appendSourceBlockWhenNeeded(withAuthor, draft));
+}
+
+function removeInternalProcessNotes(html: string) {
+  const notes = [
+    "競合URLから本文を取得しました",
+    "参照URLから本文を取得しました",
+    "入力フォームの参照情報です",
+    "入力フォームの競合情報です",
+    "AI競合調査で参照した競合情報です",
+  ];
+  const notePattern = notes.map(escapeRegExp).join("|");
+  const withoutNotes = html.replace(new RegExp(`(?:${notePattern})[。．.]?`, "g"), "");
+
+  return withoutNotes.replace(
+    /<(p|li)\b([^>]*)>\s*(?:<br\s*\/?>\s*)*<\/\1>/gi,
+    "",
+  );
 }
 
 export function replaceDraftImageReferences(
@@ -46,41 +68,66 @@ export function replaceDraftImageReferences(
   }, html);
 }
 
-export function appendFaqBlockWhenNeeded(html: string, faqItems: FaqItem[]) {
-  const items = faqItems
-    .map((item) => ({
-      question: item.question.trim(),
-      answer: item.answer.trim(),
-    }))
-    .filter((item) => item.question || item.answer);
-
-  const withoutManagedFaq = removeManagedFaqBlock(html);
+export function appendFaqBlockWhenNeeded(
+  html: string,
+  faqItems: FaqItem[],
+  options: { preserveUnmatchedBodyFaq?: boolean } = {},
+) {
+  const items = canonicalizeFaqItems(faqItems);
+  const withoutManagedFaq = removeGeneratedFaqBlocks(
+    removeManagedFaqBlock(html),
+    items,
+    options.preserveUnmatchedBodyFaq ?? false,
+  );
   if (items.length === 0) {
     return withoutManagedFaq;
   }
 
-  const text = normalizeText(stripHtmlText(withoutManagedFaq));
-  const itemsMissingFromBody = items.filter((item) => !faqItemAlreadyVisible(item, text));
-
-  if (itemsMissingFromBody.length === 0) {
-    return withoutManagedFaq;
-  }
-
-  return `${withoutManagedFaq}\n${buildFaqBlockHtml(itemsMissingFromBody)}`;
+  return joinHtmlBlocks(withoutManagedFaq, buildFaqBlockHtml(items));
 }
 
-function faqItemAlreadyVisible(
-  item: { question: string; answer: string },
-  normalizedBodyText: string,
-) {
-  const questionVisible = item.question
-    ? normalizedBodyText.includes(normalizeText(item.question))
-    : true;
-  const answerVisible = item.answer
-    ? normalizedBodyText.includes(normalizeText(item.answer))
-    : true;
+export function canonicalizeFaqItems(faqItems: FaqItem[]) {
+  const items: Array<{ question: string; answer: string }> = [];
+  const indexByQuestion = new Map<string, number>();
 
-  return questionVisible && answerVisible;
+  for (const item of faqItems) {
+    const question = faqPlainText(item.question);
+    const answer = faqPlainText(item.answer);
+    if (!question && !answer) {
+      continue;
+    }
+
+    const key = normalizeFaqQuestion(question) || `answer:${normalizeFaqQuestion(answer)}`;
+    const existingIndex = indexByQuestion.get(key);
+    if (existingIndex === undefined) {
+      indexByQuestion.set(key, items.length);
+      items.push({ question, answer });
+      continue;
+    }
+
+    // Later entries represent the editor's latest decision while the first position
+    // remains stable, so repeated save/restore cycles do not reorder the FAQ.
+    items[existingIndex] = { question, answer };
+  }
+
+  return items;
+}
+
+export function normalizeFaqQuestion(value: string) {
+  return faqPlainText(value)
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s、。?!]+/g, "")
+    .replace(/(?<!\d),(?!\d)/g, "")
+    .replace(/\.$/, "");
+}
+
+function faqPlainText(value: string) {
+  return decodeBasicHtmlEntities(
+    value.replace(/<\/?(?:a|b|br|code|em|i|span|strong)\b[^>]*>/gi, " "),
+  )
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function appendSourceBlockWhenNeeded(html: string, draft: ArticleDraft) {
@@ -96,7 +143,7 @@ export function appendSourceBlockWhenNeeded(html: string, draft: ArticleDraft) {
     return withoutManagedSources;
   }
 
-  return `${withoutManagedSources}\n${buildSourceBlockHtml(missingSources)}`;
+  return joinHtmlBlocks(withoutManagedSources, buildSourceBlockHtml(missingSources));
 }
 
 export function appendAuthorBlockWhenNeeded(
@@ -277,6 +324,111 @@ function removeManagedFaqBlock(html: string) {
   return removeSectionsByClass(html, "aio-faq-block");
 }
 
+function removeGeneratedFaqBlocks(
+  html: string,
+  faqItems: Array<{ question: string; answer: string }>,
+  preserveUnmatched: boolean,
+) {
+  const $ = cheerio.load(html, { sourceCodeLocationInfo: true }, false);
+  const ranges: Array<{ start: number; end: number }> = [];
+  const canonicalQuestionKeys = new Set(
+    faqItems.map((item) => normalizeFaqQuestion(item.question)).filter(Boolean),
+  );
+  const headings = $("h1, h2, h3, h4, h5, h6").toArray();
+  for (const [index, heading] of headings.entries()) {
+    if (!isFaqSectionHeading($(heading).text())) {
+      continue;
+    }
+
+    const scopeEnd = heading.parent?.sourceCodeLocation?.endOffset ?? html.length;
+    const section = $(heading).closest("section").get(0);
+    const questions = [];
+    for (const candidate of headings.slice(index + 1)) {
+      const text = $(candidate).text().trim();
+      if (
+        (candidate.sourceCodeLocation?.startOffset ?? html.length) >= scopeEnd ||
+        $(candidate).closest("section").get(0) !== section ||
+        !/^h[34]$/.test(candidate.tagName) ||
+        (!canonicalQuestionKeys.has(normalizeFaqQuestion(text)) && !looksLikeFaqQuestion(text))
+      ) {
+        break;
+      }
+      questions.push(candidate);
+    }
+
+    const matchedQuestions = questions.filter(
+      (question) => !preserveUnmatched || canonicalQuestionKeys.has(normalizeFaqQuestion($(question).text())),
+    );
+    const headingLocation = heading.sourceCodeLocation;
+    if (headingLocation && (!preserveUnmatched || (matchedQuestions.length > 0 && matchedQuestions.length === questions.length))) {
+      ranges.push({ start: headingLocation.startOffset, end: headingLocation.endOffset });
+    }
+
+    for (const question of matchedQuestions) {
+      const location = question.sourceCodeLocation;
+      if (!location) continue;
+      ranges.push({ start: location.startOffset, end: location.endOffset });
+
+      const nextQuestion = questions[questions.indexOf(question) + 1];
+      const hasOwnWrapper = question.parent && question.parent !== heading.parent &&
+        $(question.parent).find("h1, h2, h3, h4, h5, h6").length === 1;
+      const boundedAnswer = hasOwnWrapper || nextQuestion?.parent === question.parent;
+      const siblings = question.parent?.children ?? [];
+      let answerCount = 0;
+      for (const sibling of siblings.slice(siblings.indexOf(question) + 1)) {
+        if (sibling.type === "comment" || (sibling.type === "text" && !sibling.data.trim())) continue;
+        if (sibling.type !== "tag") break;
+        const block = $(sibling);
+        const links = block.find("a[href]");
+        const location = sibling.sourceCodeLocation;
+        if (
+          !location ||
+          !/^(p|div|ul|ol|table|blockquote)$/.test(sibling.tagName) ||
+          block.find("h1, h2, h3, h4, h5, h6").length > 0 ||
+          block.is(".closing-copy, .aio-source-block, .aio-author-block") ||
+          block.find(".closing-copy, .aio-source-block, .aio-author-block").length > 0 ||
+          (links.length > 0 && links.text().trim() === block.text().trim()) ||
+          (!boundedAnswer && answerCount > 0)
+        ) {
+          break;
+        }
+        // Only wrappers or the next question bound a multi-block answer. An unwrapped
+        // final answer must not consume ambiguous closing paragraphs or source notes.
+        ranges.push({ start: location.startOffset, end: location.endOffset });
+        answerCount += 1;
+      }
+    }
+  }
+
+  // Source offsets preserve every byte outside the selected nodes; never serialize the DOM.
+  return ranges
+    .sort((left, right) => right.start - left.start)
+    .reduce(
+      (currentHtml, range) =>
+        `${currentHtml.slice(0, range.start)}${currentHtml.slice(range.end)}`,
+      html,
+    )
+    .trim();
+}
+
+function isFaqSectionHeading(headingHtml: string) {
+  const value = decodeBasicHtmlEntities(stripHtmlText(headingHtml))
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s:：()（）【】\[\]・。、]+/g, "");
+
+  return /^(?:faq(?:よくある(?:ご)?質問)?|よくある(?:ご)?質問|q&a|質問と回答)$/.test(value);
+}
+
+function looksLikeFaqQuestion(value: string) {
+  const normalized = value.normalize("NFKC").trim();
+  return (
+    /[?？]$/.test(normalized) ||
+    /^(?:q\s*[.:：]|質問\s*[.:：])/i.test(normalized) ||
+    /(?:ですか|ますか|でしょうか|できますか|なりますか)[。.]?$/.test(normalized)
+  );
+}
+
 function removeManagedSourceBlock(html: string) {
   return removeSectionsByClass(html, "aio-source-block");
 }
@@ -300,7 +452,8 @@ function removeSectionsByClass(html: string, className: string) {
       findSectionEnd(html, sectionStart.lastIndex) ??
       findUnclosedManagedSectionEnd(html, sectionStart.lastIndex);
     if (end > sectionStart.lastIndex) {
-      ranges.push({ start: match.index, end });
+      const leadingSpacing = html.slice(0, match.index).match(/\s*$/)?.[0].length ?? 0;
+      ranges.push({ start: match.index - leadingSpacing, end });
       sectionStart.lastIndex = end;
     }
   }
@@ -351,41 +504,66 @@ function findUnclosedManagedSectionEnd(html: string, fromIndex: number) {
 
 function collectRenderableSources(draft: ArticleDraft) {
   const seen = new Set<string>();
-  return [
-    ...draft.aiResult.sources.map((source) => ({
-      url: normalizeSourceUrl(source.url),
-      title: source.title.trim(),
-      usageNotes: source.usage_notes.trim(),
-    })),
-    ...draft.fetchedReferences.map((source) => ({
-      url: normalizeSourceUrl(source.url),
-      title: source.title?.trim() || source.url.trim(),
-      usageNotes: source.ok ? "参照URLから本文を取得しました。" : source.reason?.trim() || "",
-    })),
-    ...draft.inputPayload.references.map((source) => ({
-      url: normalizeSourceUrl(source.url ?? ""),
-      title: source.url?.trim() || "",
-      usageNotes: source.text?.trim() ? "入力フォームの参照情報です。" : "",
-    })),
-    ...draft.fetchedCompetitors.map((source) => ({
+  const unusableSourceKeys = unusableFetchedSourceUrlKeys(
+    [...draft.fetchedReferences, ...draft.fetchedCompetitors],
+  );
+  const declaredSources = draft.aiResult.sources.map((source) => ({
+    url: normalizeSourceUrl(source.url),
+    title: source.title.trim(),
+    usageNotes: publicSourceNote(source.usage_notes),
+  }));
+  const legacyFallbackSources = [
+    ...draft.fetchedReferences
+      .filter((source) => source.ok && source.evidenceUsable !== false)
+      .map((source) => ({
       url: normalizeSourceUrl(source.url),
       title: source.title?.trim() || source.url.trim(),
-      usageNotes: source.ok ? "競合URLから本文を取得しました。" : source.reason?.trim() || "",
+      usageNotes: "",
     })),
-    ...draft.inputPayload.competitors.map((source) => ({
+    ...draft.inputPayload.references
+      .filter(
+        (source) =>
+          !isUnusableFetchedSourceUrl(source.url ?? "", unusableSourceKeys),
+      )
+      .map((source) => ({
       url: normalizeSourceUrl(source.url ?? ""),
       title: source.url?.trim() || "",
-      usageNotes: source.text?.trim() ? "入力フォームの競合情報です。" : "",
+      usageNotes: "",
     })),
-    ...(draft.competitorResearch?.insights ?? []).map((source) => ({
+    ...draft.fetchedCompetitors
+      .filter((source) => source.ok && source.evidenceUsable !== false)
+      .map((source) => ({
       url: normalizeSourceUrl(source.url),
-      title: source.title.trim() || source.url.trim(),
-      usageNotes: "AI競合調査で参照した競合情報です。",
+      title: source.title?.trim() || source.url.trim(),
+      usageNotes: "",
     })),
-  ]
+    ...draft.inputPayload.competitors
+      .filter(
+        (source) =>
+          !isUnusableFetchedSourceUrl(source.url ?? "", unusableSourceKeys),
+      )
+      .map((source) => ({
+      url: normalizeSourceUrl(source.url ?? ""),
+      title: source.url?.trim() || "",
+      usageNotes: "",
+    })),
+    ...(draft.competitorResearch?.insights ?? [])
+      .filter((source) => !isUnusableFetchedSourceUrl(source.url, unusableSourceKeys))
+      .map((source) => ({
+        url: normalizeSourceUrl(source.url),
+        title: source.title.trim() || source.url.trim(),
+        usageNotes: "",
+      })),
+  ];
+
+  // New drafts declare only sources that support published claims. Older drafts may not
+  // have that field populated, so keep their historical URL fallback for compatibility.
+  return (declaredSources.some((source) => source.url)
+    ? declaredSources
+    : legacyFallbackSources)
     .filter((source) => {
       const sourceKey = canonicalSourceUrlKey(source.url);
-      if (!source.url || seen.has(sourceKey)) {
+      if (!source.url || unusableSourceKeys.has(sourceKey) || seen.has(sourceKey)) {
         return false;
       }
       seen.add(sourceKey);
@@ -394,14 +572,20 @@ function collectRenderableSources(draft: ArticleDraft) {
     .slice(0, 8);
 }
 
-function sourceUrlAlreadyVisible(url: string, html: string) {
-  const normalizedHtml = decodeHtmlAmpersands(html);
-  const candidates = sourceUrlCandidates(url);
-  if (candidates.some((candidate) => normalizedHtml.includes(candidate))) {
-    return true;
+function publicSourceNote(value: string) {
+  const note = value.trim();
+  if (
+    /(?:参照|競合)URLから本文を取得しました|入力フォームの(?:参照|競合)情報です|AI競合調査で参照した競合情報です/.test(
+      note,
+    )
+  ) {
+    return "";
   }
+  return note;
+}
 
-  return articleContainsCanonicalSourceUrl(url, normalizedHtml);
+function sourceUrlAlreadyVisible(url: string, html: string) {
+  return articleContainsCanonicalSourceLink(url, html);
 }
 
 function replaceImageReference(html: string, from: string, to: string, altText: string) {
@@ -444,6 +628,20 @@ function stripHtmlText(html: string) {
 
 function normalizeText(value: string) {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function decodeBasicHtmlEntities(value: string) {
+  return value
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;|&#38;|&#038;/gi, "&")
+    .replace(/&lt;|&#60;/gi, "<")
+    .replace(/&gt;|&#62;/gi, ">")
+    .replace(/&quot;|&#34;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'");
+}
+
+function joinHtmlBlocks(...blocks: string[]) {
+  return blocks.map((block) => block.trim()).filter(Boolean).join("\n");
 }
 
 function escapeHtml(value: string) {

@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { fetchUrlContent } from "@/lib/server/content";
+import { encodedHtmlFixtures } from "../fixtures/encoded-html";
 
 describe("fetchUrlContent", () => {
   test("extracts article text from HTML responses", async () => {
@@ -13,8 +14,130 @@ describe("fetchUrlContent", () => {
     const result = await fetchUrlContent("https://example.com/article", fetcher);
 
     expect(result.ok).toBe(true);
+    expect(result.evidenceUsable).toBe(true);
+    expect(result.pageKind).toBe("article");
     expect(result.title).toBe("AIO title");
     expect(result.text).toContain("long enough article paragraph");
+  });
+
+  test.each([
+    {
+      label: "Shift_JIS from the HTTP header",
+      bytes: encodedHtmlFixtures.shiftJis,
+      contentType: "text/html; charset=Windows-31J",
+      expectedEncoding: "shift_jis",
+      expectedTitle: "犬猫の口腔ケア",
+      expectedText: "犬と猫の口腔ケア",
+    },
+    {
+      label: "EUC-JP from an HTML meta declaration",
+      bytes: encodedHtmlFixtures.eucJp,
+      contentType: "text/html",
+      expectedEncoding: "euc-jp",
+      expectedTitle: "中小企業の資金調達",
+      expectedText: "中小企業の資金調達",
+    },
+  ])("decodes $label without replacement characters", async (fixture) => {
+    const fetcher = vi.fn(async () =>
+      new Response(fixture.bytes, { headers: { "content-type": fixture.contentType } }),
+    );
+
+    const result = await fetchUrlContent("https://example.com/encoded", fetcher);
+
+    expect(result).toMatchObject({
+      ok: true,
+      evidenceUsable: true,
+      encoding: fixture.expectedEncoding,
+    });
+    expect(result.title).toContain(fixture.expectedTitle);
+    expect(result.text).toContain(fixture.expectedText);
+    expect(result.text).not.toContain("�");
+  });
+
+  test("gives a BOM precedence over conflicting transport and meta declarations", async () => {
+    const utf8Html = Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from(
+        '<html><head><meta charset="Shift_JIS"><title>BOM優先</title></head><body><article><p>UTF-8のBOMを優先して安全に復号するための十分な本文です。文字化けした文章を根拠にしません。</p></article></body></html>',
+        "utf8",
+      ),
+    ]);
+    const fetcher = vi.fn(async () =>
+      new Response(utf8Html, {
+        headers: { "content-type": "text/html; charset=EUC-JP" },
+      }),
+    );
+
+    const result = await fetchUrlContent("https://example.com/bom", fetcher);
+
+    expect(result.encoding).toBe("utf-8");
+    expect(result.title).toBe("BOM優先");
+    expect(result.warnings?.join(" ")).toContain("BOM");
+  });
+
+  test("does not reject readable article evidence because script data contains replacement characters", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        [
+          "<html><head><title>正常な記事</title>",
+          '<script type="application/json">{"tracking":"��"}</script></head>',
+          "<body><article><h1>犬猫の口腔ケア</h1>",
+          "<p>犬猫の口腔ケアは、毎日の観察と無理のない習慣化から始めます。食べ方や口臭などの変化を記録し、異変が続く場合は自己判断せず獣医師に相談してください。</p>",
+          "</article></body></html>",
+        ].join(""),
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+    );
+
+    const result = await fetchUrlContent("https://example.com/readable", fetcher);
+
+    expect(result).toMatchObject({ ok: true, evidenceUsable: true, pageKind: "article" });
+    expect(result.text).not.toContain("�");
+  });
+
+  test("does not reintroduce navigation, footer, or sidebar text through fallback extraction", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        [
+          "<html><head><title>短い本文</title></head><body>",
+          '<nav><a>料金プラン一覧</a><a>採用情報はこちら</a></nav>',
+          '<aside><p>人気記事ランキングと関連サービス</p></aside>',
+          '<main><h1>お知らせ</h1><p>提供条件を更新しました。詳細は担当者へ確認してください。</p></main>',
+          '<footer><p>会社概要 プライバシーポリシー サイトマップ</p></footer>',
+          "</body></html>",
+        ].join(""),
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+    );
+
+    const result = await fetchUrlContent("https://example.com/notice", fetcher);
+
+    expect(result.ok).toBe(true);
+    expect(result.evidenceUsable).toBe(false);
+    expect(result.text).toContain("提供条件を更新しました");
+    expect(result.text).not.toMatch(/料金プラン一覧|採用情報|人気記事ランキング|会社概要/);
+  });
+
+  test("distinguishes a listing page from usable article evidence", async () => {
+    const links = Array.from(
+      { length: 18 },
+      (_, index) => `<li><a href="/news/${index}">資金調達ニュース ${index + 1}</a></li>`,
+    ).join("");
+    const fetcher = vi.fn(async () =>
+      new Response(
+        `<html><head><title>ニュース一覧</title></head><body><main><h1>お知らせ一覧</h1><ul>${links}</ul></main></body></html>`,
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+    );
+
+    const result = await fetchUrlContent("https://example.com/news", fetcher);
+
+    expect(result).toMatchObject({
+      ok: true,
+      evidenceUsable: false,
+      pageKind: "listing",
+    });
+    expect(result.reason).toContain("一覧ページ");
   });
 
   test("rejects invalid URL protocols before fetch", async () => {
@@ -74,7 +197,9 @@ describe("fetchUrlContent", () => {
 
     await expect(fetchUrlContent("https://example.com/limited", limitedFetcher)).resolves.toMatchObject({
       ok: true,
-      reason: "本文量が少ないため、メタ情報・見出しを利用しました。",
+      evidenceUsable: false,
+      pageKind: "insufficient",
+      reason: expect.stringContaining("手動テキストで補ってください"),
     });
 
     const emptyFetcher = vi.fn(async () =>
@@ -84,9 +209,40 @@ describe("fetchUrlContent", () => {
       );
 
     await expect(fetchUrlContent("https://example.com/empty", emptyFetcher)).resolves.toMatchObject({
-      ok: false,
-      reason: "十分な本文を抽出できませんでした。",
+      ok: true,
+      evidenceUsable: false,
+      pageKind: "insufficient",
+      reason: expect.stringContaining("手動テキストで補ってください"),
     });
+  });
+
+  test("keeps article content wrapped by a page-level form", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        "<html><body><form id=\"form1\"><main><h1>資金調達の判断基準</h1><p>必要書類、資金使途、返済条件を確認し、複数の選択肢を比較します。</p><p>経営者は調達時期と必要額を先に整理すると、条件の違いを判断しやすくなります。</p></main></form></body></html>",
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+    );
+
+    const result = await fetchUrlContent("https://example.com/webforms", fetcher);
+
+    expect(result).toMatchObject({ ok: true, evidenceUsable: true, pageKind: "article" });
+    expect(result.text).toContain("必要書類、資金使途、返済条件");
+  });
+
+  test("keeps an article header while removing the page-level header", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        "<html><body><header><p>全ページ共通メニュー</p></header><article><header><h1>犬猫のオーラルケア</h1><p>飼い主が確認する口内変化</p></header><p>口臭や歯ぐきの変化を記録し、気になる症状があれば動物病院へ相談します。</p><p>毎日の観察では、食べ方や口元を触られることへの反応も確認します。</p></article></body></html>",
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+    );
+
+    const result = await fetchUrlContent("https://example.com/article-header", fetcher);
+
+    expect(result).toMatchObject({ ok: true, evidenceUsable: true, pageKind: "article" });
+    expect(result.text).toContain("犬猫のオーラルケア");
+    expect(result.text).not.toContain("全ページ共通メニュー");
   });
 
   test("returns fallback error result on network failure", async () => {
@@ -98,5 +254,39 @@ describe("fetchUrlContent", () => {
       ok: false,
       reason: "URL取得に失敗しました。network down",
     });
+  });
+
+  test("does not treat the first article card on a listing as complete evidence", async () => {
+    const cards = Array.from({ length: 8 }, (_, index) =>
+      `<article><h2><a href="/news/${index}">記事${index}</a></h2><p>${"これは記事の冒頭だけを掲載した概要です。".repeat(5)}</p></article>`,
+    ).join("");
+    const result = await fetchUrlContent("https://example.com/news", async () =>
+      new Response(`<title>ニュース一覧</title><main><h1>記事一覧</h1>${cards}</main>`, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    );
+    expect(result).toMatchObject({ ok: true, evidenceUsable: false, pageKind: "listing" });
+  });
+
+  test("rejects even one corrupted character in otherwise long article evidence", async () => {
+    const result = await fetchUrlContent("https://example.com/partly-corrupt", async () =>
+      new Response(`<article><p>${"条件と対象を確認してください。".repeat(40)}利率は�%です。</p></article>`, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.evidenceUsable).toBe(false);
+    expect(result.reason).toContain("文字化け");
+  });
+
+  test("preserves block boundaries in extracted source text", async () => {
+    const result = await fetchUrlContent("https://example.com/blocks", async () =>
+      new Response(`<article><h1>条件1</h1><p>0.5%の手数料です。</p><p>${"適用される条件と対象を確認してください。".repeat(5)}</p></article>`, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    );
+    expect(result.evidenceUsable).toBe(true);
+    expect(result.text).toContain("条件1 0.5%");
+    expect(result.text).not.toContain("条件10.5%");
   });
 });

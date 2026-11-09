@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildDraftArticleHtml } from "@/lib/draft-html";
+import { appendFaqBlockWhenNeeded, buildDraftArticleHtml } from "@/lib/draft-html";
 import { createSampleDraft } from "../fixtures/article";
 
 describe("draft HTML rendering", () => {
@@ -37,7 +37,7 @@ describe("draft HTML rendering", () => {
     expect(html).toContain("The approved FAQ is carried into the final article body.");
   });
 
-  test("does not append a duplicate FAQ block when questions are already in the body", () => {
+  test("replaces a generated body FAQ with one canonical managed FAQ block", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
         editedBodyHtml:
@@ -46,7 +46,7 @@ describe("draft HTML rendering", () => {
       }),
     );
 
-    expect(html.match(/aio-faq-block/g)).toBeNull();
+    expect(html.match(/aio-faq-block/g)).toHaveLength(1);
     expect(html.match(/What is AIO\?/g)).toHaveLength(1);
   });
 
@@ -64,10 +64,230 @@ describe("draft HTML rendering", () => {
       }),
     );
 
-    expect(html).toContain('class="aio-faq-block"');
-    expect(html.match(/What is AIO\?/g)).toHaveLength(2);
-    expect(html).toContain("Old generated answer.");
+    expect(html.match(/class="aio-faq-block"/g)).toHaveLength(1);
+    expect(html.match(/What is AIO\?/g)).toHaveLength(1);
+    expect(html).not.toContain("Old generated answer.");
     expect(html).toContain("Edited answer approved by the reviewer.");
+  });
+
+  test("preserves closing copy, CTA, and source notes after an unwrapped generated FAQ", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: [
+          "<h2>FAQ</h2>",
+          "<h3>What is AIO?</h3><p>Old generated answer.</p>",
+          '<p class="closing-copy">まずは自社の公開工程を確認してください。</p>',
+          '<p><a href="/contact">お問い合わせはこちら</a></p>',
+          '<p>出典注記: 編集者が確認した一次資料</p>',
+        ].join(""),
+        faqItems: [{ question: "What is AIO?", answer: "Edited and approved answer." }],
+      }),
+    );
+
+    expect(html).not.toContain("Old generated answer.");
+    expect(html).toContain("Edited and approved answer.");
+    expect(html).toContain("まずは自社の公開工程を確認してください。");
+    expect(html).toContain('href="/contact"');
+    expect(html).toContain("出典注記: 編集者が確認した一次資料");
+  });
+
+  test("deduplicates equivalent FAQ questions across punctuation, width, and HTML differences", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml:
+          "<h2>よくある質問</h2><h3>２者間ファクタリングでは、取引先に通知されますか？</h3><p>古い回答です。</p><h2>次の章</h2><p>本文は残します。</p>",
+        faqItems: [
+          {
+            question: "<strong>2者間ファクタリングでは取引先に通知されますか?</strong>",
+            answer: "編集者が確定した回答です。",
+          },
+          {
+            question: "2者間ファクタリングでは、取引先に通知されますか。",
+            answer: "最後に確定した回答です。",
+          },
+          {
+            question: "審査では何を確認しますか？",
+            answer: "売掛先、請求内容、入金予定を確認します。",
+          },
+        ],
+      }),
+    );
+
+    expect(html.match(/aio-faq-item/g)).toHaveLength(2);
+    expect(html).not.toContain("古い回答です。");
+    expect(html).not.toContain("編集者が確定した回答です。");
+    expect(html).toContain("最後に確定した回答です。");
+    expect(html).toContain("審査では何を確認しますか？");
+    expect(html).toContain("<h2>次の章</h2>");
+    expect(html).toContain("本文は残します。");
+  });
+
+  test("keeps FAQ rendering idempotent when final HTML is assembled repeatedly", () => {
+    const draft = createSampleDraft({
+      editedBodyHtml:
+        "<h2>FAQ</h2><h3>同じ質問ですか？</h3><p>生成時の回答です。</p>",
+      faqItems: [{ question: "同じ質問ですか?", answer: "編集後の回答です。" }],
+      images: [],
+      author: {},
+      aiResult: {
+        ...createSampleDraft().aiResult,
+        sources: [],
+      },
+    });
+
+    const once = buildDraftArticleHtml(draft);
+    const twice = buildDraftArticleHtml({ ...draft, editedBodyHtml: once });
+
+    expect(twice).toBe(once);
+    expect(twice.match(/同じ質問ですか/g)).toHaveLength(1);
+    expect(twice.match(/編集後の回答です/g)).toHaveLength(1);
+  });
+
+  test.each([
+    ["Can I use C++?", "Can I use C#?"],
+    ["Is 1.5% supported?", "Is 15% supported?"],
+    ["Is -5 supported?", "Is 5 supported?"],
+  ])("preserves distinct edited answers for %s and %s", (first, second) => {
+    const html = buildDraftArticleHtml(createSampleDraft({
+      editedBodyHtml: "<p>Body.</p>",
+      faqItems: [
+        { question: first, answer: "First approved answer." },
+        { question: second, answer: "Second approved answer." },
+      ],
+      author: {},
+    }));
+
+    expect(html.match(/aio-faq-item/g)).toHaveLength(2);
+    expect(html).toContain("First approved answer.");
+    expect(html).toContain("Second approved answer.");
+  });
+
+  test.each([
+    { faqItems: [] },
+    { faqItems: [{ question: "Can I return it?", answer: "Returns need approval." }] },
+  ])(
+    "preserves edited body-only questions without a replacement: %j",
+    ({ faqItems }) => {
+      const body = "<h2>FAQ</h2><h3>Can I cancel?</h3><p>Cancellation is permitted before shipment.</p>";
+      const draft = createSampleDraft({ editedBodyHtml: body, faqItems, author: {} });
+      const once = buildDraftArticleHtml(draft);
+      const twice = buildDraftArticleHtml({ ...draft, editedBodyHtml: once });
+
+      expect(once).toContain(body);
+      expect(twice).toBe(once);
+    },
+  );
+
+  test("preserves unmatched body questions between replaced FAQ answers", () => {
+    const html = buildDraftArticleHtml(createSampleDraft({
+      editedBodyHtml: [
+        "<h2>FAQ</h2><h3>Can I cancel?</h3><p>Old cancellation answer.</p>",
+        "<h3>Can I exchange it?</h3><p>Editor-only exchange policy.</p>",
+        "<h3>Can I return it?</h3><p>Old return answer.</p>",
+        '<p><a href="/contact">Contact us.</a></p>',
+      ].join(""),
+      faqItems: [
+        { question: "Can I cancel?", answer: "Approved cancellation answer." },
+        { question: "Can I return it?", answer: "Approved return answer." },
+      ],
+      author: {},
+    }));
+
+    expect(html).toContain("<h3>Can I exchange it?</h3><p>Editor-only exchange policy.</p>");
+    expect(html).not.toContain("Old cancellation answer.");
+    expect(html).not.toContain("Old return answer.");
+    expect(html).toContain("Approved cancellation answer.");
+    expect(html).toContain("Approved return answer.");
+    expect(html).toContain('href="/contact"');
+  });
+
+  test("replaces wrapped multi-paragraph answers without rewriting adjacent CTA or unrelated HTML", () => {
+    const prefix = "<p data-note='keep'>Body &amp; context.</p><!-- keep this comment -->";
+    const closing = "<p class='closing-copy'>Editorial closing.</p><p><a href='/contact'>Contact us.</a></p><p>Source note: verified.</p>";
+    const unmatched = '<div class="faq-item"><h3>Can I exchange it?</h3><p>Editor-only exchange policy.</p></div>';
+    const body = `${prefix}<section><h2>FAQ</h2><div class="faq-item"><h3>Can I cancel?</h3><p>Old first paragraph.</p><p>Old second paragraph.</p><div><p>Old nested paragraph.</p></div></div>${unmatched}</section>${closing}`;
+    const items = [{ question: "Can I cancel?", answer: "Approved answer." }];
+    const html = appendFaqBlockWhenNeeded(body, items, { preserveUnmatchedBodyFaq: true });
+
+    expect(html).toContain(prefix);
+    expect(html).toContain(closing);
+    expect(html).toContain(unmatched);
+    expect(html).not.toContain("Old first paragraph.");
+    expect(html).not.toContain("Old second paragraph.");
+    expect(html).not.toContain("Old nested paragraph.");
+    expect(html.match(/Can I cancel\?/g)).toHaveLength(1);
+    expect(html).toContain("Approved answer.");
+    expect(appendFaqBlockWhenNeeded(html, items, { preserveUnmatchedBodyFaq: true })).toBe(html);
+  });
+
+  test("replaces all answer paragraphs before the next FAQ question and preserves the final tail", () => {
+    const tail = '<p>Unmarked editorial closing.</p><p><a href="/contact">Contact us.</a></p><p>Source note: verified.</p>';
+    const body = '<h2>FAQ</h2><h3>Can I cancel?</h3><p>Old first paragraph.</p><p>Old second paragraph.</p><ul><li>Old condition.</li></ul><h3>Can I return it?</h3><p>Old return answer.</p>' + tail;
+    const html = appendFaqBlockWhenNeeded(body, [
+      { question: "Can I cancel?", answer: "Approved cancellation answer." },
+      { question: "Can I return it?", answer: "Approved return answer." },
+    ], { preserveUnmatchedBodyFaq: true });
+
+    expect(html).not.toContain("Old first paragraph.");
+    expect(html).not.toContain("Old second paragraph.");
+    expect(html).not.toContain("Old condition.");
+    expect(html).not.toContain("Old return answer.");
+    expect(html).toContain(tail);
+    expect(html.match(/Can I return it\?/g)).toHaveLength(1);
+  });
+
+  test("keeps CTA blocks inside a question wrapper and questions outside the FAQ section", () => {
+    const cta = '<p class="closing-copy">Editorial closing.</p><p><a href="/contact">Contact us.</a></p>';
+    const outside = '<h3>Can I cancel?</h3><p>This is an unrelated later section.</p>';
+    const html = appendFaqBlockWhenNeeded(
+      `<section><h2>FAQ</h2><div><h3>Can I cancel?</h3><p>Old answer.</p>${cta}</div></section>${outside}`,
+      [{ question: "Can I cancel?", answer: "Approved answer." }],
+      { preserveUnmatchedBodyFaq: true },
+    );
+
+    expect(html).not.toContain("Old answer.");
+    expect(html).toContain(cta);
+    expect(html).toContain(outside);
+  });
+
+  test("does not extend an unwrapped FAQ into a later independent section", () => {
+    const outside = '<section><h3>Can I cancel?</h3><p>Independent section copy.</p></section>';
+    const html = appendFaqBlockWhenNeeded(
+      '<h2>FAQ</h2><div><h3>Can I cancel?</h3><p>Old answer.</p></div>' + outside,
+      [{ question: "Can I cancel?", answer: "Approved answer." }],
+      { preserveUnmatchedBodyFaq: true },
+    );
+
+    expect(html).not.toContain("Old answer.");
+    expect(html).toContain(outside);
+  });
+
+  test("stops answer removal at bare editorial text between elements", () => {
+    const tail = 'Editorial note outside paragraphs.<p>Closing copy.</p>';
+    const html = appendFaqBlockWhenNeeded(
+      `<h2>FAQ</h2><div><h3>Can I cancel?</h3><p>Old answer.</p>${tail}</div>`,
+      [{ question: "Can I cancel?", answer: "Approved answer." }],
+      { preserveUnmatchedBodyFaq: true },
+    );
+
+    expect(html).not.toContain("Old answer.");
+    expect(html).toContain(tail);
+  });
+
+  test("does not treat a shared FAQ wrapper as the final answer's boundary", () => {
+    const tail = '<p>Unmarked editorial closing.</p><p><a href="/contact">Contact us.</a></p>';
+    const html = appendFaqBlockWhenNeeded(
+      `<h2>FAQ</h2><div><h3>Can I cancel?</h3><p>Old cancellation answer.</p><h3>Can I return it?</h3><p>Old return answer.</p>${tail}</div>`,
+      [
+        { question: "Can I cancel?", answer: "Approved cancellation answer." },
+        { question: "Can I return it?", answer: "Approved return answer." },
+      ],
+      { preserveUnmatchedBodyFaq: true },
+    );
+
+    expect(html).not.toContain("Old cancellation answer.");
+    expect(html).not.toContain("Old return answer.");
+    expect(html).toContain(tail);
   });
 
   test("replaces a stale managed FAQ block with the current edited FAQ items", () => {
@@ -561,6 +781,17 @@ describe("draft HTML rendering", () => {
     expect(html).not.toContain('class="aio-source-block"');
   });
 
+  test("adds a publishable source link when the body contains only a plain URL", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: "<p>出典: https://example.com/reference</p>",
+      }),
+    );
+
+    expect(html).toContain('class="aio-source-block"');
+    expect(html).toContain('href="https://example.com/reference"');
+  });
+
   test("does not duplicate source URLs when the saved source keeps a leading www prefix", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
@@ -651,7 +882,7 @@ describe("draft HTML rendering", () => {
     expect(html).toContain('href="https://example.com/reference"');
   });
 
-  test("falls back to fetched and input reference URLs when AI sources are empty", () => {
+  test("keeps fallback reference links without exposing acquisition notes", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
         editedBodyHtml: "<p>Body only.</p>",
@@ -684,12 +915,12 @@ describe("draft HTML rendering", () => {
     expect(html).toContain('class="aio-source-block"');
     expect(html).toContain('href="https://example.com/fetched"');
     expect(html).toContain("Fetched reference");
-    expect(html).toContain("参照URLから本文を取得しました。");
     expect(html).toContain('href="https://example.com/input"');
-    expect(html).toContain("入力フォームの参照情報です。");
+    expect(html).not.toContain("参照URLから本文を取得しました。");
+    expect(html).not.toContain("入力フォームの参照情報です。");
   });
 
-  test("falls back to competitor URLs when AI sources are empty", () => {
+  test("keeps fallback competitor links without exposing research-process notes", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
         editedBodyHtml: "<p>Body only.</p>",
@@ -737,12 +968,173 @@ describe("draft HTML rendering", () => {
     expect(html).toContain('class="aio-source-block"');
     expect(html).toContain('href="https://competitor.example.com/fetched"');
     expect(html).toContain("Fetched competitor");
-    expect(html).toContain("競合URLから本文を取得しました。");
     expect(html).toContain('href="https://competitor.example.com/input"');
-    expect(html).toContain("入力フォームの競合情報です。");
     expect(html).toContain('href="https://competitor.example.com/researched"');
     expect(html).toContain("Researched competitor");
-    expect(html).toContain("AI競合調査で参照した競合情報です。");
+    expect(html).not.toContain("競合URLから本文を取得しました。");
+    expect(html).not.toContain("入力フォームの競合情報です。");
+    expect(html).not.toContain("AI競合調査で参照した競合情報です。");
+  });
+
+  test("removes exact acquisition-process notes from the public body without deleting reader content", () => {
+    const draft = createSampleDraft({
+      editedBodyHtml:
+        "<p>参照URLから本文を取得しました。</p><p>読者が判断するための条件は本文に残します。競合URLから本文を取得しました。</p>",
+      images: [],
+      author: { name: "", title: "", bio: "", imageUrl: "" },
+      faqItems: [],
+    });
+
+    const html = buildDraftArticleHtml(draft);
+
+    expect(html).not.toMatch(/参照URLから本文を取得|競合URLから本文を取得/);
+    expect(html).toContain("読者が判断するための条件は本文に残します。");
+  });
+
+  test("publishes only explicitly used AI sources when that list is available", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: "<p>Body only.</p>",
+        fetchedReferences: [
+          {
+            url: "https://example.com/fetched-but-unused",
+            title: "Fetched but unused",
+            text: "Fetched text",
+            ok: true,
+            evidenceUsable: true,
+            sourceType: "url",
+          },
+        ],
+        fetchedCompetitors: [
+          {
+            url: "https://example.com/competitor-but-unused",
+            title: "Competitor but unused",
+            text: "Competitor text",
+            ok: true,
+            evidenceUsable: true,
+            sourceType: "url",
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('href="https://example.com/reference"');
+    expect(html).not.toContain("https://example.com/fetched-but-unused");
+    expect(html).not.toContain("https://example.com/competitor-but-unused");
+  });
+
+  test("does not restore failed or unusable fetched URLs through the legacy input fallback", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: "<p>Legacy body.</p>",
+        aiResult: { ...createSampleDraft().aiResult, sources: [] },
+        fetchedReferences: [
+          {
+            url: "https://example.com/mojibake",
+            title: "Broken source",
+            ok: true,
+            evidenceUsable: false,
+            reason: "文字化けのため記事根拠には使用しません。",
+            sourceType: "url",
+          },
+        ],
+        fetchedCompetitors: [
+          {
+            url: "https://example.com/failed",
+            ok: false,
+            reason: "取得失敗",
+            sourceType: "url",
+          },
+        ],
+        inputPayload: {
+          ...createSampleDraft().inputPayload,
+          references: [{ id: "ref", url: "https://example.com/mojibake", text: "" }],
+          competitors: [{ id: "comp", url: "https://example.com/failed", text: "" }],
+        },
+      }),
+    );
+
+    expect(html).not.toContain("https://example.com/mojibake");
+    expect(html).not.toContain("https://example.com/failed");
+    expect(html).not.toContain('class="aio-source-block"');
+  });
+
+  test("does not publish an AI-declared source that the fetch result marked unusable", () => {
+    const html = buildDraftArticleHtml(
+      createSampleDraft({
+        editedBodyHtml: "<p>Body only.</p>",
+        aiResult: {
+          ...createSampleDraft().aiResult,
+          sources: [
+            {
+              url: "https://example.com/mojibake",
+              title: "Broken source",
+              usage_notes: "The model declared this despite the failed evidence check.",
+            },
+          ],
+        },
+        fetchedReferences: [
+          {
+            url: "https://example.com/mojibake",
+            title: "Broken source",
+            ok: true,
+            evidenceUsable: false,
+            reason: "文字化けのため記事根拠には使用しません。",
+            sourceType: "url",
+          },
+        ],
+        inputPayload: {
+          ...createSampleDraft().inputPayload,
+          references: [{ id: "ref", url: "https://example.com/mojibake", text: "" }],
+        },
+      }),
+    );
+
+    expect(html).not.toContain("https://example.com/mojibake");
+    expect(html).not.toContain('class="aio-source-block"');
+  });
+
+  test.each([
+    { declared: false, ok: false },
+    { declared: false, ok: true },
+    { declared: true, ok: false },
+    { declared: true, ok: true },
+  ])("excludes canonical source conflicts from either fetched list: %j", ({ declared, ok }) => {
+    const successful = { url: "https://example.com/reference", ok: true, evidenceUsable: true, sourceType: "url" as const };
+    const unusable = { url: "http://www.example.com/reference/?utm_source=review", ok, evidenceUsable: false, sourceType: "url" as const };
+    const safe = { url: "https://example.com/safe", ok: true, sourceType: "url" as const };
+    for (const [reference, competitor] of [[successful, unusable], [unusable, successful]]) {
+      const draft = createSampleDraft({
+        editedBodyHtml: "<p>Body.</p>",
+        faqItems: [],
+        author: {},
+        aiResult: {
+          ...createSampleDraft().aiResult,
+          sources: declared ? [
+            { url: successful.url, title: "Conflicted source", usage_notes: "" },
+            { url: safe.url, title: "Safe source", usage_notes: "" },
+          ] : [],
+        },
+        fetchedReferences: [reference, safe],
+        fetchedCompetitors: [competitor],
+        inputPayload: { ...createSampleDraft().inputPayload, references: [], competitors: [] },
+      });
+      const html = buildDraftArticleHtml(draft);
+
+      expect(html).not.toContain(successful.url);
+      expect(html).not.toContain(unusable.url);
+      expect(html).toContain('href="https://example.com/safe"');
+    }
+  });
+
+  test.each([
+    '<!-- <a href="https://example.com/reference">Source</a> -->',
+    '<a href="/contact" data-href="https://example.com/reference">Contact us.</a>',
+  ])("appends a real source link when the edited body only has a false match: %s", (body) => {
+    const html = buildDraftArticleHtml(createSampleDraft({ editedBodyHtml: body, faqItems: [], author: {} }));
+
+    expect(html).toContain('class="aio-source-block"');
+    expect(html).toContain('href="https://example.com/reference"');
   });
 
   test("deduplicates AI, fetched, input, and competitor source URLs after normalization", () => {
@@ -960,7 +1352,7 @@ describe("draft HTML rendering", () => {
     expect(html).not.toContain('class="aio-source-block"');
   });
 
-  test("does not duplicate a fully escaped visible source URL when meaningful query parameters are reordered", () => {
+  test("appends a real source link when the URL appears only inside escaped markup", () => {
     const html = buildDraftArticleHtml(
       createSampleDraft({
         editedBodyHtml:
@@ -986,8 +1378,10 @@ describe("draft HTML rendering", () => {
     expect(html).toContain(
       "&lt;a href=&quot;https://example.com/reference?page=1&amp;id=primary&quot;&gt;",
     );
-    expect(html).not.toContain("utm_source");
-    expect(html).not.toContain('class="aio-source-block"');
+    expect(html).toContain('class="aio-source-block"');
+    expect(html).toContain(
+      'href="https://example.com/reference?id=primary&amp;page=1&amp;utm_source=newsletter"',
+    );
   });
 
   test("normalizes escaped quote decorations in source URL values before source block dedupe", () => {

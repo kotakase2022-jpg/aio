@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -10,6 +10,8 @@ import {
   isSupabaseGatewayConfigured,
 } from "@/lib/server/supabase-gateway";
 import { truncateText } from "@/lib/utils";
+import { withLocalStoreLock, writeLocalJson } from "@/lib/server/local-store";
+import { articleFormSchema } from "@/lib/server/article-form-schema";
 import type {
   ArticleDraft,
   ArticleFormPayload,
@@ -25,6 +27,9 @@ const dataDir = process.env.VERCEL
   ? path.join(os.tmpdir(), "aio-article-generator")
   : process.env.AIO_LOCAL_DATA_DIR || path.join(process.cwd(), ".data");
 const jobFile = path.join(dataDir, "generation-jobs.json");
+
+// The POST worker has a 300-second budget; allow another minute before recovery.
+const GENERATION_JOB_EXPIRY_MS = 6 * 60 * 1000;
 
 const initialSteps: GenerationStep[] = [
   { id: "fetch_refs", label: "参照URL本文抽出", status: "pending" },
@@ -98,11 +103,43 @@ export async function getGenerationJob(id: string) {
   return store[id] ?? null;
 }
 
-export async function saveGenerationJob(job: GenerationJob) {
+export async function recoverStaleGenerationJob(job: GenerationJob, now = Date.now()) {
+  if (!isGenerationJobExpired(job, now)) return job;
+
+  return updateGenerationJob(job.id, (current) => {
+    if (!isGenerationJobExpired(current, now)) return current;
+    const error = "記事生成が制限時間を超えたため停止しました。入力内容を確認し、もう一度「AIによる記事作成」を実行してください。";
+    return {
+      ...current,
+      status: "failed",
+      completedAt: new Date(now).toISOString(),
+      error,
+      steps: current.steps.map((step) =>
+        step.status === "running" ? { ...step, status: "error", detail: error } : step,
+      ),
+    };
+  });
+}
+
+function isGenerationJobExpired(job: GenerationJob, now: number) {
+  if (job.status !== "queued" && job.status !== "running") return false;
+  const startedAt = job.status === "running" ? Date.parse(job.startedAt ?? "") : NaN;
+  const beganAt = Number.isFinite(startedAt) ? startedAt : Date.parse(job.createdAt);
+  return Number.isFinite(beganAt) && now - beganAt >= GENERATION_JOB_EXPIRY_MS;
+}
+
+export async function saveGenerationJob(job: GenerationJob, expectedUpdatedAt?: string): Promise<GenerationJob | null> {
   assertDurableStorageConfigured("記事生成ジョブの保存");
 
   const supabase = getSupabaseAdmin();
   if (supabase) {
+    if (expectedUpdatedAt) {
+      const { data, error } = await supabase.from("article_inputs")
+        .update(sanitizeForPostgres({ input_payload: job, updated_at: job.updatedAt }))
+        .eq("id", job.id).eq("updated_at", expectedUpdatedAt).select("id").maybeSingle();
+      if (error) throw new ApiError("生成ジョブの保存に失敗しました。", 500, error.message);
+      return data ? job : null;
+    }
     const { error } = await supabase.from("article_inputs").upsert(
       sanitizeForPostgres({
         id: job.id,
@@ -121,33 +158,40 @@ export async function saveGenerationJob(job: GenerationJob) {
   }
 
   if (isSupabaseGatewayConfigured()) {
-    await callSupabaseGateway<{ job: GenerationJob }>("upsert_job", { job });
-    return job;
+    const result = await callSupabaseGateway<{ job: GenerationJob | null }>("upsert_job", { job, expectedUpdatedAt });
+    return result.job;
   }
 
-  const store = await readLocalJobs();
-  store[job.id] = job;
-  await writeLocalJobs(store);
-  return job;
+  return withLocalStoreLock(jobFile, async () => {
+    const store = await readLocalJobs();
+    if (expectedUpdatedAt && store[job.id]?.updatedAt !== expectedUpdatedAt) return null;
+    store[job.id] = job;
+    await writeLocalJson(jobFile, store);
+    return job;
+  });
 }
 
 export async function updateGenerationJob(
   id: string,
   updater: (job: GenerationJob) => GenerationJob,
 ) {
-  const current = await getGenerationJob(id);
-  if (!current) {
-    throw new ApiError(
-      "生成ジョブが見つかりません。",
-      404,
-      "古い生成状態をクリアし、もう一度「AIによる記事作成」を実行してください。",
-    );
-  }
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const current = await getGenerationJob(id);
+    if (!current) {
+      throw new ApiError(
+        "生成ジョブが見つかりません。",
+        404,
+        "古い生成状態をクリアし、もう一度「AIによる記事作成」を実行してください。",
+      );
+    }
 
-  const next = updater(current);
-  next.updatedAt = new Date().toISOString();
-  await saveGenerationJob(next);
-  return next;
+    if (current.status === "canceled" || current.status === "failed") return current;
+    const next = updater(current);
+    if (next === current || (current.status === "completed" && next.status !== "completed")) return current;
+    next.updatedAt = new Date(Math.max(Date.now(), Date.parse(current.updatedAt) + 1)).toISOString();
+    if (await saveGenerationJob(next, current.updatedAt)) return next;
+  }
+  throw new ApiError("生成ジョブが更新されました。もう一度お試しください。", 409);
 }
 
 export async function updateGenerationStep(
@@ -165,7 +209,7 @@ export async function updateGenerationStep(
 }
 
 export async function cancelGenerationJob(id: string) {
-  return updateGenerationJob(id, (job) => ({
+  return updateGenerationJob(id, (job) => job.status === "completed" || job.status === "failed" ? job : ({
     ...job,
     status: "canceled",
     completedAt: new Date().toISOString(),
@@ -188,6 +232,10 @@ export async function assertGenerationJobActive(id: string) {
 
   if (job.status === "canceled") {
     throw new ApiError("記事作成は停止済みです。", 409);
+  }
+
+  if (job.status === "failed" || job.status === "completed") {
+    throw new ApiError("記事作成は終了済みです。", 409);
   }
 
   return job;
@@ -262,23 +310,21 @@ export async function markGenerationJobWordpressPost({
   }
 
   const now = new Date().toISOString();
-  const next: GenerationJob = {
-    ...job,
+  return updateGenerationJob(job.id, (current) => ({
+    ...current,
     wordpressPostStatus: status,
     wordpressPostUrl: postUrl,
     wordpressPostedAt: now,
     updatedAt: now,
-    draft: job.draft
+    draft: current.draft
       ? {
-          ...job.draft,
+          ...current.draft,
           status: "posted",
-          wordpressPostUrl: postUrl || job.draft.wordpressPostUrl,
+          wordpressPostUrl: postUrl || current.draft.wordpressPostUrl,
           updatedAt: now,
         }
-      : job.draft,
-  };
-  await saveGenerationJob(next);
-  return next;
+      : current.draft,
+  }));
 }
 
 function rowToJob(row: Record<string, unknown>) {
@@ -291,7 +337,7 @@ function rowToJob(row: Record<string, unknown>) {
     ...payload,
     id: String(payload.id ?? row.id),
     createdAt: String(payload.createdAt ?? row.created_at ?? new Date().toISOString()),
-    updatedAt: String(payload.updatedAt ?? row.updated_at ?? new Date().toISOString()),
+    updatedAt: String(row.updated_at ?? payload.updatedAt ?? new Date().toISOString()),
   } as GenerationJob;
 }
 
@@ -317,6 +363,9 @@ function jobToLogSummary(job: GenerationJob): GenerationLogSummary {
 }
 
 function summarizeInput(input: ArticleFormPayload) {
+  if (!articleFormSchema.safeParse(input).success) {
+    return "入力形式が不正です。新規生成で入力し直してください。";
+  }
   const references =
     input.references.filter((item) => item.url?.trim() || item.text?.trim()).length +
     (input.referenceFiles ?? []).filter((file) => file.ok).length;
@@ -348,14 +397,12 @@ function summarizeTone(input: ArticleFormPayload) {
 async function readLocalJobs(): Promise<LocalJobStore> {
   try {
     return JSON.parse(await readFile(jobFile, "utf8")) as LocalJobStore;
-  } catch {
-    return {};
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return {};
+    }
+    throw error;
   }
-}
-
-async function writeLocalJobs(store: LocalJobStore) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(jobFile, JSON.stringify(store, null, 2), "utf8");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -22,6 +22,10 @@ export type ImageCount = 0 | 1 | 2 | 3;
 
 export type WordCount = 1000 | 2000 | 3000 | 4000 | 5000 | 6000;
 
+export type AudienceType = "auto" | "btoc" | "btob";
+
+export type ArticleStructure = "auto" | "textbook" | "faq" | "case";
+
 export type VisualToneInput = {
   mode: VisualToneMode;
   preset?: string;
@@ -45,6 +49,11 @@ export type FetchResult = {
   text?: string;
   ok: boolean;
   reason?: string;
+  evidenceUsable?: boolean;
+  pageKind?: "article" | "notice" | "listing" | "insufficient" | "unknown";
+  encoding?: string;
+  warnings?: string[];
+  httpStatus?: number;
   sourceType?: "url" | "manual" | "file";
   fileName?: string;
   fileType?: string;
@@ -166,6 +175,8 @@ export type ArticleFormPayload = {
   referenceFiles?: AttachedFileInput[];
   competitorFiles?: AttachedFileInput[];
   theme: string;
+  audienceType?: AudienceType;
+  articleStructure?: ArticleStructure;
   primaryInfoTypes?: import("@/lib/primary-information").PrimaryInformationType[];
   primaryInfo?: string;
   closingText: string;

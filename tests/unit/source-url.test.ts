@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  articleContainsCanonicalSourceLink,
   articleContainsCanonicalSourceUrl,
   normalizeSourceUrl,
   normalizeSourceUrls,
@@ -69,6 +70,41 @@ describe("source URL helpers", () => {
         "Source: &lt;a href=&quot;https://example.com/reference?page=1&amp;id=primary&quot;&gt;Primary source&lt;/a&gt;",
       ),
     ).toBe(true);
+  });
+
+  test("requires an actual anchor href when checking publishable source links", () => {
+    const url = "https://example.com/reference?id=primary";
+
+    expect(articleContainsCanonicalSourceLink(url, `<p>出典: ${url}</p>`)).toBe(false);
+    expect(
+      articleContainsCanonicalSourceLink(
+        url,
+        '<p><a href="https://www.example.com/reference?id=primary&utm_source=test">参照元</a></p>',
+      ),
+    ).toBe(true);
+    expect(
+      articleContainsCanonicalSourceLink(
+        url,
+        '&lt;a href=&quot;https://example.com/reference?id=primary&quot;&gt;参照元&lt;/a&gt;',
+      ),
+    ).toBe(false);
+  });
+
+  test.each([
+    '<!-- <a href="https://example.com/reference">Source</a> -->',
+    '<a data-href="https://example.com/reference">Source</a>',
+    '<a href="/contact" data-href="https://example.com/reference">Contact</a>',
+    '<a data-href="https://example.com/reference" href="/contact">Contact</a>',
+    '<script>const example = \'<a href="https://example.com/reference">Source</a>\';</script>',
+  ])("does not treat inert markup or data attributes as a source link: %s", (html) => {
+    expect(articleContainsCanonicalSourceLink("https://example.com/reference", html)).toBe(false);
+  });
+
+  test("uses the real href even when a data-href attribute follows it", () => {
+    expect(articleContainsCanonicalSourceLink(
+      "https://example.com/reference",
+      '<a href="https://example.com/reference" data-href="https://other.example/">Source</a>',
+    )).toBe(true);
   });
 
   test("keeps path-only candidates separate from meaningful query URLs", () => {

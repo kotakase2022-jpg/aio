@@ -19,8 +19,11 @@ export async function POST(request: Request) {
       updatedAt: new Date().toISOString(),
     };
     const result = await saveDraft(cleanDraft);
-    await syncGenerationJobDraft(result.draft);
-    return okJson(result);
+    const warnings: string[] = [];
+    await syncGenerationJobDraft(result.draft).catch((error: unknown) => {
+      warnings.push(`生成ログの同期に失敗しました: ${error instanceof Error ? error.message : "Unknown error"}`);
+    });
+    return okJson({ ...result, warnings });
   } catch (error) {
     return errorJson(error);
   }

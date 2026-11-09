@@ -1,4 +1,5 @@
 import type { ArticleQualityEvaluation } from "@/lib/article-quality";
+import { canonicalizeFaqItems } from "@/lib/draft-html";
 import { englishTokenAppearsInText } from "@/lib/english-token";
 import type { FaqItem } from "@/types/aio";
 
@@ -95,12 +96,7 @@ export function evaluateFaqQuality({
   referenceTexts = [],
   competitorTexts = [],
 }: FaqQualityInput): ArticleQualityEvaluation {
-  const normalizedItems = faqItems
-    .map((item) => ({
-      question: item.question.trim(),
-      answer: item.answer.trim(),
-    }))
-    .filter((item) => item.question || item.answer);
+  const normalizedItems = canonicalizeFaqItems(faqItems);
   const faqText = normalizedItems
     .map((item) => `${item.question} ${item.answer}`)
     .join(" ");
