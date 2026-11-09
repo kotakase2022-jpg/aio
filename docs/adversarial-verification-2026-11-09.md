@@ -106,6 +106,19 @@ The prior additional conflicting-URL fallback finding was reproduced and fixed.
 If an old WordPress posting worker is still running, let it finish before release;
 old versions do not acquire the new duplicate-post reservation.
 
+### Release Checkpoint
+
+- PR #42 merged through protected squash merge to `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`.
+- Required PR CI run `42628456722` and main CI run `42629017490`: PASS.
+- All 13 review threads resolved; the latest CodeRabbit re-review was skipped because
+  of the OSS hourly limit. It is not represented as a fresh review pass.
+- Supabase `apply_migration` confirmation expired twice. The migration list still
+  contains only the three pre-existing migrations. No permanent RPC/gateway/app
+  rollout took place. Do not deploy the new app until RPC and gateway are ready.
+- Remaining release verification: permanent RPC permissions, guarded three-case live
+  Supabase suite and cleanup, staged Vercel smoke, promotion and canonical smoke.
+- The app remains on previous production deployment `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`.
+
 ## Remaining Limits / Human Checks
 
 - This is reproducible evidence, not a claim that every possible input is bug-free.

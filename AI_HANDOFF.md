@@ -5,24 +5,27 @@
 - Next owner: Claude Code
 - Loop: 9
 - Loop number inferred from: 前回Current ownerがCodexでClaude Codeへの引継ぎ後、Claudeによる新ループ完了記録はない。相沢様対応PR #42の追加検証・本番反映としてLoop 9を継続。
-- Phase: Development / Release verification
-- Last updated: 2026-11-09 22:47 +09:00
+- Phase: Handoff / Release awaiting connector confirmation
+- Last updated: 2026-11-09 23:00 +09:00
 
 ## 1. Current Goal
 ユーザーの最新指示により、厳格・敵対的検証、再現テスト、必要な修正、保護されたPR経由のmerge、本番Vercel反映までを実施する。
 前回の「本番反映なし」制限は今回の明示承認で変更された。既存記事一括変更、本番WordPressへのテスト投稿、相沢様への送信は実施しない。
 
 ## 2. Current Branch / Commit / PR
-- Branch: `codex/loop9-aizawa-content-integrity`
+- Branch: `codex/loop9-release-handoff` (release-status documentation only)
 - Latest commit at start: `30e0ab35ef1646c506563bf02a6d9f83541c3a56`
 - Last known good implementation before this follow-up: `0304a04`
 - Baseline/main at start: `8c2a9b5a584ede25d94d2747550cc692db4d6f90`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/42
 - Latest reviewed commit: `4fcb514fdd3cf0985477adc715f6da6655077814`
+- Final implementation head: `994b0445560b1c8112617bca32fd99d06d2a236d`
+- Merged main / last known good commit: `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`
+- PR #42: MERGED through protected squash merge; no direct main push or bypass.
 - CodeRabbit OSS review status: 4fcb514の追加6 inline + 1 outside-diffを確認。6件修正、正本取得エラー時の古いsnapshotへのfallback提案1件はデータ保全のため不採用。根拠と再試行テストを記録。
 - Production at start: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`、runtime `742370e`
 - Production URL: https://aio-article-generator.vercel.app/
-- Release status: NOT YET DEPLOYED; final gate/review/CI and migration/gateway/app rollout pending.
+- Release status: NOT YET DEPLOYED. Required CI and merge complete. Supabase connector apply_migration confirmation expired twice; migration list confirms no new migration. Do not deploy gateway/app before the migration succeeds.
 
 ## 3. What Was Done
 - 必須文書、差分、PR、レビュー、現在のVercel本番コードを確認。相沢様の実ログ照合・8項目回答案は前回報告に保持。
@@ -41,6 +44,8 @@
 - CodeRabbit追加対応：slash-backslashリンクを拒否、長文の根拠を文単位で数値優先抽出、破損job storeを維持、RPC迂回がないことを明示検証。正本取得失敗では古い回答に戻さずエラーと再試行を維持。
 - Next 16.4.5等へ互換更新。本番依存監査0件。E2Eをdev serverから隔離production build/serverへ変更。
 - 本番read-only smokeを追加し、アプリデータのmutationを遮断。`output/`、env、local data、test artifactsをVercelアップロードから除外。
+- PR #42を保護ルールのままsquash merge。PR CI run42628456722（3m26s）とmain CI run42629017490ともにPASS。
+- CodeRabbitの13スレッドはすべて解決。canonical fallback不採用はレビュアーも指摘を取り下げ。最新994b044の自動再レビューはOSS時間枠制限でNEUTRAL/skippingであり、再レビュー成功とは扱わない。
 
 ## 4. Files Changed
 主な変更範囲：
@@ -60,8 +65,8 @@ AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に�
 - 先行combined quality PASS。typecheck/lint/integrity/535 tests/contract 15/coverageすべて成功。
 - production Chromium E2E 56/56、Next 16.4.5 build 19 routes PASS。
 - 独立静的レビューで新たなblockerなし。ライブDBの証明とは区別する。
-- 最終CodeRabbit対応後のcombined quality PASS（544 tests、contract15、E2E56/56、build19 routes）。先行CI run 42624652856は4m8sでPASS。追加修正のCIはpush後確認。
-- 本番migration/gateway/appはまだ未反映。
+- 最終CodeRabbit対応後のcombined quality PASS（544 tests、contract15、E2E56/56、build19 routes）。最新PR/main CIもPASS。
+- 本番migration/gateway/appはまだ未反映。MCP apply_migrationは2回とも確認期限切れで失敗。確認を回避する別経路への切替はしていない。
 - 実OpenAI文章・画像はPASS。WordPress実接続試験は専用sandbox不足で未実施。
 
 ## 6. Known Issues
@@ -75,10 +80,10 @@ AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に�
 - 共通デモコードは既存仕様。ユーザー別データ分離を提供する認証ではない。
 
 ## 7. CodeRabbit Review
-- Review status: 4fcb514のCodeRabbitレビュー完了（13m41s）。追加修正のpush後にCIを再確認する。OSS時間枠残量0のため次回レビューが制限される可能性あり。
+- Review status: 4fcb514のCodeRabbitレビュー完了（13m41s）。994b044の再レビューはOSS時間枠上限でNEUTRAL/skipping。全13スレッド解決、最新required CI成功後にmerge。
 - Critical findings: 初回なし。
 - Resolved findings: 初回8件は0304a04。追加の同一URL成功/失敗混在fallback指摘はrenderer/UI共通の最終filterとunit/E2Eで解消。
-- Deferred findings: 修正6件の返信・resolveは最終commit後。
+- Deferred findings: なし。追加修正の返信・resolve済み。新しい自動差分レビュー自体は時間枠回復後となる。
 - Intentional non-adoption: canonical draft取得失敗時のjob.draft fallbackは、補助同期に失敗した古い編集・承認内容を復元し上書きするリスクがある。APIは500を返して再試行で最新正本を取得する。専用integration testで保存内容を変えないことを確認。
 - False positives / not applicable: 一律docstring coverage警告は既存コメント方針と合わず機能検証とは分離。過去Codex GitHub reviewは使用上限で失敗、標準レビューはCodeRabbit。
 
@@ -102,15 +107,20 @@ AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に�
 - `npm audit --omit=dev`: PASS、0 vulnerabilities。full auditはdev moderate8件。
 - `test:live:readiness`: WordPressのみ未設定でFAIL。実WordPress成功とは報告しない。
 - `git diff --check`: PASS。
+- PR CI: https://github.com/kotakase2022-jpg/aio/actions/runs/42628456722 PASS。
+- main CI: https://github.com/kotakase2022-jpg/aio/actions/runs/42629017490 PASS。
+- Release command failure: Supabase `apply_migration` twice returned `status: expired` / confirmation expired. No SQL executed according to subsequent migration list. Cause: connector confirmation not completed within its window; not an SQL/test failure. Retry only with the confirmation UI accepted, then verify permanent RPC and run the guarded live suite.
+- Release未実施：恒久RPC適用、gateway deploy、拡張Supabase live3件、Vercel stage/promote、本番readonly smoke。現在本番は従来版のまま。
 - Windows sandboxのSSR cache rename EPERMはテスト実行前の環境障害。同一検査を許可済みローカル環境で再実行し成功。
 - 復元E2EのlocalStorage即時判定は非同期処理を待たないテスト不備だったため同じ期待値のexpect.pollへ変更。テスト削除/skip/緩和なし。
 
 ## 10. Next Recommended Action
-1. 最終quality、PR required CI、CodeRabbitレビューを確認し保護PR経由でmerge。
-2. additive RPC migration → gateway → mainのVercel stageの順で反映。
-3. guarded Supabase disposable testsとcleanupを確認。
-4. stageのread-only smoke成功後にpromoteし、canonical URLで再確認。
-5. 本番deployment/commit/CI番号と検証結果でこの文書を更新する。
+1. PR #42/main e150927は既にmerge/CI成功済み。再マージ・main直pushは不要。
+2. ユーザーが確認UIを操作できる時にSupabase apply_migrationを再提示し、`supabase/migrations/20261109125814_atomic_draft_save.sql`を対象npdyfhqugniuxfxpgnghへ適用。期限切れを別経路で迂回しない。
+3. RPC権限を確認後、`supabase/functions/aio-store/index.ts`を同プロジェクトへdeploy。既存custom token認証とverify_jwt=falseを維持。
+4. `npm run test:live:supabase`（拡張3件）を許可済みdisposable手順で実行、cleanupと既存データ不変を確認。
+5. reviewed mainからVercel `deploy --prod --skip-domain --scope sl2026 --yes`、unique URLにreadonly smoke、同じbuildをpromote、canonical URLで再確認。プロジェクトprj_rIIxUXcj7bOgZMaKxUgHad353Dpf、team_CPnFJ0qkgljoSR97jIur7YNA。
+6. 本番deployment/commit/CI番号と検証結果でこの文書を更新する。
 
 ## 11. Suggested Review Scope for Claude Code
 - transactional saveの権限/rollback/画像所有関係。
@@ -124,6 +134,7 @@ AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に�
 - 公開前の数値/対象/期間/条件/例外/出典、医療・金融内容は人が確認する。
 - rollout時は旧WordPress投稿workerが完了してから更新する。旧バージョンは予約方式を使わない。
 - 新アプリはRPCがないと保存が失敗するためmigration/gatewayを先に反映する。
+- 反映直前の既存件数：article_inputs22（completed18/failed2/canceled2、active0）、article_drafts19、article_images33、wordpress_posts0。テスト前後の集計fingerprintも比較し、顧客データは変更しない。
 
 ## 13. Do Not Touch
 - env/keys/passwords/tokensを表示・commitしない。
