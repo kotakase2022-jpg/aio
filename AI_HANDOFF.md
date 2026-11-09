@@ -7,7 +7,7 @@
 - Loop: 9
 - Loop number inferred from: 作業ブランチが`codex/loop9-aizawa-content-integrity`であり、前回handoffはLoop 7の完了状態のまま更新されていなかった。今回の相沢様検証対応を独立したLoop 9として扱う。
 - Phase: Handoff
-- Last updated: 2026-11-09 21:16 +09:00
+- Last updated: 2026-11-09 21:24 +09:00
 
 ## 1. Current Goal
 
@@ -21,13 +21,14 @@
 ## 2. Current Branch / Commit / PR
 
 - Branch: `codex/loop9-aizawa-content-integrity`
+- Current branch HEAD before final handoff commit: `79cc683e9807e21f5d57aab453fe841540eedd07`
 - Latest implementation commit: `0304a04` (`fix: address content integrity review findings`)
 - Initial implementation commit: `ba93f6d7860acbf800c35c42a4dd45e84c448ebe` (`fix: enforce article content integrity`)
 - Last known good commit: `0304a04`
 - Baseline commit: `8c2a9b5a584ede25d94d2747550cc692db4d6f90`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/42
-- CodeRabbit OSS review status: initial review complete; 7 inline findings and 1 outside-diff finding were reproduced and fixed in `0304a04`; follow-up review runs after push
-- Required GitHub Actions: PASS, run `42611596371`, job `129141104934`, 4m33s
+- CodeRabbit OSS review status: initial review complete; 7 inline findings and 1 outside-diff finding were reproduced and fixed in `0304a04`; all 7 review threads resolved. Follow-up check was `NEUTRAL/skipping` because the free OSS hourly review allowance resets in 28 minutes.
+- Required GitHub Actions: PASS, latest run `42615706910`, job `129154918511`, 4m35s
 - Production URL: https://aio-article-generator.vercel.app/ (今回の差分は未反映)
 
 ## 3. What Was Done
@@ -97,10 +98,10 @@
 - Chromium PC E2E: PASS、52/52
 - Next.js 16.3.2 production build: PASS、19 routes
 - Live OpenAI structured generation: PASS、1/1、143.77秒
-- GitHub required CI: PASS
-- PR #42: OPEN、MERGEABLE
+- GitHub required CI: PASS、latest run `42615706910`
+- PR #42: OPEN、CLEAN、MERGEABLE
 - CodeRabbit initial review: PASS check with Moderate merge risk、7 inline + 1 outside-diff actionable finding。全件`0304a04`で対応済み。
-- CodeRabbit follow-up review: PR #42の最新checkを確認してからmerge判断する。
+- CodeRabbit follow-up check: `NEUTRAL/skipping`（無料OSS枠の時間制限）。新規指摘なし。初回7スレッドは全件解決済みで、outside-diff 1件もコード・E2E・PRコメントで対応を記録済み。
 - Production deployment: NOT RUN（今回の明示スコープ外）
 - Production Supabase inspection: read-only only。書き込み・削除なし。
 - Production WordPress posting: NOT RUN
@@ -123,7 +124,7 @@
 
 CodeRabbit OSSの指摘と対応状況：
 
-- Review status: 初回レビュー完了。対応コミット`0304a04`をpush後、PR #42でfollow-up reviewを確認する。
+- Review status: 初回レビュー完了。7 inline + 1 outside-diff findingを`0304a04`で対応し、全7 review threadsをresolvedにした。follow-up checkは無料OSS枠の時間制限で`NEUTRAL/skipping`。
 - Critical findings: なし。
 - Resolved findings: 旧FAQが後続CTAまで消す問題、取得不可URLがAI宣言ソースから公開出典へ戻る問題、執筆者欄数値の誤検出、ルート相対リンク誤判定、不正URL失敗件数欠落、全体`form`・記事内`header`過剰除去、本文不足案内テスト不足、画像再作成BtoB固定の8件。
 - Deferred findings: なし。
@@ -168,7 +169,7 @@ gh pr checks 42 --watch --interval 10
 - Chromium PC E2E: PASS、52/52。
 - Next.js build: PASS、19 routes。
 - Live OpenAI: PASS、1/1。デルタ相当BtoB教科書型、デルタ相当BtoBケース型、アニハ相当BtoC FAQ型を1契約テスト内で検証。生産データ書き込みなし。
-- GitHub Actions quality-gate: PASS、4m33s。
+- GitHub Actions quality-gate: initial run `42611596371` PASS、follow-up run `42615706910` PASS（4m35s）。
 - Git hooks: pre-commit / pre-pushともPASS。
 - `git diff --check`: PASS。
 
@@ -178,12 +179,13 @@ gh pr checks 42 --watch --interval 10
 
 次にClaude Codeが最初にやるべきこと：
 
-1. PR #42のCodeRabbit follow-up結果と未解決コメントを確認する。
-2. `src/lib/draft-html.ts`のFAQ正本化・冪等性と、`src/lib/server/content.ts`の文字コード優先順位・SSRF制約維持を独立レビューする。
+1. PR #42の初回CodeRabbit指摘、`0304a04`の修正、解決済みreview threadsを独立レビューする。
+2. `src/lib/draft-html.ts`のFAQ正本化・冪等性・CTA保持と、`src/lib/server/content.ts`の文字コード優先順位・SSRF制約維持を確認する。
 3. `src/lib/publication-quality.ts`の数値根拠・条件一般化・リンク検出に過不足がないかfixtureと合わせて確認する。
 4. `src/lib/server/article-generation.ts`で読者層・構成・根拠条件が新規生成と再作成の両方へ渡ることを確認する。
 5. `npm.cmd run quality`を再実行し、差分がなければレビュー結果をhandoffへ追記する。
-6. 承認前にPRをmergeしたり、本番デプロイしたりしない。
+6. CodeRabbit follow-upを再実行する場合は、PR表示上の無料OSS枠リセット後に行う。
+7. 承認前にPRをmergeしたり、本番デプロイしたりしない。
 
 ## 11. Suggested Review Scope for Claude Code
 

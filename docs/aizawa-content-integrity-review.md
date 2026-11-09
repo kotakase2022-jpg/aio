@@ -266,9 +266,9 @@ E2Eで警告表示、追加指示、読者層・構成、現在の一次情報�
   - Chromium PC E2E: 52 / 52
   - Next.js 16.3.2 build: PASS、19 routes
 - 実OpenAI structured generation: 1 / 1 PASS。デルタ相当BtoB教科書型、デルタ相当BtoBケース型、アニハ相当BtoC FAQ型を、同じ契約テスト内で確認した。
-- GitHub Actions `quality-gate`: 初回実装コミットでPASS。CodeRabbit指摘対応後の再実行結果はPR #42を正とする。
+- GitHub Actions `quality-gate`: 初回実装run `42611596371`、CodeRabbit指摘対応後のrun `42615706910`ともPASS。
 
-CodeRabbit初回レビューでは、旧FAQ除去によるCTA消失、取得不可URLの公開出典復活、執筆者欄数値の誤検出、ルート相対リンクの誤判定、不正URLの失敗件数欠落、`form`・記事内`header`の過剰除去、本文不足時の案内文テスト不足、画像再作成のBtoB固定を指摘された。8件を再現テストで確認し、すべて実装修正した。Docstring coverage警告は、70関数へ説明コメントを機械追加すると既存方針に反して可読性を下げるため、必須品質ゲートのtypecheck、lint、test、coverage、E2E、buildを優先し、非機能警告として記録する。
+CodeRabbit初回レビューでは、旧FAQ除去によるCTA消失、取得不可URLの公開出典復活、執筆者欄数値の誤検出、ルート相対リンクの誤判定、不正URLの失敗件数欠落、`form`・記事内`header`の過剰除去、本文不足時の案内文テスト不足、画像再作成のBtoB固定を指摘された。8件を再現テストで確認し、すべて実装修正した。7件のインラインレビュー会話は全件解決済みで、outside-diff 1件もE2EとPRコメントで対応を記録した。追加CodeRabbit checkは無料OSS枠の時間制限で`NEUTRAL/skipping`となったため、新規レビュー完了とは扱わず、初回指摘への返信、回帰テスト、required CIを対応確認の根拠とする。Docstring coverage警告は、70関数へ説明コメントを機械追加すると既存方針に反して可読性を下げるため、必須品質ゲートのtypecheck、lint、test、coverage、E2E、buildを優先し、非機能警告として記録する。
 
 ## 8. 相沢様への回答案
 
