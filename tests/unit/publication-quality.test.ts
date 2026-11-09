@@ -196,6 +196,18 @@ describe("evaluatePublicationReadiness", () => {
     );
   });
 
+  test.each([
+    ["/\\evil.example/path", true],
+    ["//evil.example/path", true],
+    ["/contact", false],
+  ])("checks browser-resolved root-relative link %s", (href, blocked) => {
+    const resolved = new URL(href, "https://trusted.example");
+    expect(resolved.origin).toBe(blocked ? "https://evil.example" : "https://trusted.example");
+
+    const result = evaluatePublicationReadiness(`<p><a href="${href}">Contact</a></p>`);
+    expect(result.issues.some((issue) => issue.id === "broken-link")).toBe(blocked);
+  });
+
   test("does not evaluate author profile numbers as article claims", () => {
     const result = evaluatePublicationReadiness(`
       <p>本文には数値の主張がありません。</p>

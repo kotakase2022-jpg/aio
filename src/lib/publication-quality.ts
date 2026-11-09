@@ -339,7 +339,7 @@ function isPublishableHref(value: string) {
   if (/^(?:mailto:|tel:)/i.test(value)) {
     return true;
   }
-  if (value.startsWith("/") && !value.startsWith("//")) {
+  if (value.startsWith("/") && !/[\/\\]/.test(value.charAt(1))) {
     return true;
   }
   try {

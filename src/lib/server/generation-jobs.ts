@@ -28,6 +28,9 @@ const dataDir = process.env.VERCEL
   : process.env.AIO_LOCAL_DATA_DIR || path.join(process.cwd(), ".data");
 const jobFile = path.join(dataDir, "generation-jobs.json");
 
+// The POST worker has a 300-second budget; allow another minute before recovery.
+const GENERATION_JOB_EXPIRY_MS = 6 * 60 * 1000;
+
 const initialSteps: GenerationStep[] = [
   { id: "fetch_refs", label: "参照URL本文抽出", status: "pending" },
   { id: "fetch_competitors", label: "競合URL本文抽出", status: "pending" },
@@ -100,6 +103,31 @@ export async function getGenerationJob(id: string) {
   return store[id] ?? null;
 }
 
+export async function recoverStaleGenerationJob(job: GenerationJob, now = Date.now()) {
+  if (!isGenerationJobExpired(job, now)) return job;
+
+  return updateGenerationJob(job.id, (current) => {
+    if (!isGenerationJobExpired(current, now)) return current;
+    const error = "記事生成が制限時間を超えたため停止しました。入力内容を確認し、もう一度「AIによる記事作成」を実行してください。";
+    return {
+      ...current,
+      status: "failed",
+      completedAt: new Date(now).toISOString(),
+      error,
+      steps: current.steps.map((step) =>
+        step.status === "running" ? { ...step, status: "error", detail: error } : step,
+      ),
+    };
+  });
+}
+
+function isGenerationJobExpired(job: GenerationJob, now: number) {
+  if (job.status !== "queued" && job.status !== "running") return false;
+  const startedAt = job.status === "running" ? Date.parse(job.startedAt ?? "") : NaN;
+  const beganAt = Number.isFinite(startedAt) ? startedAt : Date.parse(job.createdAt);
+  return Number.isFinite(beganAt) && now - beganAt >= GENERATION_JOB_EXPIRY_MS;
+}
+
 export async function saveGenerationJob(job: GenerationJob, expectedUpdatedAt?: string): Promise<GenerationJob | null> {
   assertDurableStorageConfigured("記事生成ジョブの保存");
 
@@ -157,8 +185,9 @@ export async function updateGenerationJob(
       );
     }
 
+    if (current.status === "canceled" || current.status === "failed") return current;
     const next = updater(current);
-    if (current.status === "canceled") return current;
+    if (next === current || (current.status === "completed" && next.status !== "completed")) return current;
     next.updatedAt = new Date(Math.max(Date.now(), Date.parse(current.updatedAt) + 1)).toISOString();
     if (await saveGenerationJob(next, current.updatedAt)) return next;
   }
@@ -203,6 +232,10 @@ export async function assertGenerationJobActive(id: string) {
 
   if (job.status === "canceled") {
     throw new ApiError("記事作成は停止済みです。", 409);
+  }
+
+  if (job.status === "failed" || job.status === "completed") {
+    throw new ApiError("記事作成は終了済みです。", 409);
   }
 
   return job;
@@ -364,8 +397,11 @@ function summarizeTone(input: ArticleFormPayload) {
 async function readLocalJobs(): Promise<LocalJobStore> {
   try {
     return JSON.parse(await readFile(jobFile, "utf8")) as LocalJobStore;
-  } catch {
-    return {};
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return {};
+    }
+    throw error;
   }
 }
 

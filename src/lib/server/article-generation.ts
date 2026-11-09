@@ -402,24 +402,33 @@ function compactEvidenceText(value: string, maxLength: number) {
   const headLength = Math.floor(contentBudget * 0.4);
   const evidenceLength = Math.floor(contentBudget * 0.35);
   const tailLength = contentBudget - headLength - evidenceLength;
-  const middle = text.slice(headLength, Math.max(headLength, text.length - tailLength));
-  const evidenceSentences = middle
-    .split(/(?<=[。！？!?\n])/)
-    .map((sentence) => sentence.trim())
-    .filter(Boolean)
-    .filter((sentence) =>
-      /[0-9０-９]|[%％円日時週月年件社人名回]|条件|場合|対象|例外|のみ|に限|時点|期間|単位|約|目安|成功|実績/.test(
-        sentence,
-      ),
-    )
-    .join("\n");
-  const evidenceExcerpt = (evidenceSentences || middle.slice(0, evidenceLength)).slice(
-    0,
-    evidenceLength,
-  );
+  let offset = 0;
+  // Split before taking the middle so a boundary fragment cannot become evidence.
+  const middleSentences = text.split(/(?<=[。！？!?\n])/).flatMap((sentence) => {
+    const start = offset;
+    offset += sentence.length;
+    const trimmed = sentence.trim();
+    return start >= headLength && offset <= text.length - tailLength && trimmed
+      ? [trimmed]
+      : [];
+  });
+  const selectedIndices = new Set<number>();
+  let excerptLength = 0;
+  for (const pattern of [/[0-9０-９]/, /条件|場合|対象|例外|のみ|に限|時点|期間|単位/]) {
+    for (const [index, sentence] of middleSentences.entries()) {
+      if (selectedIndices.has(index) || !pattern.test(sentence)) continue;
+      const addedLength = sentence.length + (selectedIndices.size > 0 ? 1 : 0);
+      if (excerptLength + addedLength > evidenceLength) continue;
+      selectedIndices.add(index);
+      excerptLength += addedLength;
+    }
+  }
+  const evidenceSentences = middleSentences.filter((_, index) => selectedIndices.has(index));
+  const evidenceExcerpt = evidenceSentences.join("\n");
+  const retainedEvidenceLength = evidenceSentences.reduce((sum, sentence) => sum + sentence.length, 0);
   const omittedLength = Math.max(
     0,
-    text.length - headLength - tailLength - evidenceExcerpt.length,
+    text.length - headLength - tailLength - retainedEvidenceLength,
   );
 
   return [

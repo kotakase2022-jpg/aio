@@ -22,6 +22,7 @@ main `8c2a9b5`. Starting Vercel deployment: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`
 | OpenAI | Headers arrive but JSON response body stalls forever | Deadline covers body consumption; transport failure is not silently converted to empty JSON |
 | Persistence | Draft saved but image failure leaves body/approval committed | `aio_save_draft` transactional RPC; invalid image rolls back all changes |
 | Jobs | Concurrent cancellation overwritten by worker completion | Conditional revision update with bounded retries, cancellation remains terminal |
+| Jobs | Worker killed at Vercel's 300-second limit leaves endless progress | Status GET recovers queued/running jobs after six minutes; terminal states win CAS races and late workers cannot replace recovery |
 | Logs | Draft save succeeds but embedded job copy fails to sync | Explicit auxiliary warning; restore reads canonical saved draft |
 | Input | Null arrays / malformed form persisted before validation | Zod structural validation before generation/job persistence; old malformed log summary is safe |
 | Images | Stale regeneration overwrites a later save; old published image deleted | Conditional final save and conservative asset cleanup; published assets retained |
@@ -46,6 +47,14 @@ main `8c2a9b5`. Starting Vercel deployment: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`
   cases, 147.96 seconds. Existing key reuse explicitly authorized; no saved article.
 - Live OpenAI Image: PASS, one PNG response validated in memory, 57.28 seconds;
   no Storage/DB write and no image published.
+- Final text API rerun after transport changes: PASS, 156.75 seconds.
+- Stale-job recovery regressions: before fix 16 failed / 7 passed; after fix 23/23 PASS,
+  related six suites 53/53 PASS. Recovery runs on the next authenticated status GET,
+  not a scheduler, and cannot cancel already in-flight provider billing.
+- Production smoke's CommonJS dependency import was corrected after Node reproduced a
+  named-export failure; it does not change application behavior.
+- Built browser assets: 12 files checked for configured server-secret values, 0 exposures
+  (two secret types available locally; not proof about every remote environment variable).
 - Live Supabase initial disposable CRUD/image replacement: 2/2 PASS before the new RPC.
 - Real PostgreSQL `BEGIN; migration; fixture; ROLLBACK;`: PASS for atomic rollback,
   stale revision rejection and service_role-only EXECUTE. Temporary function/rows
@@ -57,6 +66,28 @@ main `8c2a9b5`. Starting Vercel deployment: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`
 
 Final combined gate, PR CI, CodeRabbit findings and deployment IDs are recorded in
 `AI_HANDOFF.md`; intermediate green runs do not substitute for that final gate.
+
+Final local `npm run quality` after the follow-up fixes: PASS. 54 files / 544 tests,
+15 separately rerun contract tests, coverage S/B/F/L 87.37/78.19/92.61/88.08%,
+56/56 Chromium E2E, integrity 59 files, Next 16.4.5 build 19 routes.
+
+## CodeRabbit Follow-up
+
+Review of `4fcb514` completed in 13m41s with six inline and one outside-diff finding.
+The prior additional conflicting-URL fallback finding was reproduced and fixed.
+
+- Update historic Next version labeling and remove outdated `next dev` E2E description.
+- Reject slash-backslash external-looking links in publication validation.
+- Do not replace a corrupted local job store with an empty object on non-ENOENT errors.
+- RPC failure tests explicitly assert no table-level bypass calls; PostgreSQL rollback
+  is proven by SQL/live tests, not simulated atomicity in JavaScript mocks.
+- Preserve whole prioritized numeric/condition sentences when compacting long input;
+  common standalone kanji must not fill the evidence budget.
+- **Intentional non-adoption:** silently returning `job.draft` after canonical draft
+  read failure can restore stale edits/approval and overwrite the newer saved draft.
+  Keep the visible failure/retry behavior. The canonical-read integration regression
+  confirms no stale job is returned and retry restores the latest untouched draft.
+- Generic docstring-coverage warning remains separate from executable quality gates.
 
 ## Release Order
 

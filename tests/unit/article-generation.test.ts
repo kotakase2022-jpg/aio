@@ -1158,6 +1158,75 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("never infer the omitted passage");
   });
 
+  describe("prioritized evidence excerpts", () => {
+    const background = "担当者は日々の相談を記録し、社内で名前や連絡日時を確認してから案内を回覧します。";
+    const numericFact = "必要書類が揃った会員のみ、手数料は1.5%となり、非会員には適用されません。";
+    const condition = "例外として、対象外の申請については受付窓口への確認が必要です。";
+    const evidenceBudget = Math.floor((3000 - 180) * 0.35);
+    const headBudget = Math.floor((3000 - 180) * 0.4);
+    const tailBudget = 3000 - 180 - headBudget - evidenceBudget;
+
+    async function compactReference(text: string) {
+      const { createStructuredResponse } = await import("@/lib/server/openai");
+      const { generateAioArticle } = await import("@/lib/server/article-generation");
+      vi.mocked(createStructuredResponse).mockResolvedValueOnce(sampleArticleResult);
+      await generateAioArticle({
+        form: sampleFormPayload,
+        fetchedReferences: [{ url: "manual-text", ok: true, text }],
+        fetchedCompetitors: [],
+      });
+      const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
+      const input = JSON.parse(String(call?.input)) as {
+        payload: { fetchedReferences: Array<{ text: string }> };
+      };
+      const compacted = input.payload.fetchedReferences[0].text;
+      const excerpt = compacted.split("[省略区間から保持した数値・条件・例外]\n")[1].split("\n[末尾]")[0];
+      return { compacted, excerpt };
+    }
+
+    test("retains late numeric and conditional evidence after ordinary Japanese prose", async () => {
+      const original = background.repeat(90) + numericFact + condition + background.repeat(80);
+      const { compacted, excerpt } = await compactReference(original);
+
+      expect(excerpt).toBe(`${numericFact}\n${condition}`);
+      expect(compacted.length).toBeLessThanOrEqual(3000);
+      expect(excerpt.length).toBeLessThanOrEqual(evidenceBudget);
+      const retainedLength = headBudget + tailBudget + numericFact.length + condition.length;
+      expect(compacted).toContain(`原文${original.length}文字のうち約${original.length - retainedLength}文字を省略`);
+    });
+
+    test("reserves room for later numbers before earlier explicit conditions", async () => {
+      const { excerpt } = await compactReference(
+        background.repeat(50) + condition.repeat(60) + numericFact + background.repeat(50),
+      );
+
+      expect(excerpt).toContain(numericFact);
+      expect(excerpt).toContain(condition);
+      expect(excerpt.length).toBeLessThanOrEqual(evidenceBudget);
+      expect(excerpt.split("\n").every((sentence) => [numericFact, condition].includes(sentence))).toBe(true);
+    });
+
+    test("skips an over-budget sentence without stripping its trailing restriction", async () => {
+      const oversized = `特別契約の費用は9.5万円で、${"契約内容や必要な書類を窓口で確認したうえで、".repeat(80)}会員のみ対象です。`;
+      expect(oversized.length).toBeGreaterThan(evidenceBudget);
+      const { excerpt } = await compactReference(
+        background.repeat(50) + oversized + numericFact + background.repeat(50),
+      );
+
+      expect(excerpt).toBe(numericFact);
+      expect(excerpt).not.toContain("9.5万円");
+    });
+
+    test("does not manufacture a partial excerpt when no evidence sentence fits", async () => {
+      const oversized = `対象の契約では７日以内を目安とし、${"書類の確認結果を担当窓口へ連絡したうえで、".repeat(80)}例外は別途協議します。`;
+      const original = background.repeat(50) + oversized + background.repeat(50);
+      const { compacted, excerpt } = await compactReference(original);
+
+      expect(excerpt).toBe("");
+      expect(compacted).toContain(`原文${original.length}文字のうち約${original.length - headBudget - tailBudget}文字を省略`);
+    });
+  });
+
   test("does not publish an undeclared competitor URL as if it supported the article", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");

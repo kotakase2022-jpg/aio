@@ -251,6 +251,10 @@ E2Eで警告表示、追加指示、読者層・構成、現在の一次情報�
 
 ## 7. 実装・検証記録
 
+以下は初回対応コミット `0304a04` 時点の記録です。追加の敵対的検証・本番反映は
+`docs/adversarial-verification-2026-11-09.md` と `AI_HANDOFF.md` を正とします。
+追加対応でNext.jsを16.4.5へ更新し、同バージョンのbuild成功を再確認しています。
+
 - Review PR: https://github.com/kotakase2022-jpg/aio/pull/42
 - 基準コミット: `8c2a9b5a584ede25d94d2747550cc692db4d6f90`
 - 初回実装コミット: `ba93f6d7860acbf800c35c42a4dd45e84c448ebe`
@@ -264,7 +268,7 @@ E2Eで警告表示、追加指示、読者層・構成、現在の一次情報�
   - contract: 4 files / 15 tests
   - coverage: statements 87.32%、branches 77.36%、functions 92.64%、lines 87.80%
   - Chromium PC E2E: 52 / 52
-  - Next.js 16.3.2 build: PASS、19 routes
+  - 初回時点のNext.js 16.3.2 build: PASS、19 routes（現在の最終buildは16.4.5）
 - 実OpenAI structured generation: 1 / 1 PASS。デルタ相当BtoB教科書型、デルタ相当BtoBケース型、アニハ相当BtoC FAQ型を、同じ契約テスト内で確認した。
 - GitHub Actions `quality-gate`: 初回実装run `42611596371`、CodeRabbit指摘対応後のrun `42615706910`ともPASS。
 

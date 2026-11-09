@@ -37,22 +37,40 @@ afterEach(async () => {
 describe("workflow integrity regressions", () => {
   test("a failed image write cannot commit the draft body or approval", async () => {
     const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+    const draft = createSampleDraft({ status: "approved" });
     let committed = false;
     const rpc = vi.fn(async () => ({ error: { message: "image write failed" } }));
+    const from = vi.fn((table: string) => ({ upsert: async () => {
+      if (table === "article_drafts") committed = true;
+      return { error: table === "article_images" ? { message: "image write failed" } : null };
+    } }));
     vi.mocked(getSupabaseAdmin).mockReturnValue({
       rpc,
-      from: (table: string) => ({ upsert: async () => {
-        if (table === "article_drafts") committed = true;
-        return { error: table === "article_images" ? { message: "image write failed" } : null };
-      } }),
+      from,
     } as unknown as ReturnType<typeof getSupabaseAdmin>);
     const { saveDraft } = await import("@/lib/server/drafts");
-    await expect(saveDraft(createSampleDraft({ status: "approved" }))).rejects.toThrow();
+    await expect(saveDraft(draft, draft.updatedAt)).rejects.toMatchObject({
+      message: "下書きの保存に失敗しました。",
+      detail: "image write failed",
+      status: 500,
+    });
+    expect(from).not.toHaveBeenCalled();
     expect(committed).toBe(false);
-    expect(rpc).toHaveBeenCalledWith("aio_save_draft", expect.objectContaining({
-      draft_row: expect.objectContaining({ status: "approved" }),
-      image_rows: expect.arrayContaining([expect.objectContaining({ id: "img-1" })]),
-    }));
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("aio_save_draft", {
+      draft_row: expect.objectContaining({
+        id: draft.id,
+        edited_body_html: draft.editedBodyHtml,
+        status: "approved",
+        generated_image_urls: draft.images.map((image) => image.url),
+      }),
+      image_rows: [expect.objectContaining({
+        id: "img-1",
+        draft_id: draft.id,
+        slot: draft.images[0].slot,
+        image_url: draft.images[0].url,
+      })],
+      expected_updated_at: draft.updatedAt,
+    });
   });
 
   test.each(["save-draft", "approve-draft"])("%s reports a committed write despite log-sync failure", async (route) => {

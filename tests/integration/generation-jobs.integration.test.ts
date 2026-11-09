@@ -1,8 +1,8 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { sampleFormPayload } from "../fixtures/article";
+import { createCompletedGenerationJob, sampleFormPayload } from "../fixtures/article";
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 
 let tempDir = "";
@@ -24,6 +24,16 @@ afterEach(async () => {
 });
 
 describe("generation job cancellation and restoration", () => {
+  test("saving rejects a malformed local job store without overwriting it", async () => {
+    const { saveGenerationJob } = await import("@/lib/server/generation-jobs");
+    const jobFile = path.join(tempDir, "generation-jobs.json");
+    const malformedStore = '{"existing-job":';
+    await writeFile(jobFile, malformedStore, "utf8");
+
+    await expect.soft(saveGenerationJob(createCompletedGenerationJob())).rejects.toBeInstanceOf(SyntaxError);
+    await expect(readFile(jobFile, "utf8")).resolves.toBe(malformedStore);
+  });
+
   test("cancel route persists canceled state and active guard rejects it after reload", async () => {
     const { createGenerationJob, assertGenerationJobActive } = await import(
       "@/lib/server/generation-jobs"

@@ -255,8 +255,8 @@ in the same project to check it before promotion. This smoke is not a substitute
 image model. It verifies a complete PNG in memory without saving to Storage or the database.
 Run it only with approved API credentials and cost authorization, like the text live probe.
 
-E2E tests use Playwright Chromium at a PC viewport. They start the app with `next dev` through
-Playwright `webServer` and set safe test environment variables.
+E2E tests use Playwright Chromium at a PC viewport. They build and start the app with
+`next build` / `next start` through Playwright `webServer` and set safe test environment variables.
 
 Install browsers when needed:
 

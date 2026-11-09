@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { chromium, expect } from "@playwright/test";
 
-loadEnvConfig(process.cwd());
+nextEnv.loadEnvConfig(process.cwd());
 const baseURL = process.env.AIO_SMOKE_BASE_URL || "https://aio-article-generator.vercel.app";
 const target = new URL(baseURL);
 assert.equal(target.protocol, "https:");

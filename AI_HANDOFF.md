@@ -6,7 +6,7 @@
 - Loop: 9
 - Loop number inferred from: 前回Current ownerがCodexでClaude Codeへの引継ぎ後、Claudeによる新ループ完了記録はない。相沢様対応PR #42の追加検証・本番反映としてLoop 9を継続。
 - Phase: Development / Release verification
-- Last updated: 2026-11-09 22:20 +09:00
+- Last updated: 2026-11-09 22:47 +09:00
 
 ## 1. Current Goal
 ユーザーの最新指示により、厳格・敵対的検証、再現テスト、必要な修正、保護されたPR経由のmerge、本番Vercel反映までを実施する。
@@ -18,7 +18,8 @@
 - Last known good implementation before this follow-up: `0304a04`
 - Baseline/main at start: `8c2a9b5a584ede25d94d2747550cc692db4d6f90`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/42
-- CodeRabbit OSS review status: 初回7 inline + 1 outside-diff対応済み。返信中の追加fallback指摘も今回再現・修正済み。最新差分のレビューはpush後に確認する。
+- Latest reviewed commit: `4fcb514fdd3cf0985477adc715f6da6655077814`
+- CodeRabbit OSS review status: 4fcb514の追加6 inline + 1 outside-diffを確認。6件修正、正本取得エラー時の古いsnapshotへのfallback提案1件はデータ保全のため不採用。根拠と再試行テストを記録。
 - Production at start: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`、runtime `742370e`
 - Production URL: https://aio-article-generator.vercel.app/
 - Release status: NOT YET DEPLOYED; final gate/review/CI and migration/gateway/app rollout pending.
@@ -35,6 +36,9 @@
 - WordPress投稿前に永続予約を取得。重複送信防止、結果不明時の保留、投稿成功後の補助保存失敗時に投稿URLを保持。
 - 画像再生成完了の条件付き保存、公開済み画像保持、local JSONの直列化・atomic rename・読取エラー伝播。
 - 保存・承認・投稿・画像再作成中の編集/同時操作を抑止し、遅いログ復元応答を無効化。save/approveの遅延E2Eを追加。
+- Vercel実行上限でworkerが終了した際の無限進行を防止。status GETで6分経過ジョブをfailedへ復旧し、遅いworkerの再上書きを防ぐ23件の回帰を追加。
+- 本番smokeのCommonJS importをNodeで再現・修正。ビルド済みクライアント12ファイルにローカル設定server秘密値の露出0件を確認。
+- CodeRabbit追加対応：slash-backslashリンクを拒否、長文の根拠を文単位で数値優先抽出、破損job storeを維持、RPC迂回がないことを明示検証。正本取得失敗では古い回答に戻さずエラーと再試行を維持。
 - Next 16.4.5等へ互換更新。本番依存監査0件。E2Eをdev serverから隔離production build/serverへ変更。
 - 本番read-only smokeを追加し、アプリデータのmutationを遮断。`output/`、env、local data、test artifactsをVercelアップロードから除外。
 
@@ -53,9 +57,10 @@
 AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に適合するため変更不要。
 
 ## 5. Current Status
-- 最終combined quality PASS。typecheck/lint/integrity/512 tests/contract 15/coverageすべて成功。
+- 先行combined quality PASS。typecheck/lint/integrity/535 tests/contract 15/coverageすべて成功。
 - production Chromium E2E 56/56、Next 16.4.5 build 19 routes PASS。
 - 独立静的レビューで新たなblockerなし。ライブDBの証明とは区別する。
+- 最終CodeRabbit対応後のcombined quality PASS（544 tests、contract15、E2E56/56、build19 routes）。先行CI run 42624652856は4m8sでPASS。追加修正のCIはpush後確認。
 - 本番migration/gateway/appはまだ未反映。
 - 実OpenAI文章・画像はPASS。WordPress実接続試験は専用sandbox不足で未実施。
 
@@ -70,10 +75,11 @@ AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に�
 - 共通デモコードは既存仕様。ユーザー別データ分離を提供する認証ではない。
 
 ## 7. CodeRabbit Review
-- Review status: 既存PRの初回レビューと追加返信を確認。最新差分はcommit/push後に再確認。
+- Review status: 4fcb514のCodeRabbitレビュー完了（13m41s）。追加修正のpush後にCIを再確認する。OSS時間枠残量0のため次回レビューが制限される可能性あり。
 - Critical findings: 初回なし。
 - Resolved findings: 初回8件は0304a04。追加の同一URL成功/失敗混在fallback指摘はrenderer/UI共通の最終filterとunit/E2Eで解消。
-- Deferred findings: 最新レビュー待ち。
+- Deferred findings: 修正6件の返信・resolveは最終commit後。
+- Intentional non-adoption: canonical draft取得失敗時のjob.draft fallbackは、補助同期に失敗した古い編集・承認内容を復元し上書きするリスクがある。APIは500を返して再試行で最新正本を取得する。専用integration testで保存内容を変えないことを確認。
 - False positives / not applicable: 一律docstring coverage警告は既存コメント方針と合わず機能検証とは分離。過去Codex GitHub reviewは使用上限で失敗、標準レビューはCodeRabbit。
 
 ## 8. Optional Bugbot Findings
@@ -85,8 +91,11 @@ AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に�
 ## 9. Verification Results
 - 修正前の回帰失敗を確認：URL3、OpenAI本文停止1、workflow8、FAQ拡張、WP5xx1、UI遅延save/approve2、local破損store1など。
 - 中間full quality PASS: 510 tests、contract15、E2E54、build19 routes。
-- 最終full quality: PASS。512 tests、contract15、coverage S/B/F/L 87.17/77.66/92.56/87.90%、Chromium E2E56/56、Next 16.4.5 build19 routes。
-- `npm run test:live:openai`: PASS、3種類の読者/構成を含む1契約、147.96秒。
+- 先行full quality: PASS。535 tests、contract15、coverage S/B/F/L 87.27/77.96/92.60/87.99%、Chromium E2E56/56、Next 16.4.5 build19 routes。
+- 最終 `npm run quality`: PASS。54 test files / 544 tests、contract15、coverage S/B/F/L 87.37/78.19/92.61/88.08%、production Chromium E2E56/56、Next16.4.5 build19 routes。integrity59files、型/LintもPASS。
+- 最終追加回帰：リンク/長文抽出の修正前5 failed / 55 passed、修正後60/60 PASS。job JSON破損の修正前1 failed / 22 passed、修正後23/23 PASS。正本取得失敗と再試行1/1 PASS。
+- `npm run test:live:openai`: PASS、3種類の読者/構成を含む1契約、147.96秒。最終transportコードで再実行もPASS、156.75秒。
+- 期限超過復旧の修正前16 failed / 7 passed、修正後23/23、関連6 suites 53/53 PASS。
 - `npm run test:live:openai:image`: PASS、メモリ内PNG1枚、57.28秒、保存なし。
 - `npm run test:live:supabase`: 初期2/2 PASS。新RPCの恒久適用後に拡張3件を再実行する。
 - live PostgreSQL: BEGIN + migration + SQL fixture + ROLLBACK PASS。atomic rollback/CAS/role権限を確認。仮関数と行が残らないことも確認。

@@ -1,4 +1,6 @@
 .git
+.agents
+.codex
 .vercel
 .env*
 node_modules
