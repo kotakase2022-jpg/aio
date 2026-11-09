@@ -56,9 +56,12 @@ main `8c2a9b5`. Starting Vercel deployment: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`
 - Built browser assets: 12 files checked for configured server-secret values, 0 exposures
   (two secret types available locally; not proof about every remote environment variable).
 - Live Supabase initial disposable CRUD/image replacement: 2/2 PASS before the new RPC.
+  After permanent migration, the expanded suite passed 3/3 in 3.27 seconds, including
+  actual rollback of body/approval/images/revision on an invalid image. Cleanup passed;
+  existing input/draft/image/WordPress-post counts and aggregate fingerprints are unchanged.
 - Real PostgreSQL `BEGIN; migration; fixture; ROLLBACK;`: PASS for atomic rollback,
   stale revision rejection and service_role-only EXECUTE. Temporary function/rows
-  confirmed absent afterward. Permanent migration and final live suite are release steps.
+  confirmed absent afterward. Permanent migration and final live suite subsequently passed.
 - `npm audit --omit=dev`: 0 vulnerabilities. Full audit retains 8 moderate dev-only
   reports in the typescript-eslint/minimatch chain. No force-downgrade was applied.
 - Live WordPress readiness: NOT READY (dedicated sandbox credentials absent).
@@ -105,6 +108,38 @@ The prior additional conflicting-URL fallback finding was reproduced and fixed.
 
 If an old WordPress posting worker is still running, let it finish before release;
 old versions do not acquire the new duplicate-post reservation.
+
+### Release Checkpoint
+
+- PR #42 merged through protected squash merge to `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`.
+- Required PR CI run `42628456722` and main CI run `42629017490`: PASS.
+- All 13 review threads resolved; the latest CodeRabbit re-review was skipped because
+  of the OSS hourly limit. It is not represented as a fresh review pass.
+- Supabase confirmation initially expired twice. On the user's retry request, approval
+  succeeded. Remote `20261109140927_atomic_draft_save` corresponds to local
+  `20261109125814_atomic_draft_save.sql`; gateway `aio-store` version5 is ACTIVE.
+- RPC is security invoker with fixed search_path, service_role EXECUTE enabled and
+  anon/authenticated EXECUTE disabled. Unauthenticated gateway POST returns401.
+- Vercel deployment `dpl_ByP6QrgAv4ehCXL7ECP54PwfK5mS` built main `e150927` in51s,
+  was staged without domain assignment and then promoted without a rebuild.
+- Stage automation first hit Vercel SSO; local OIDC was rejected with
+  TRUSTED_SOURCES_ENVIRONMENT_MISMATCH. No Trusted Sources expansion was made. Chrome's
+  normal Vercel login was used to inspect all six input steps, required-input readiness,
+  BtoC/FAQ selection persistence and20 generation logs, without generation/save/post.
+  Application-origin console errors:0; one Google FedCM error on Vercel's own login
+  page is recorded separately. Temporary OIDC script changes were removed.
+- Vercel CLI curl automatically provisioned its project automation bypass token; no
+  value was displayed or committed. Application auth still returns401 without login.
+- Canonical https://aio-article-generator.vercel.app now points to that READY deployment.
+  `node scripts/production-smoke.mjs`: PASS for unauthenticated API rejection, login,
+  durable log reads, six steps, audience/structure, primary information and ready-to-generate
+  state. No console/page/network errors or application mutations. Screenshot inspected
+  at `.verification-files/production-smoke.png` (local, not committed).
+- New-deployment error logs over the next queried15-minute window:0. Drains and
+  continuous monitoring were not audited; this is a point-in-time check.
+- Supabase security advisor retains only the pre-existing leaked-password-protection
+  warning. The app does not currently use Supabase password Auth; before adopting it,
+  follow the [password security guidance](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
 
 ## Remaining Limits / Human Checks
 
