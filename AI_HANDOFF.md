@@ -5,8 +5,8 @@
 - Next owner: Claude Code
 - Loop: 9
 - Loop number inferred from: 前回Current ownerがCodexでClaude Codeへの引継ぎ後、Claudeによる新ループ完了記録はない。相沢様対応PR #42の追加検証・本番反映としてLoop 9を継続。
-- Phase: Handoff / Release awaiting connector confirmation
-- Last updated: 2026-11-09 23:00 +09:00
+- Phase: Handoff / Production released and verified
+- Last updated: 2026-11-09 23:20 +09:00
 
 ## 1. Current Goal
 ユーザーの最新指示により、厳格・敵対的検証、再現テスト、必要な修正、保護されたPR経由のmerge、本番Vercel反映までを実施する。
@@ -22,10 +22,13 @@
 - Final implementation head: `994b0445560b1c8112617bca32fd99d06d2a236d`
 - Merged main / last known good commit: `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`
 - PR #42: MERGED through protected squash merge; no direct main push or bypass.
+- Release-evidence PR: https://github.com/kotakase2022-jpg/aio/pull/43 (documentation only)
 - CodeRabbit OSS review status: 4fcb514の追加6 inline + 1 outside-diffを確認。6件修正、正本取得エラー時の古いsnapshotへのfallback提案1件はデータ保全のため不採用。根拠と再試行テストを記録。
 - Production at start: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`、runtime `742370e`
 - Production URL: https://aio-article-generator.vercel.app/
-- Release status: NOT YET DEPLOYED. Required CI and merge complete. Supabase connector apply_migration confirmation expired twice; migration list confirms no new migration. Do not deploy gateway/app before the migration succeeds.
+- Release status: DEPLOYED / READY. Main e150927 staged, browser-verified and promoted without rebuilding.
+- Production deployment: `dpl_ByP6QrgAv4ehCXL7ECP54PwfK5mS`, unique URL https://aio-article-generator-2ovfy85ge-sl2026.vercel.app, remote build 51s / Next16.4.5.
+- Supabase: remote migration `20261109140927_atomic_draft_save` maps to local `20261109125814_atomic_draft_save.sql`; gateway `aio-store` version5 ACTIVE. Existing custom token authentication and verify_jwt=false retained.
 
 ## 3. What Was Done
 - 必須文書、差分、PR、レビュー、現在のVercel本番コードを確認。相沢様の実ログ照合・8項目回答案は前回報告に保持。
@@ -46,6 +49,10 @@
 - 本番read-only smokeを追加し、アプリデータのmutationを遮断。`output/`、env、local data、test artifactsをVercelアップロードから除外。
 - PR #42を保護ルールのままsquash merge。PR CI run42628456722（3m26s）とmain CI run42629017490ともにPASS。
 - CodeRabbitの13スレッドはすべて解決。canonical fallback不採用はレビュアーも指摘を取り下げ。最新994b044の自動再レビューはOSS時間枠制限でNEUTRAL/skippingであり、再レビュー成功とは扱わない。
+- ユーザーの再提示依頼後、Supabase確認が承認されmigration適用成功。security invoker/fixed search_path/service_role専用EXECUTEを実DBで確認。
+- gateway v5反映、認証なしPOSTは401。恒久RPC適用後の実Supabase3テスト成功・cleanup完了。既存4テーブルの件数と内容fingerprintは変更前と同一。
+- main e150927をVercelへstage。Chrome既存GoogleログインでVercel認証を完了し、アプリログイン・6入力ステップ・BtoC/FAQ選択保持・生成可能状態・生成ログ20件表示を確認。
+- 同一buildを本番URLへpromote。canonicalの自動smokeはPASS、アプリmutationなし、console/page/networkエラー0。新deploymentの直近15分errorログ0。
 
 ## 4. Files Changed
 主な変更範囲：
@@ -66,7 +73,7 @@ AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に�
 - production Chromium E2E 56/56、Next 16.4.5 build 19 routes PASS。
 - 独立静的レビューで新たなblockerなし。ライブDBの証明とは区別する。
 - 最終CodeRabbit対応後のcombined quality PASS（544 tests、contract15、E2E56/56、build19 routes）。最新PR/main CIもPASS。
-- 本番migration/gateway/appはまだ未反映。MCP apply_migrationは2回とも確認期限切れで失敗。確認を回避する別経路への切替はしていない。
+- 本番migration/gateway/app反映完了。以前の確認期限切れは、ユーザー操作による確認承認で解消。確認迂回はしていない。
 - 実OpenAI文章・画像はPASS。WordPress実接続試験は専用sandbox不足で未実施。
 
 ## 6. Known Issues
@@ -78,6 +85,7 @@ AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に�
 - JS描画/ログイン必須/画像のみの参照ページは手動補足が必要。
 - 開発依存typescript-eslint/minimatch系moderate 8件が残る。npm audit fix --forceの破壊的downgradeは未実施。
 - 共通デモコードは既存仕様。ユーザー別データ分離を提供する認証ではない。
+- Supabase advisorは既存のLeaked Password Protection Disabled警告1件のみ。現在アプリはSupabaseパスワードAuthを使用しないが、導入時は https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection を確認する。
 
 ## 7. CodeRabbit Review
 - Review status: 4fcb514のCodeRabbitレビュー完了（13m41s）。994b044の再レビューはOSS時間枠上限でNEUTRAL/skipping。全13スレッド解決、最新required CI成功後にmerge。
@@ -98,29 +106,32 @@ AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に�
 - 中間full quality PASS: 510 tests、contract15、E2E54、build19 routes。
 - 先行full quality: PASS。535 tests、contract15、coverage S/B/F/L 87.27/77.96/92.60/87.99%、Chromium E2E56/56、Next 16.4.5 build19 routes。
 - 最終 `npm run quality`: PASS。54 test files / 544 tests、contract15、coverage S/B/F/L 87.37/78.19/92.61/88.08%、production Chromium E2E56/56、Next16.4.5 build19 routes。integrity59files、型/LintもPASS。
+- 本番反映後も同じ `npm run quality` を再実行して全項目PASS（544 tests/E2E56、coverage同値）。今回の追加差分はリリース証跡文書2ファイルのみ。
 - 最終追加回帰：リンク/長文抽出の修正前5 failed / 55 passed、修正後60/60 PASS。job JSON破損の修正前1 failed / 22 passed、修正後23/23 PASS。正本取得失敗と再試行1/1 PASS。
 - `npm run test:live:openai`: PASS、3種類の読者/構成を含む1契約、147.96秒。最終transportコードで再実行もPASS、156.75秒。
 - 期限超過復旧の修正前16 failed / 7 passed、修正後23/23、関連6 suites 53/53 PASS。
 - `npm run test:live:openai:image`: PASS、メモリ内PNG1枚、57.28秒、保存なし。
-- `npm run test:live:supabase`: 初期2/2 PASS。新RPCの恒久適用後に拡張3件を再実行する。
+- `npm run test:live:supabase`: 恒久RPC適用後3/3 PASS、3.27秒。無効画像時に本文・承認・画像・revisionが全てrollback、ジョブCRUD、画像置換/削除を実DBで確認しdisposable行をcleanup。
 - live PostgreSQL: BEGIN + migration + SQL fixture + ROLLBACK PASS。atomic rollback/CAS/role権限を確認。仮関数と行が残らないことも確認。
 - `npm audit --omit=dev`: PASS、0 vulnerabilities。full auditはdev moderate8件。
 - `test:live:readiness`: WordPressのみ未設定でFAIL。実WordPress成功とは報告しない。
 - `git diff --check`: PASS。
 - PR CI: https://github.com/kotakase2022-jpg/aio/actions/runs/42628456722 PASS。
 - main CI: https://github.com/kotakase2022-jpg/aio/actions/runs/42629017490 PASS。
-- Release command failure: Supabase `apply_migration` twice returned `status: expired` / confirmation expired. No SQL executed according to subsequent migration list. Cause: connector confirmation not completed within its window; not an SQL/test failure. Retry only with the confirmation UI accepted, then verify permanent RPC and run the guarded live suite.
-- Release未実施：恒久RPC適用、gateway deploy、拡張Supabase live3件、Vercel stage/promote、本番readonly smoke。現在本番は従来版のまま。
+- Historical release failure: Supabase確認2回期限切れ。ユーザー再依頼後の確認承認で成功し、migration履歴とRPC権限を再確認済み。
+- Stage smoke初回はVercel SSOへの302転送後200で失敗。OIDCの試行は403 TRUSTED_SOURCES_ENVIRONMENT_MISMATCH。Trusted Sourcesを拡張せず、Chromeの通常Vercelログインで検証した。一時スクリプト変更は取り消し、アプリコードの追加変更なし。
+- Vercel CLI curlは既存認証でproject用protection bypass tokenを自動作成した（秘密値の表示/commitなし）。scopeフラグをcurlへ誤転送するCLI挙動を避け、明示deployment URLとリンク済みprojectで401を確認。不要なら管理者がVercel設定でこの自動化tokenを失効できる。
+- Stage Chrome: 入力6段階・required情報・選択保持・ログ表示PASS、アプリ由来console error0。Vercelログイン画面のGoogle FedCM AbortError1件は別originの既存認証UIで発生し、アプリの失敗とは分離。
+- `node scripts/production-smoke.mjs` on canonical production: PASS。未認証API401、login、認証済みログ200、入力6段階、読者/構成、必須一次情報、generate enabled、console/page/network error0、mutation0。
+- `vercel inspect`でcanonicalがdpl_ByP6QrgAv4ehCXL7ECP54PwfK5mS / production / READYを指すことを確認。`vercel logs ... --level error --since 15m --no-branch` は該当ログ0。
 - Windows sandboxのSSR cache rename EPERMはテスト実行前の環境障害。同一検査を許可済みローカル環境で再実行し成功。
 - 復元E2EのlocalStorage即時判定は非同期処理を待たないテスト不備だったため同じ期待値のexpect.pollへ変更。テスト削除/skip/緩和なし。
 
 ## 10. Next Recommended Action
-1. PR #42/main e150927は既にmerge/CI成功済み。再マージ・main直pushは不要。
-2. ユーザーが確認UIを操作できる時にSupabase apply_migrationを再提示し、`supabase/migrations/20261109125814_atomic_draft_save.sql`を対象npdyfhqugniuxfxpgnghへ適用。期限切れを別経路で迂回しない。
-3. RPC権限を確認後、`supabase/functions/aio-store/index.ts`を同プロジェクトへdeploy。既存custom token認証とverify_jwt=falseを維持。
-4. `npm run test:live:supabase`（拡張3件）を許可済みdisposable手順で実行、cleanupと既存データ不変を確認。
-5. reviewed mainからVercel `deploy --prod --skip-domain --scope sl2026 --yes`、unique URLにreadonly smoke、同じbuildをpromote、canonical URLで再確認。プロジェクトprj_rIIxUXcj7bOgZMaKxUgHad353Dpf、team_CPnFJ0qkgljoSR97jIur7YNA。
-6. 本番deployment/commit/CI番号と検証結果でこの文書を更新する。
+1. 本番反映済み。PR #42/e150927を再deployしたりmigrationを重複適用したりする必要はない。remote/local migration番号の対応に注意。
+2. PR #43のリリース証跡をレビュー。実装レビューは#42のdiffと本報告を読む。文書のみのmergeにアプリ再deployは不要。
+3. 専用WordPress sandboxが用意されたら許可範囲を確認しlive media/post/delete契約テストを行う。本番WordPressをテスト投稿先にしない。
+4. 開発依存の互換更新、意味解析の限界、多人数同時編集のrevision管理は別タスク。現在の動作/UIを無関係に変更しない。
 
 ## 11. Suggested Review Scope for Claude Code
 - transactional saveの権限/rollback/画像所有関係。
@@ -134,7 +145,8 @@ AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に�
 - 公開前の数値/対象/期間/条件/例外/出典、医療・金融内容は人が確認する。
 - rollout時は旧WordPress投稿workerが完了してから更新する。旧バージョンは予約方式を使わない。
 - 新アプリはRPCがないと保存が失敗するためmigration/gatewayを先に反映する。
-- 反映直前の既存件数：article_inputs22（completed18/failed2/canceled2、active0）、article_drafts19、article_images33、wordpress_posts0。テスト前後の集計fingerprintも比較し、顧客データは変更しない。
+- 反映前後の既存件数・fingerprint一致：article_inputs22（completed18/failed2/canceled2、active0）、article_drafts19、article_images33、wordpress_posts0。顧客データは変更していない。
+- 設定済みdrainや長期監視は今回未監査。直近ログ0は継続的な無障害保証ではない。
 
 ## 13. Do Not Touch
 - env/keys/passwords/tokensを表示・commitしない。
