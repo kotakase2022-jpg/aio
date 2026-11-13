@@ -12,7 +12,7 @@
 11/11付の4項目（構成追加、表/補足FAQ選択、制作過程文言、一次情報の限定条件）を局所改修し、protected PR/CI、本番反映、本番確認まで行う。ユーザーが今回の本番反映を明示承認。既存記事変更、顧客WordPress公開、追加課金/権限拡大は禁止。
 
 ## 2. Current Branch / Commit / PR
-- Branch: `codex/aizawa-nov11-article-options`
+- Branch: `codex/aizawa-nov11-faq-preservation`
 - Latest commit at start / baseline: `749301de18e847c6de777f21c11743ec28562ae5`
 - Last known good production commit: `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/44
@@ -86,6 +86,7 @@
 - Final prompt CI43354358059 PASS at1d59a44. Merge blocked by newly arrived review: converted table-cell paragraphs split scope. Also rechecked CodeRabbit follow-up about non-FAQ none losing unmatched editor Q&A. Both reproduced (2failed/30passed), then fixed (98/98 targeted). Test fixture had an invalid top-level sources field, caught by typecheck and removed; full quality restarted with585 tests. Release still waits for final CI.
 - Production smoke/CI/review: pending, not counted as success.
 - Latest full quality after final review fixes: PASS (585 tests, contract15, E2E59, build19). Coverage S/B/F/L87.65/79.34/92.82/88.31%. Final live matrix8/8PASS in280.04s; 30.21-39.43s/article. No model instruction changes after that run, only covered HTML preservation fixes.
+- PR44 CI43355420330 PASS (4m15s), merged as dd5707dd1f07d80afec1ff331017642e53ca2421. Follow-up CodeRabbit comment arrived at merge: supplemental none + matching leftover faqItems still drops body answer. Reproduced1failed/32passed; retain unmanaged Q&A entirely when none. Separate follow-up PR required before production. No production release yet.
 
 ## 10. Next Recommended Action
 1. Commit scoped diff, create PR, obtain CodeRabbit/required CI. No protection bypass or direct main push.
