@@ -75,6 +75,7 @@ import { cn, joinCsv, splitCsv } from "@/lib/utils";
 import type {
   AttachedFileInput,
   ArticleStructure,
+  ArticleElementMode,
   ArticleDraft,
   ArticleFormPayload,
   ArticleGenerationResult,
@@ -182,6 +183,9 @@ export function ArticleGeneratorApp() {
   const [theme, setTheme] = useState("");
   const [audienceType, setAudienceType] = useState<AudienceType>("auto");
   const [articleStructure, setArticleStructure] = useState<ArticleStructure>("auto");
+  const [structureInstruction, setStructureInstruction] = useState("");
+  const [tableMode, setTableMode] = useState<ArticleElementMode>("auto");
+  const [supplementalFaqMode, setSupplementalFaqMode] = useState<ArticleElementMode>("auto");
   const [primaryInfoTypes, setPrimaryInfoTypes] = useState<PrimaryInformationType[]>([]);
   const [primaryInfo, setPrimaryInfo] = useState("");
   const [closingText, setClosingText] = useState("");
@@ -275,6 +279,9 @@ export function ArticleGeneratorApp() {
       theme,
       audienceType,
       articleStructure,
+      structureInstruction,
+      tableMode,
+      supplementalFaqMode,
       primaryInfoTypes,
       primaryInfo,
       closingText,
@@ -286,6 +293,9 @@ export function ArticleGeneratorApp() {
     [
       author,
       articleStructure,
+      structureInstruction,
+      tableMode,
+      supplementalFaqMode,
       audienceType,
       closingText,
       competitorFiles,
@@ -695,6 +705,9 @@ export function ArticleGeneratorApp() {
     setTheme(input.theme ?? "");
     setAudienceType(input.audienceType ?? "auto");
     setArticleStructure(input.articleStructure ?? "auto");
+    setStructureInstruction(input.structureInstruction ?? "");
+    setTableMode(input.tableMode ?? "auto");
+    setSupplementalFaqMode(input.supplementalFaqMode ?? "auto");
     setPrimaryInfoTypes(restoredPrimaryInfoTypes);
     setPrimaryInfo(input.primaryInfo ?? "");
     setClosingText(input.closingText ?? "");
@@ -1714,12 +1727,32 @@ export function ArticleGeneratorApp() {
                       <option value="textbook">教科書型</option>
                       <option value="faq">FAQ型</option>
                       <option value="case">ケース型</option>
+                      <option value="comparison">比較型</option>
+                      <option value="problem_solution">課題解決型</option>
                     </select>
                   </Field>
                 </div>
-                <p className="text-xs leading-5 text-slate-500">
-                  読者区分は語彙と判断材料、記事構成は本文の展開方法に反映します。
-                </p>
+                <Field label="構成方針（任意）">
+                  <Textarea data-testid="structure-instruction" aria-label="構成方針" value={structureInstruction}
+                    maxLength={2000} onChange={(event) => setStructureInstruction(event.target.value)}
+                    placeholder="例：必要書類・返済負担・資金が必要な時期で比較し、最後に選択基準を示す" />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="表">
+                    <select data-testid="table-mode-select" aria-label="表" value={tableMode}
+                      onChange={(event) => setTableMode(event.target.value as ArticleElementMode)}
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
+                      <option value="auto">自動</option><option value="on">あり</option><option value="none">なし</option>
+                    </select>
+                  </Field>
+                  <Field label="末尾の補足FAQ">
+                    <select data-testid="supplemental-faq-mode-select" aria-label="末尾の補足FAQ" value={supplementalFaqMode}
+                      onChange={(event) => setSupplementalFaqMode(event.target.value as ArticleElementMode)}
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
+                      <option value="auto">自動</option><option value="on">あり</option><option value="none">なし</option>
+                    </select>
+                  </Field>
+                </div>
                 {themeCandidateError ? (
                   <div
                     data-testid="theme-candidates-error"
@@ -3026,7 +3059,12 @@ function ArticlePreview({
         competitorTexts: collectDraftCompetitorTexts(draft),
         targetWordCount: draft.inputPayload.wordCount,
         audienceType: draft.inputPayload.audienceType,
-        articleStructure: draft.inputPayload.articleStructure,
+        articleStructure: draft.aiResult.resolved_article_structure ?? draft.inputPayload.articleStructure,
+        structureInstruction: draft.inputPayload.structureInstruction,
+        regenerationInstruction: draft.inputPayload.regenerationInstruction,
+        tableMode: draft.inputPayload.tableMode,
+        supplementalFaqMode: draft.inputPayload.supplementalFaqMode ?? (draft.aiResult.content_policy_version === 2 ? "auto" : undefined),
+        additionalPublicationTexts: [draft.editedTitle, draft.editedMetaDescription],
       }),
     [draft],
   );
@@ -3044,6 +3082,7 @@ function ArticlePreview({
     () =>
       evaluateFaqQuality({
         faqItems: draft.faqItems,
+        supplementalFaqMode: draft.inputPayload.supplementalFaqMode ?? (draft.aiResult.content_policy_version === 2 ? "auto" : undefined),
         themeText: draft.inputPayload.theme,
         primaryInfo: draft.inputPayload.primaryInfo,
         referenceTexts: collectDraftReferenceTexts(draft),
@@ -3351,8 +3390,14 @@ function ArticlePreview({
             </div>
           ) : null}
           <p className="mt-3 text-xs leading-5 text-slate-500">
-            FAQ重複、文字化け、未裏付け数値、条件の一般化、リンク、制作過程の文言を確認します。最終判断は編集者が行ってください。
+            FAQ重複、文字化け、未裏付け数値、条件の一般化、リンク、制作過程の文言を確認します。対象・前提・例外の意味が保たれているかは自動判定だけでは保証できません。要約・要点も含め、最終判断は編集者が行ってください。
           </p>
+          {draft.aiResult.editor_warnings?.length ? (
+            <details className="mt-3 text-xs text-amber-900" data-testid="generation-editor-warnings">
+              <summary>生成時の注意情報（編集後も原文照合用に保持）</summary>
+              <ul className="mt-2 list-disc space-y-1 pl-4">{draft.aiResult.editor_warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+            </details>
+          ) : null}
         </InfoPanel>
         <InfoPanel title="出典URL">
           <div className="space-y-2 text-sm">
@@ -3711,9 +3756,10 @@ function ArticleEditor({
       </div>
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-medium text-slate-700">FAQ</div>
+          <div className="text-sm font-medium text-slate-700">{draft.aiResult.content_policy_version === 2 || draft.inputPayload.supplementalFaqMode ? "末尾の補足FAQ" : "FAQ"}{draft.inputPayload.supplementalFaqMode === "none" ? "（なし）" : ""}</div>
           <Button
             data-testid="draft-faq-add-button"
+            disabled={draft.inputPayload.supplementalFaqMode === "none"}
             type="button"
             variant="secondary"
             size="sm"

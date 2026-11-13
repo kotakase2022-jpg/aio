@@ -4,6 +4,8 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createSampleDraft } from "../fixtures/article";
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
+import { deltaNov11Form } from "../fixtures/delta-nov11";
+import { buildDraftArticleHtml } from "@/lib/draft-html";
 
 let tempDir = "";
 const processEnvSnapshot = snapshotProcessEnv();
@@ -44,6 +46,20 @@ afterEach(async () => {
 });
 
 describe("WordPress connection and posting", () => {
+  test.each(["auto", "on", "none"] as const)("WordPress HTML equals preview for presentation %s", async (mode) => {
+    const { saveWordpressConnection, publishDraftToWordpress } = await import("@/lib/server/wordpress");
+    const connection = await saveWordpressConnection({ siteUrl: "https://wordpress.example.com", username: "editor", applicationPassword: "test-password" });
+    const draft = createSampleDraft({ status: "approved", categories: [], tags: [], images: [], author: {}, inputPayload: { ...deltaNov11Form, articleStructure: "faq", tableMode: mode, supplementalFaqMode: mode }, editedBodyHtml: '<h2>必要書類は？</h2><p>契約条件を確認します。</p><table><tr><td>返済負担</td></tr></table>' });
+    let content = "";
+    vi.stubGlobal("fetch", vi.fn(async (_url: string | URL, init?: RequestInit) => {
+      content = (JSON.parse(String(init?.body)) as { content: string }).content;
+      return Response.json({ id: 125, link: "https://wordpress.example.com/options" }, { status: 201 });
+    }));
+    await publishDraftToWordpress({ draft, connectionId: connection.id, status: "draft", origin: "http://localhost" });
+    expect(content).toBe(buildDraftArticleHtml(draft));
+    expect(content).toContain("必要書類は？");
+    if (mode === "none") expect(content).not.toMatch(/<table|aio-faq-block/);
+  });
   test("connect route returns Japanese validation details for missing application password", async () => {
     const { POST } = await import("@/app/api/wordpress/connect/route");
 

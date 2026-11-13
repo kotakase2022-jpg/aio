@@ -1,5 +1,7 @@
 import { sanitizeArticleHtml } from "@/lib/article-html";
-import { appendFaqBlockWhenNeeded } from "@/lib/draft-html";
+import { appendFaqBlockWhenNeeded, buildPresentedArticleBody } from "@/lib/draft-html";
+import { buildPresentationInstruction, convertTablesToProse, readArticleStructure, readElementMode, resolveArticleStructure } from "@/lib/article-presentation";
+import { evaluatePublicationReadiness } from "@/lib/publication-quality";
 import { articleGenerationSchema } from "@/lib/server/ai-schemas";
 import { createStructuredResponse } from "@/lib/server/openai";
 import { evaluateArticleQuality } from "@/lib/article-quality";
@@ -17,7 +19,6 @@ import { evaluateTitleQuality } from "@/lib/title-quality";
 import { compactOptionalText, truncateText } from "@/lib/utils";
 import type {
   ArticleGenerationResult,
-  ArticleStructure,
   AudienceType,
 } from "@/types/aio";
 
@@ -30,7 +31,7 @@ export type ArticleGenerationPayload = {
 
 const ARTICLE_GENERATION_TIMEOUT_MS = 150_000;
 
-export async function generateAioArticle(payload: ArticleGenerationPayload) {
+export async function generateAioArticle(payload: ArticleGenerationPayload): Promise<ArticleGenerationResult> {
   const compactPayload = {
     form: compactForm(payload.form),
     fetchedReferences: payload.fetchedReferences.slice(0, 8).map(compactFetchResult),
@@ -38,7 +39,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     competitorResearch: payload.competitorResearch,
   };
   const audienceInstruction = buildAudienceInstruction(compactPayload.form.audienceType);
-  const structureInstruction = buildStructureInstruction(compactPayload.form.articleStructure);
+  const structureInstruction = buildPresentationInstruction(compactPayload.form);
 
   const result = await createStructuredResponse<ArticleGenerationResult>({
     schemaName: "aio_article_generation",
@@ -71,7 +72,9 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "If a number appears because it is part of a keyword or category label, such as a reader segment or service name, make that role explicit near the phrase or attach the source/context that provided it. Do not let keyword numerals read like unsupported research findings.",
       "When reference URLs or source URLs are available, keep the actual URLs visible in body_html as source notes or links so the WordPress draft remains independently checkable after publishing.",
       "Return in sources only the URLs actually used to support a definition, claim, condition, or comparison in the article. Keep title, URL, and a reader-facing note about what the source supports; never put acquisition status or internal workflow notes in usage_notes.",
-      "Use faq_items as the single canonical FAQ source. Do not include an FAQ, よくある質問, Q&A, or duplicate question-and-answer section inside body_html. The application appends the edited faq_items exactly once for preview and publication.",
+      "Use faq_items as the single canonical FAQ source for supplemental questions. The main Q&A body for FAQ-type articles belongs in body_html; it is distinct from the optional supplemental FAQ. Never duplicate questions across these two locations.",
+      "Do not expose the production process: 入力元には省略区間があるため, 入力情報には具体的な料率の根拠がないため, 競合記事では相談先の種類を広く挙げていますが and similar acquisition, missing-input or competitor-analysis commentary must NOT occur in public fields. Keep unresolved evidence and truncation cautions in aio_score_self_evaluation.improvements for the editor. Reader-facing cautions may say 個別の契約条件を確認してください without referring to the input or drafting process. Keep legitimate source attribution and links.",
+      "Preserve scope independently in selected_title, meta_description, article_summary, key_takeaways, every table row, body paragraph and FAQ answer. A qualifier in another section does NOT cover a standalone summary or answer. Example: デルタのファクタリング相談では希望日の5営業日前 must never become a general financing deadline. Repeat デルタ and ファクタリング相談 near that figure, or omit the figure. Do not invent fees, success rates or durations. Clearly distinguish hypothetical examples from results.",
       "The first paragraph of body_html must be answer-first and include a definition or decision sentence using a natural Japanese form such as '...とは...を指します' when the topic allows it.",
       "Do not reuse the opening definition as the first H2/H3. After a definition-style opening, make the first heading a different editorial angle such as the reader's first decision, a failure pattern, a comparison axis, or an operational checkpoint.",
       "Write as a human editor who has interviewed the business: each major section should include at least one concrete decision criterion, field example, operational caveat, failure pattern, or source-backed detail.",
@@ -82,7 +85,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       "Make headings editorial and useful, not mechanical keyword strings. Vary sentence rhythm and endings so the body does not read like a template.",
       "Make title candidates specific and editorial. Avoid generic titles such as 重要なポイント, メリット, デメリット, まとめ, 概要, 基本, 活用方法, 注意点, 完全ガイド, 徹底解説, Best Practices, Strategy, Checklist, or Tips unless paired with a concrete reader decision, first-party insight, or comparison axis from the inputs.",
       "Make faq_items specific enough for publication. Avoid generic questions such as よくある質問, メリットは何ですか, 注意点は何ですか, AIOとは何ですか, AIOはなぜ重要ですか, AIOはどのように活用できますか, What is AIO?, Why is AIO important?, How does it work?, What are the benefits?, or What are the benefits of AIO? Avoid generic FAQ answer filler such as can help, helps improve, improve efficiency, should consider, recommended to, best practices, streamline, enhance productivity, or leverage unless the sentence includes a concrete condition, source boundary, field example, or decision criterion. Each answer should include a condition, decision criterion, field example, caveat, source note, cost/timing/team detail, or competitor comparison when available.",
-      "At least two FAQ items should visibly reuse concrete input terms from the theme, primaryInfo, references, or competitor material, but the answers must explain the terms through a decision, condition, caveat, field example, or source boundary.",
+      "When supplemental FAQ is needed, answer remaining reader questions with evidence and conditions, not keyword repetition. An empty faq_items array is correct when supplemental FAQ is none or unnecessary in automatic mode.",
       "Keep sentences short enough to read comfortably. Avoid single Japanese sentences over roughly 130 visible characters; split long sentences into conclusion, condition, exception, and example sentences.",
       "Do not start many consecutive sentences with the same connector such as また, さらに, そのため, 一方で, or このように. Mix short direct sentences, examples, conditions, and caveats instead.",
       "Do not overuse formulaic sentence openings such as 結論として, 具体的には, たとえば, 重要なのは, ポイントは, or 注意点は. Use direct editorial judgments, field observations, conditions, exceptions, and comparisons to vary paragraph openings.",
@@ -98,7 +101,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     ].join("\n"),
     input: JSON.stringify({
       task:
-        "AIO最適化済みの記事ドラフトを日本語で生成してください。payload.form.regenerationInstruction がある場合は、現在のフォーム入力とその再作成方針を使って全文を生成し直してください。payload.form.audienceType と payload.form.articleStructure を生成計画に反映してください。想定読者に役割名や職種名がある場合は、自然な言い換えを許容しつつ読者の立場と判断材料を本文へ反映してください。冒頭に結論または定義を置き、構成種別に合うH2/H3、箇条書き、必要な場合のみ表を使ってください。FAQはfaq_itemsだけに返し、body_htmlには入れないでください。各H2では、一次情報・参照情報・競合情報から得られる具体例、判断条件、注意点、失敗パターンのいずれかを入れてください。入力根拠にない数値は作らず、条件・対象・例外を一般化しないでください。body_htmlはHTML込みで9000文字以内に収め、JSONを必ず最後まで閉じてください。結び文章が入力されている場合は記事末尾に自然に反映してください。payload.form.wordCountをHTMLタグを除いた本文の目標文字数として扱い、目標の90〜110%を狙い、130%を超えないよう調整してください。payload.form.imageCountが0の場合はimage_promptsを空配列にし、1以上の場合はfeaturedから順に指定枚数分だけ返してください。",
+        "AIO記事を日本語で生成してください。現在のフォーム入力、structureInstruction、regenerationInstructionから全文生成します。想定読者に役割名や職種名がある場合は自然な言い換えで読者の立場を反映してください。読者・構成・tableMode・supplementalFaqModeを優先してください。FAQ型は本文そのものを質問H2と回答中心にし、faq_itemsは末尾の補足FAQだけに使用します。表・補足FAQは自動/あり/なしの指定に従い、なしなら生成しません。入力の条件・対象・例外は要約・要点・表・FAQでも保持し、制作過程の説明は編集者用improvementsにだけ記載してください。本文はHTML込み9000文字以内、表示文字数はwordCountを目標の90〜110%、上限130%とします。結び文章は自然に反映し、image_promptsはimageCount枚（0なら空配列）返してください。",
       payload: compactPayload,
     }),
     timeoutMs: ARTICLE_GENERATION_TIMEOUT_MS,
@@ -112,18 +115,22 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
     result.sources,
     [...compactPayload.fetchedReferences, ...compactPayload.fetchedCompetitors],
   );
+  const normalizedBody = compactPayload.form.tableMode === "none"
+    ? convertTablesToProse(result.body_html) : result.body_html;
+  const supplementalFaqItems = compactPayload.form.supplementalFaqMode === "none" ? [] : result.faq_items;
   const sanitizedBodyHtml = ensureGeneratedSourceUrls(
     ensureGeneratedBodyStructure(
-      appendFaqBlockWhenNeeded(sanitizeArticleHtml(result.body_html), []),
+      appendFaqBlockWhenNeeded(sanitizeArticleHtml(normalizedBody), []),
       result,
     ),
     sourceUrls,
   );
-  const finalHtmlForEvaluation = appendFaqBlockWhenNeeded(sanitizedBodyHtml, result.faq_items);
+  const finalHtmlForEvaluation = buildPresentedArticleBody(sanitizedBodyHtml, supplementalFaqItems, compactPayload.form, true);
+  const additionalPublicationTexts = [result.selected_title, result.meta_description, result.article_summary, ...result.key_takeaways];
   const qualityEvaluation = evaluateArticleQuality(finalHtmlForEvaluation, {
     primaryInfo:
-      typeof compactPayload.form.primaryInfo === "string"
-        ? compactPayload.form.primaryInfo
+      typeof payload.form.primaryInfo === "string"
+        ? payload.form.primaryInfo
         : undefined,
     closingText:
       typeof compactPayload.form.closingText === "string"
@@ -133,17 +140,22 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       typeof compactPayload.form.theme === "string" ? compactPayload.form.theme : undefined,
     targetReaderText: result.target_reader,
     searchIntentText: result.search_intent,
-    referenceTexts: collectReferenceTexts(compactPayload.form, compactPayload.fetchedReferences),
+    referenceTexts: collectReferenceTexts(payload.form, payload.fetchedReferences),
     sourceUrls,
     competitorTexts: collectCompetitorTexts(
-      compactPayload.form,
-      compactPayload.fetchedCompetitors,
-      compactPayload.competitorResearch,
+      payload.form,
+      payload.fetchedCompetitors,
+      payload.competitorResearch,
     ),
     targetWordCount:
       typeof compactPayload.form.wordCount === "number" ? compactPayload.form.wordCount : undefined,
     audienceType: readAudienceType(compactPayload.form.audienceType),
     articleStructure: readArticleStructure(compactPayload.form.articleStructure),
+    structureInstruction: compactPayload.form.structureInstruction,
+    regenerationInstruction: typeof compactPayload.form.regenerationInstruction === "string" ? compactPayload.form.regenerationInstruction : undefined,
+    tableMode: compactPayload.form.tableMode,
+    supplementalFaqMode: compactPayload.form.supplementalFaqMode,
+    additionalPublicationTexts,
   });
   const titleEvaluation = evaluateTitleQuality({
     selectedTitle: result.selected_title,
@@ -153,7 +165,8 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
       typeof compactPayload.form.primaryInfo === "string" ? compactPayload.form.primaryInfo : "",
   });
   const faqEvaluation = evaluateFaqQuality({
-    faqItems: result.faq_items,
+    faqItems: supplementalFaqItems,
+    supplementalFaqMode: compactPayload.form.supplementalFaqMode,
     themeText: typeof compactPayload.form.theme === "string" ? compactPayload.form.theme : "",
     primaryInfo:
       typeof compactPayload.form.primaryInfo === "string" ? compactPayload.form.primaryInfo : "",
@@ -193,6 +206,17 @@ export async function generateAioArticle(payload: ArticleGenerationPayload) {
 
   return {
     ...result,
+    content_policy_version: 2,
+    resolved_article_structure: resolveArticleStructure(compactPayload.form),
+    editor_warnings: uniqueItems([
+      ...result.aio_score_self_evaluation.improvements,
+      ...evaluatePublicationReadiness(finalHtmlForEvaluation, {
+        evidenceTexts: [typeof payload.form.primaryInfo === "string" ? payload.form.primaryInfo : "", ...collectReferenceTexts(payload.form, payload.fetchedReferences), ...collectCompetitorTexts(payload.form, payload.fetchedCompetitors, payload.competitorResearch)],
+        additionalTexts: additionalPublicationTexts,
+      }).issues.map((issue) => issue.detail),
+      ...(JSON.stringify(compactPayload).includes("[入力短縮:") ? ["入力の一部を短縮しました。省略部分を根拠にせず、数値・期間・対象・例外は原文と照合してください。"] : []),
+    ]),
+    faq_items: supplementalFaqItems,
     headings: normalizedHeadings,
     body_html: sanitizedBodyHtml,
     image_prompts: normalizedImagePrompts,
@@ -329,9 +353,17 @@ function compactForm(form: Record<string, unknown>) {
     ...form,
     references: compactTextInputs(form.references),
     competitors: compactTextInputs(form.competitors),
-    theme: typeof form.theme === "string" ? truncateText(form.theme, 1800) : form.theme,
+    theme: typeof form.theme === "string" ? truncateText(form.theme, 1800) : "",
     audienceType: readAudienceType(form.audienceType),
-    articleStructure: readArticleStructure(form.articleStructure),
+    articleStructure: resolveArticleStructure({
+      articleStructure: readArticleStructure(form.articleStructure),
+      theme: typeof form.theme === "string" ? form.theme : "",
+      structureInstruction: typeof form.structureInstruction === "string" ? form.structureInstruction : "",
+      regenerationInstruction: typeof form.regenerationInstruction === "string" ? form.regenerationInstruction : "",
+    }),
+    structureInstruction: typeof form.structureInstruction === "string" ? form.structureInstruction : "",
+    tableMode: readElementMode(form.tableMode),
+    supplementalFaqMode: readElementMode(form.supplementalFaqMode),
     primaryInfo:
       typeof form.primaryInfo === "string"
         ? compactEvidenceText(form.primaryInfo, 3600)
@@ -344,7 +376,7 @@ function compactForm(form: Record<string, unknown>) {
     regenerationInstruction:
       typeof form.regenerationInstruction === "string"
         ? compactOptionalText(form.regenerationInstruction, 1200)
-        : form.regenerationInstruction,
+        : undefined,
     visualTone: {
       ...visualTone,
       uploadedImageUrl: visualTone.uploadedImageUrl ? "[uploaded image]" : undefined,
@@ -659,10 +691,6 @@ function readAudienceType(value: unknown): AudienceType {
   return value === "btoc" || value === "btob" ? value : "auto";
 }
 
-function readArticleStructure(value: unknown): ArticleStructure {
-  return value === "textbook" || value === "faq" || value === "case" ? value : "auto";
-}
-
 function buildAudienceInstruction(value: unknown) {
   const audienceType = readAudienceType(value);
   if (audienceType === "btoc") {
@@ -672,18 +700,4 @@ function buildAudienceInstruction(value: unknown) {
     return "Audience plan: BtoB. Write for business owners or responsible staff and present decision conditions, alternatives, costs/timing when evidenced, risks, and operational cautions.";
   }
   return "Audience plan: infer BtoC or BtoB from the supplied target reader and topic. Do not default to BtoB; use vocabulary and decision support appropriate to the inferred reader.";
-}
-
-function buildStructureInstruction(value: unknown) {
-  const structure = readArticleStructure(value);
-  if (structure === "textbook") {
-    return "Structure plan: textbook. Explain the concept, available options, decision criteria, conditions, exceptions, and cautions systematically.";
-  }
-  if (structure === "faq") {
-    return "Structure plan: FAQ. Make faq_items the center of the published article. Keep body_html to a concise answer-first introduction and only the context needed to understand the questions; do not create a second FAQ section in body_html.";
-  }
-  if (structure === "case") {
-    return "Structure plan: case. Organize around a concrete situation, assumptions, options, and decision forks. If the case is not explicitly supplied as a real result, label it clearly as a hypothetical example and never present it as company performance.";
-  }
-  return "Structure plan: infer the most suitable textbook, FAQ, or case structure from the brief. Keep faq_items separate from body_html and do not force every article into the same explanatory template.";
 }

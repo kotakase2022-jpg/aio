@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { sampleArticleResult, sampleFormPayload } from "../fixtures/article";
+import { deltaNov11Form } from "../fixtures/delta-nov11";
 
 vi.mock("@/lib/server/openai", () => ({
   createStructuredResponse: vi.fn(),
@@ -8,6 +9,49 @@ vi.mock("@/lib/server/openai", () => ({
 describe("generateAioArticle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  test("retains model-only evidence cautions for editors before quality-list truncation", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    const caution = "入力情報には具体的な料率の根拠がないため、編集者が確認してください。";
+    vi.mocked(createStructuredResponse).mockResolvedValue({ ...sampleArticleResult, aio_score_self_evaluation: { ...sampleArticleResult.aio_score_self_evaluation, improvements: [caution] } });
+    const result = await generateAioArticle({ form: sampleFormPayload, fetchedReferences: [], fetchedCompetitors: [] });
+    expect(result.editor_warnings).toContain(caution);
+    expect(result.body_html).not.toContain(caution);
+  });
+
+  test("resolves a structure instruction before shortening a long theme", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValue(sampleArticleResult);
+    const result = await generateAioArticle({
+      form: { ...sampleFormPayload, articleStructure: "auto", theme: `${"背景情報。".repeat(500)}課題解決型で説明してください。` },
+      fetchedReferences: [], fetchedCompetitors: [],
+    });
+    expect(result.resolved_article_structure).toBe("problem_solution");
+    expect(vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0].instructions).toContain("Structure plan: problem_solution");
+  });
+
+  test.each(["auto", "on", "none"] as const)("propagates %s options on new generation and regeneration", async (mode) => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValue({ ...sampleArticleResult, body_html: '<h2>何を確認しますか？</h2><p>対象条件を確認します。</p><table><tr><td>返済負担</td></tr></table>', article_summary: "資金調達では希望日の5営業日前に相談します。" });
+    for (const regenerationInstruction of ["", "比較型で全文再作成。更新した一次情報を反映する"]) {
+      const form = { ...deltaNov11Form, articleStructure: "auto", tableMode: mode, supplementalFaqMode: mode, regenerationInstruction };
+      const result = await generateAioArticle({ form, fetchedReferences: [], fetchedCompetitors: [] });
+      const call = vi.mocked(createStructuredResponse).mock.calls.at(-1)?.[0];
+      expect(JSON.parse(call!.input).payload.form).toMatchObject({ tableMode: mode, supplementalFaqMode: mode, primaryInfo: deltaNov11Form.primaryInfo });
+      expect(result.content_policy_version).toBe(2);
+      expect(result.editor_warnings).toEqual(expect.arrayContaining([expect.stringContaining("5営業日")]));
+      if (regenerationInstruction) expect(result.resolved_article_structure).toBe("comparison");
+      if (mode === "none") {
+        expect(result.faq_items).toEqual([]);
+        expect(result.body_html).not.toContain("<table");
+      } else {
+        expect(result.faq_items).toEqual(sampleArticleResult.faq_items);
+      }
+    }
   });
 
   test("sanitizes unsafe HTML and returns zero image prompts when imageCount is 0", async () => {
@@ -127,7 +171,8 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("0-100 scale");
     expect(call?.instructions).toContain("not 8.6");
     expect(call?.instructions).toContain("single canonical FAQ source");
-    expect(call?.instructions).toContain("Do not include an FAQ");
+    // November 11: main-body Q&A is allowed; only supplemental FAQ is separate.
+    expect(call?.instructions).toContain("The main Q&A body for FAQ-type articles belongs in body_html");
     expect(input.payload.form.primaryInfo?.startsWith(" ")).toBe(false);
     expect(input.payload.form.primaryInfo).toContain("one-person contractors");
     expect(input.payload.form.primaryInfo).toContain("LINE");
@@ -360,8 +405,9 @@ describe("generateAioArticle", () => {
     expect(call?.instructions).toContain("enhance productivity");
     expect(call?.instructions).toContain("leverage");
     expect(call?.instructions).toContain("Each answer should include a condition");
-    expect(call?.instructions).toContain("At least two FAQ items");
-    expect(call?.instructions).toContain("concrete input terms");
+    // Supplemental FAQ is optional, so no unconditional minimum or keyword quota.
+    expect(call?.instructions).toContain("An empty faq_items array is correct");
+    expect(call?.instructions).toContain("answer remaining reader questions with evidence and conditions");
     expect(call?.instructions).toContain("Do not use vague heading patterns");
     expect(call?.instructions).toContain("Avoid thin H2/H3 sections");
     expect(call?.instructions).toContain("at least two concrete signals");

@@ -24,7 +24,9 @@ export type WordCount = 1000 | 2000 | 3000 | 4000 | 5000 | 6000;
 
 export type AudienceType = "auto" | "btoc" | "btob";
 
-export type ArticleStructure = "auto" | "textbook" | "faq" | "case";
+export type ArticleStructure = "auto" | "textbook" | "faq" | "case" | "comparison" | "problem_solution";
+
+export type ArticleElementMode = "auto" | "on" | "none";
 
 export type VisualToneInput = {
   mode: VisualToneMode;
@@ -116,6 +118,9 @@ export type ThemeCandidateResult = {
 };
 
 export type ArticleGenerationResult = {
+  content_policy_version?: 2;
+  resolved_article_structure?: ArticleStructure;
+  editor_warnings?: string[];
   title_candidates: string[];
   selected_title: string;
   meta_description: string;
@@ -177,6 +182,9 @@ export type ArticleFormPayload = {
   theme: string;
   audienceType?: AudienceType;
   articleStructure?: ArticleStructure;
+  structureInstruction?: string;
+  tableMode?: ArticleElementMode;
+  supplementalFaqMode?: ArticleElementMode;
   primaryInfoTypes?: import("@/lib/primary-information").PrimaryInformationType[];
   primaryInfo?: string;
   closingText: string;
