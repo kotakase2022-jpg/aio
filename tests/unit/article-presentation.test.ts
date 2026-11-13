@@ -132,6 +132,31 @@ describe("November 11 article presentation requirements", () => {
     expect(buildDraftArticleHtml(draft)).not.toContain("aio-faq-block");
   });
 
+  test("non-FAQ articles preserve unmatched editor Q&A even with supplemental FAQ disabled", () => {
+    const draft = createSampleDraft({
+      inputPayload: { ...sampleFormPayload, articleStructure: "comparison", supplementalFaqMode: "none" },
+      editedBodyHtml: "<h2>質問と回答</h2><h3>必要書類は？</h3><p>編集者が確定した本文回答。</p><section class=\"aio-faq-block\"><h2>FAQ</h2><p>旧補足回答。</p></section>",
+      faqItems: [],
+    });
+    const html = buildDraftArticleHtml(draft);
+    expect(html).toContain("編集者が確定した本文回答。");
+    expect(html).not.toMatch(/aio-faq-block|旧補足回答/);
+    expect(buildDraftArticleHtml({ ...draft, editedBodyHtml: html })).toBe(html);
+  });
+
+  test("table-to-prose keeps a valid row context with cell blocks and inline links", () => {
+    const draft = createSampleDraft({
+      inputPayload: { ...sampleFormPayload, tableMode: "none", supplementalFaqMode: "none" },
+      editedBodyHtml: '<table><tr><td><p>デルタの<a href="https://example.com/terms">ファクタリング相談</a></p></td><td><div><p>希望日の5営業日前に相談</p></div></td></tr></table>',
+      faqItems: [],
+    });
+    const html = buildDraftArticleHtml(draft);
+    expect(html).not.toContain("<table");
+    expect(html).toContain('href="https://example.com/terms"');
+    expect(evaluatePublicationReadiness(html, { evidenceTexts: [scopedEvidence] }).issues).toEqual([]);
+    expect(buildDraftArticleHtml({ ...draft, editedBodyHtml: html })).toBe(html);
+  });
+
   test.each(["auto", "none"] as const)("%s does not penalize missing tables or supplemental FAQ", (mode) => {
     const quality = evaluateArticleQuality("<h2>必要時期を確認する</h2><p>返済原資を整理します。</p><ul><li>書類を確認する</li></ul>", { tableMode: mode, supplementalFaqMode: mode });
     expect(quality.checks.filter((check) => ["comparison-table", "structured-elements"].includes(check.id)).every((check) => check.passed)).toBe(true);

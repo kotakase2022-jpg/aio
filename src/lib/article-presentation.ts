@@ -65,12 +65,19 @@ export function convertTablesToProse(html: string) {
   const $ = cheerio.load(html, null, false);
   // Keep cell content and links; the explicit 'none' preference removes the format,
   // not the evidence an editor may have entered in a table.
+  const inlineContent = (html: string) => {
+    const fragment = cheerio.load(html, null, false);
+    fragment("p, div, section, blockquote, ul, ol, li, h1, h2, h3, h4, h5, h6, br").toArray().reverse().forEach((block) => {
+      fragment(block).replaceWith(`${fragment(block).html() ?? ""} `);
+    });
+    return fragment.root().html()?.trim() ?? "";
+  };
   $("table").toArray().reverse().forEach((table) => {
     const caption = $(table).children("caption").html();
     const rows = $(table).find("tr").map((_, row) =>
-      `<p>${$(row).children("th, td").map((__, cell) => $(cell).html() ?? "").get().join(" / ")}</p>`,
+      `<p>${$(row).children("th, td").map((__, cell) => inlineContent($(cell).html() ?? "")).get().join(" / ")}</p>`,
     ).get().join("");
-    $(table).replaceWith(`<div class="aio-table-text">${caption ? `<p>${caption}</p>` : ""}${rows}</div>`);
+    $(table).replaceWith(`<div class="aio-table-text">${caption ? `<p>${inlineContent(caption)}</p>` : ""}${rows}</div>`);
   });
   return $.root().html() ?? "";
 }

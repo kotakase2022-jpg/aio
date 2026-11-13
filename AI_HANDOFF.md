@@ -45,7 +45,7 @@
 
 ## 5. Current Status
 - Local full quality PASS after review/case fixes: 583 tests, contract15, E2E59, build19 routes.
-- Real OpenAI initial matrix PASS; subsequent rerun 7/8, case structure failed. Case prompt corrected without loosening evaluation; final matrix rerun in progress. Release waits for it.
+- Real OpenAI initial matrix PASS; subsequent rerun 7/8, case structure failed. Case prompt corrected without loosening evaluation; final matrix 8/8 PASS in 280.04s.
 - Production release and disposable smoke pending. Do not report them completed yet.
 - No production writes so far; read-only row counts/fingerprints in the follow-up report.
 
@@ -83,7 +83,9 @@
 - Live rerun271.32s:7/8 PASS, case-type generated a normal comparison with a short late example. Preserved failure in ignored .verification-files/nov11-case-before-fix.json. Strengthened case plan to follow one explicitly hypothetical scenario across the whole article; no structure-test relaxation. Added prompt regression (red then green). Full quality after this change:583 tests/E2E59/build19 PASS, coverage unchanged87.63/79.38/92.80/88.30%.
 - PR second CI run43353618949 PASS at a8a31b4. Final case-only prompt commit requires its own CI before release.
 - PR initial CI run43351995407: PASS (4m14s). `npm audit --omit=dev`: PASS, 0 vulnerabilities. Local production-build Chrome screenshot checked (1440x1000).
+- Final prompt CI43354358059 PASS at1d59a44. Merge blocked by newly arrived review: converted table-cell paragraphs split scope. Also rechecked CodeRabbit follow-up about non-FAQ none losing unmatched editor Q&A. Both reproduced (2failed/30passed), then fixed (98/98 targeted). Test fixture had an invalid top-level sources field, caught by typecheck and removed; full quality restarted with585 tests. Release still waits for final CI.
 - Production smoke/CI/review: pending, not counted as success.
+- Latest full quality after final review fixes: PASS (585 tests, contract15, E2E59, build19). Coverage S/B/F/L87.65/79.34/92.82/88.31%. Final live matrix8/8PASS in280.04s; 30.21-39.43s/article. No model instruction changes after that run, only covered HTML preservation fixes.
 
 ## 10. Next Recommended Action
 1. Commit scoped diff, create PR, obtain CodeRabbit/required CI. No protection bypass or direct main push.

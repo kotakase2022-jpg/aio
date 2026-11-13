@@ -40,7 +40,7 @@ export function buildPresentedArticleBody(html: string, faqItems: FaqItem[], inp
   const canonicalItems = canonicalizeFaqItems(faqItems);
   const cleanBody = resolveArticleStructure(input) === "faq"
     ? withoutSupplement
-    : removeGeneratedFaqBlocks(withoutSupplement, canonicalItems, input.supplementalFaqMode !== "none");
+    : removeGeneratedFaqBlocks(withoutSupplement, canonicalItems, true);
   const mainQuestions = new Set(mainQuestionHeadings(cleanBody).map(normalizeFaqQuestion));
   const items = input.supplementalFaqMode === "none" ? [] : canonicalItems
     .filter((item) => !mainQuestions.has(normalizeFaqQuestion(item.question)));
