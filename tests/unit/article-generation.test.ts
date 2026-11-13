@@ -25,6 +25,16 @@ describe("generateAioArticle", () => {
     expect(result.body_html).toContain(sampleArticleResult.sources[0].url);
   });
 
+  test.each(["対象は既存会員のみです。", "対象は既存会員のみです。出典：https://example.com/terms"])("retains substantive text appended to a manual source note: %s", async (suffix) => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    const paragraph = `出典メモ：手動入力テキスト（manual-text）。${suffix}`;
+    vi.mocked(createStructuredResponse).mockResolvedValue({ ...sampleArticleResult, body_html: `<p>${paragraph}</p>` });
+    const result = await generateAioArticle({ form: sampleFormPayload, fetchedReferences: [], fetchedCompetitors: [] });
+    expect(result.body_html).toContain(suffix);
+    expect(result.editor_warnings).toEqual(expect.arrayContaining([expect.stringContaining("manual-text")]));
+  });
+
   test("retains model-only evidence cautions for editors before quality-list truncation", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");
