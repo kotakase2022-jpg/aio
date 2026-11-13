@@ -9,7 +9,10 @@ export const articleDraftSchema = z
     inputPayload: z.object({}).passthrough(),
     fetchedReferences: z.array(z.object({}).passthrough()).max(100),
     fetchedCompetitors: z.array(z.object({}).passthrough()).max(100),
-    competitorResearch: z.object({}).passthrough().optional(),
+    competitorResearch: z.preprocess(
+      (value) => value === null ? undefined : value,
+      z.object({}).passthrough().optional(),
+    ),
     aiResult: z.object({}).passthrough(),
     editedTitle: z.string().max(1000),
     editedSlug: z.string().max(500),
