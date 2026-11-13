@@ -1,4 +1,5 @@
 import { sanitizeArticleHtml } from "@/lib/article-html";
+import * as cheerio from "cheerio";
 import { appendFaqBlockWhenNeeded, buildPresentedArticleBody } from "@/lib/draft-html";
 import { buildPresentationInstruction, convertTablesToProse, readArticleStructure, readElementMode, resolveArticleStructure } from "@/lib/article-presentation";
 import { evaluatePublicationReadiness } from "@/lib/publication-quality";
@@ -41,7 +42,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload): Pro
   const audienceInstruction = buildAudienceInstruction(compactPayload.form.audienceType);
   const structureInstruction = buildPresentationInstruction(compactPayload.form);
 
-  const result = await createStructuredResponse<ArticleGenerationResult>({
+  const rawResult = await createStructuredResponse<ArticleGenerationResult>({
     schemaName: "aio_article_generation",
     schema: articleGenerationSchema,
     instructions: [
@@ -72,6 +73,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload): Pro
       "If a number appears because it is part of a keyword or category label, such as a reader segment or service name, make that role explicit near the phrase or attach the source/context that provided it. Do not let keyword numerals read like unsupported research findings.",
       "When reference URLs or source URLs are available, keep the actual URLs visible in body_html as source notes or links so the WordPress draft remains independently checkable after publishing.",
       "Return in sources only the URLs actually used to support a definition, claim, condition, or comparison in the article. Keep title, URL, and a reader-facing note about what the source supports; never put acquisition status or internal workflow notes in usage_notes.",
+      "sources.url must be a real absolute HTTP(S) URL. For manual input without a URL, do not invent placeholders such as manual-text, and do not write acquisition notes such as 出典メモ：手動入力テキスト in public fields. Attribute meaningful first-party facts to the business in natural prose; preserve private provenance concerns in improvements.",
       "Use faq_items as the single canonical FAQ source for supplemental questions. The main Q&A body for FAQ-type articles belongs in body_html; it is distinct from the optional supplemental FAQ. Never duplicate questions across these two locations.",
       "Do not expose the production process: 入力元には省略区間があるため, 入力情報には具体的な料率の根拠がないため, 競合記事では相談先の種類を広く挙げていますが and similar acquisition, missing-input or competitor-analysis commentary must NOT occur in public fields. Keep unresolved evidence and truncation cautions in aio_score_self_evaluation.improvements for the editor. Reader-facing cautions may say 個別の契約条件を確認してください without referring to the input or drafting process. Keep legitimate source attribution and links.",
       "Preserve scope independently in selected_title, meta_description, article_summary, key_takeaways, every table row, body paragraph and FAQ answer. A qualifier in another section does NOT cover a standalone summary or answer. Example: デルタのファクタリング相談では希望日の5営業日前 must never become a general financing deadline. Repeat デルタ and ファクタリング相談 near that figure, or omit the figure. Do not invent fees, success rates or durations. Clearly distinguish hypothetical examples from results.",
@@ -107,6 +109,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload): Pro
     timeoutMs: ARTICLE_GENERATION_TIMEOUT_MS,
     maxOutputTokens: 16_000,
   });
+  const { result, sourceWarnings } = normalizeGeneratedSources(rawResult);
   const normalizedHeadings = result.headings.filter(
     (heading) => !isManagedFaqHeading(heading.text),
   );
@@ -209,6 +212,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload): Pro
     content_policy_version: 2,
     resolved_article_structure: resolveArticleStructure(compactPayload.form),
     editor_warnings: uniqueItems([
+      ...sourceWarnings,
       ...result.aio_score_self_evaluation.improvements,
       ...evaluatePublicationReadiness(finalHtmlForEvaluation, {
         evidenceTexts: [typeof payload.form.primaryInfo === "string" ? payload.form.primaryInfo : "", ...collectReferenceTexts(payload.form, payload.fetchedReferences), ...collectCompetitorTexts(payload.form, payload.fetchedCompetitors, payload.competitorResearch)],
@@ -240,6 +244,28 @@ export async function generateAioArticle(payload: ArticleGenerationPayload): Pro
       ]).slice(0, 12),
     },
   } satisfies ArticleGenerationResult;
+}
+
+function normalizeGeneratedSources(raw: ArticleGenerationResult) {
+  const sourceWarnings: string[] = [];
+  const sources = raw.sources.filter((source) => {
+    try {
+      const url = new URL(source.url);
+      if (url.protocol === "http:" || url.protocol === "https:") return true;
+    } catch { /* Non-URL provenance belongs in editor warnings, not public links. */ }
+    sourceWarnings.push(`出典URLとして使用できない生成情報（原文確認が必要）: ${source.title} / ${source.url} / ${source.usage_notes}`);
+    return false;
+  });
+  const $ = cheerio.load(raw.body_html, null, false);
+  $("p").each((_, element) => {
+    const text = $(element).text().trim();
+    // Only a known acquisition-only placeholder note; never remove real citations.
+    if (!$(element).find("a").length && /^出典メモ[：:]\s*手動入力テキスト[（(]manual-text[）)]/.test(text)) {
+      sourceWarnings.push(text);
+      $(element).remove();
+    }
+  });
+  return { result: { ...raw, sources, body_html: $.root().html() ?? "" }, sourceWarnings };
 }
 
 export function normalizeSelfEvaluationScore(score: number) {

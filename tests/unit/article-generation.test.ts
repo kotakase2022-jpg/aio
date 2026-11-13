@@ -11,6 +11,20 @@ describe("generateAioArticle", () => {
     vi.clearAllMocks();
   });
 
+  test("keeps manual source identifiers and acquisition notes private while retaining valid citations", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    const note = "出典メモ：手動入力テキスト（manual-text）は、融資とファクタリングの比較軸を整理するために参照しました。";
+    const source = { title: "手動入力テキスト", url: "manual-text", usage_notes: "比較軸の整理" };
+    vi.mocked(createStructuredResponse).mockResolvedValue({ ...sampleArticleResult, sources: [...sampleArticleResult.sources, source], body_html: `${sampleArticleResult.body_html}<p>${note}</p><p>顧客の手動入力テキストを分析する業務です。</p>` });
+    const result = await generateAioArticle({ form: sampleFormPayload, fetchedReferences: [], fetchedCompetitors: [] });
+    expect(result.sources).toEqual(sampleArticleResult.sources);
+    expect(result.body_html).not.toContain("manual-text");
+    expect(result.body_html).toContain("顧客の手動入力テキストを分析する業務です。");
+    expect(result.editor_warnings).toEqual(expect.arrayContaining([expect.stringContaining(note), expect.stringContaining("manual-text")]));
+    expect(result.body_html).toContain(sampleArticleResult.sources[0].url);
+  });
+
   test("retains model-only evidence cautions for editors before quality-list truncation", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");
