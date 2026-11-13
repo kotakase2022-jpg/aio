@@ -6,7 +6,7 @@
 - Loop: 9
 - Loop number inferred from: 前回Codexからの引継ぎ後、Claude完了の新記録はない。相沢様11/11追加指摘へのフォローアップとしてLoop9を継続。旧作業はdocs/adversarial-verification-2026-11-09.mdとgit履歴に保持。
 - Phase: Development / PR and release verification
-- Last updated: 2026-11-13 11:23 +09:00
+- Last updated: 2026-11-13 11:38 +09:00
 
 ## 1. Current Goal
 11/11付の4項目（構成追加、表/補足FAQ選択、制作過程文言、一次情報の限定条件）を局所改修し、protected PR/CI、本番反映、本番確認まで行う。ユーザーが今回の本番反映を明示承認。既存記事変更、顧客WordPress公開、追加課金/権限拡大は禁止。
@@ -15,8 +15,8 @@
 - Branch: `codex/aizawa-nov11-article-options`
 - Latest commit at start / baseline: `749301de18e847c6de777f21c11743ec28562ae5`
 - Last known good production commit: `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`
-- PR: not created yet; implementation and local quality complete
-- CodeRabbit OSS review status: pending new PR
+- PR: https://github.com/kotakase2022-jpg/aio/pull/44
+- CodeRabbit OSS review status: dc45267 reviewed, 7 findings fixed with reproduction tests; follow-up review is subject to OSS hourly allowance (no paid review requested).
 - Production URL: https://aio-article-generator.vercel.app/
 - Current production / rollback: `dpl_ByP6QrgAv4ehCXL7ECP54PwfK5mS`, https://aio-article-generator-2ovfy85ge-sl2026.vercel.app (READY confirmed this turn)
 - Intended team/project: `sl2026` / `aio-article-generator` / `prj_rIIxUXcj7bOgZMaKxUgHad353Dpf`
@@ -44,7 +44,7 @@
 - AGENTS.md/CLAUDE.md already match current operating rules; no unnecessary edits.
 
 ## 5. Current Status
-- Local full quality PASS for final implementation: 575 tests, contract15, E2E59, build19 routes.
+- Local full quality PASS after review fixes: 582 tests, contract15, E2E59, build19 routes.
 - Real OpenAI eight-case matrix PASS; not evidence about all customer inputs.
 - Production release and disposable smoke pending. Do not report them completed yet.
 - No production writes so far; read-only row counts/fingerprints in the follow-up report.
@@ -58,11 +58,11 @@
 - User-owned untracked `output/` remains untouched.
 
 ## 7. CodeRabbit Review
-- Review status: pending PR
-- Critical findings: not yet reviewed for this change
-- Resolved findings: none yet
-- Deferred findings: none yet
-- False positives / not applicable: none yet
+- Review status: CodeRabbit dc45267 completed (9m30s). GitHub既存Codex自動レビューの2指摘はCodeRabbitの表関連指摘と重複。
+- Critical findings: no security/permission issue identified.
+- Resolved findings: 7件すべて実装対応。否定構成指定、caption条件/出典保持、新FAQ型の本文必須、補足FAQを比較軸から除外、編集済みQ&A保持、表セル内段落の文脈維持、モデル固有注意の非公開表示保持。
+- Deferred findings: none. Follow-up automatic review may be unavailable because the one included hourly review was consumed; no billing/plan change.
+- False positives / not applicable: none. Review replies/resolutions pending push of fixes.
 
 ## 8. Optional Bugbot Findings
 - Status: Not run
@@ -78,6 +78,9 @@
 - Old prompt expectations updated for new FAQ-body/optional-supplement specification. No test deletion/skip/threshold relaxation.
 - Windows sandbox EPERM on SSR cache rename before execution; permitted local rerun passed.
 - `git diff --check`: PASS.
+- Review fixes full `npm.cmd run quality`: PASS, 582 tests / contract15 / E2E59 / build19; coverage S/B/F/L87.63/79.38/92.80/88.30%.
+- Review reproductions: table2 failed/23passed, editor-Q&A2 failed/25passed, remaining3 failed/65passed; all fixed. Additional targeted suites158/158 PASS.
+- PR initial CI run43351995407: PASS (4m14s). `npm audit --omit=dev`: PASS, 0 vulnerabilities. Local production-build Chrome screenshot checked (1440x1000).
 - Production smoke/CI/review: pending, not counted as success.
 
 ## 10. Next Recommended Action

@@ -13,8 +13,9 @@ export type ArticlePresentation = {
 export function resolveArticleStructure(input: ArticlePresentation): ArticleStructure {
   if (input.articleStructure && input.articleStructure !== "auto") return input.articleStructure;
   // The dedicated brief takes precedence over the broader theme in automatic mode.
-  for (const text of [input.structureInstruction, input.regenerationInstruction, input.theme]) {
-    if (!text) continue;
+  for (const instruction of [input.structureInstruction, input.regenerationInstruction, input.theme]) {
+    if (!instruction) continue;
+    const text = instruction.replace(/(?:課題解決型|問題解決型|比較型|FAQ型|Q\s*&\s*A型|ケース型|教科書型)\s*(?:ではなく|ではない|でなく|じゃなく|にしない|を避け|を除く|以外|は不要)/gi, "");
     if (/課題解決型|問題解決型|problem[ _-]solution/i.test(text)) return "problem_solution";
     if (/比較型|comparison/i.test(text)) return "comparison";
     if (/FAQ型|Q\s*&\s*A(?:型|中心)|質問と回答を中心/i.test(text)) return "faq";
@@ -65,10 +66,11 @@ export function convertTablesToProse(html: string) {
   // Keep cell content and links; the explicit 'none' preference removes the format,
   // not the evidence an editor may have entered in a table.
   $("table").toArray().reverse().forEach((table) => {
+    const caption = $(table).children("caption").html();
     const rows = $(table).find("tr").map((_, row) =>
       `<p>${$(row).children("th, td").map((__, cell) => $(cell).html() ?? "").get().join(" / ")}</p>`,
     ).get().join("");
-    $(table).replaceWith(`<div class="aio-table-text">${rows}</div>`);
+    $(table).replaceWith(`<div class="aio-table-text">${caption ? `<p>${caption}</p>` : ""}${rows}</div>`);
   });
   return $.root().html() ?? "";
 }

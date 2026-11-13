@@ -235,6 +235,10 @@ function detectNumericIssues(html: string, evidenceTexts: string[]): Publication
   // Keep row context together, but never borrow a qualifier from a different
   // paragraph, FAQ answer or table row merely because markup has no whitespace.
   $("br").replaceWith("\n");
+  $("tr").toArray().reverse().forEach((row) => {
+    const rowText = $(row).children("th, td").map((_, cell) => cleanText($(cell).text())).get().join(" ");
+    $(row).empty().append($("<td>").text(rowText));
+  });
   $("p, li, tr, h1, h2, h3, h4, h5, h6, section, div").append("\n");
   $("th, td").append(" ");
   const articleText = $.root().text().replace(/https?:\/\/\S+/g, " ");

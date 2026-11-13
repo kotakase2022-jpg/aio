@@ -85,7 +85,10 @@ try {
   assert.equal(draft.aiResult.content_policy_version, 2);
   assert.equal(draft.inputPayload.tableMode, "none");
   assert.equal(draft.inputPayload.supplementalFaqMode, "none");
+  // Private model cautions are intentionally retained; public-content issues must be zero below.
+  assert.ok(Array.isArray(draft.aiResult.editor_warnings));
   await expect(page.getByRole("article")).toContainText(draft.editedTitle);
+  await expect(page.getByTestId("publication-readiness-issue")).toHaveCount(0);
   await page.getByRole("button", { name: "編集", exact: true }).click();
   const editMarker = "検証用の編集保存確認。契約条件は個別に確認してください。";
   await page.getByTestId("draft-body-html-textarea").fill(`${draft.editedBodyHtml}<p>${editMarker}</p>`);
@@ -114,8 +117,8 @@ try {
   const exportPath = path.join(directory, "article.html");
   await download.saveAs(exportPath);
   const exported = load(await readFile(exportPath, "utf8"));
-  exported("body > h1").remove();
-  assert.equal(normalize(exported("body").html()), normalize(copied));
+  exported("article > h1").remove();
+  assert.equal(normalize(exported("article").html()), normalize(copied));
   await page.screenshot({ path: path.join(directory, "preview.png"), fullPage: true });
   await step("theme");
   await expect(page.getByTestId("article-structure-select")).toHaveValue("comparison");
@@ -125,6 +128,9 @@ try {
   record.result = "PASS";
   record.completedAt = new Date().toISOString();
   console.log(JSON.stringify(record));
+} catch (error) {
+  record.result = "FAIL";
+  throw error;
 } finally {
   await persist();
   await browser.close();

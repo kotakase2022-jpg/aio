@@ -209,6 +209,7 @@ export async function generateAioArticle(payload: ArticleGenerationPayload): Pro
     content_policy_version: 2,
     resolved_article_structure: resolveArticleStructure(compactPayload.form),
     editor_warnings: uniqueItems([
+      ...result.aio_score_self_evaluation.improvements,
       ...evaluatePublicationReadiness(finalHtmlForEvaluation, {
         evidenceTexts: [typeof payload.form.primaryInfo === "string" ? payload.form.primaryInfo : "", ...collectReferenceTexts(payload.form, payload.fetchedReferences), ...collectCompetitorTexts(payload.form, payload.fetchedCompetitors, payload.competitorResearch)],
         additionalTexts: additionalPublicationTexts,

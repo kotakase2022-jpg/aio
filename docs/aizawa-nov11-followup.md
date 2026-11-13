@@ -35,6 +35,11 @@
 - 新E2E初回は、保存記事の復元を自動localStorage復元と誤認して失敗。仕様通り生成ログから開く操作へ修正。エラー集計関数の呼び出し漏れも修正。アプリの失敗をmock成功に置換したものではない。
 - Windows sandboxではSSR cache rename EPERMがテスト開始前に発生。許可済み通常ローカル環境で再実行。
 - 中間 `npm run quality`: PASS（574 tests、contract15、E2E59、build19 routes）。最終結果はhandoffに記録する。
+- 次の全検査も575 tests/E2E59でPASS。PR #44の初回CIは4m14sでPASS。
+- GitHubの既存Codex自動レビューで表セル内段落の誤警告とキャプション喪失を指摘。修正前2 failed/23 passedを確認し、行内のブロックを同じ文脈として扱い、文章変換時もキャプションの条件・リンクを保持するよう修正。関連51 tests PASS。
+- `npm audit --omit=dev`: 0 vulnerabilities。PC1440x1000のローカル本番ビルド画面を確認。
+- CodeRabbit初回レビュー9分30秒、指摘7件を全対応。否定された構成名の除外、caption保持、旧記事だけにFAQ互換判定を限定、比較/課題解決の判定から補助ブロックを除外、編集済みQ&A保持、表行文脈保持、モデル固有注意を切捨て前に非公開表示へ保持。再現失敗後に修正済み。
+- レビュー対応後 `npm run quality`: 582 tests、contract15、E2E59、build19 routesすべてPASS。coverage S/B/F/L87.63/79.38/92.80/88.30%。CodeRabbitの無料時間枠を使い切ったため、有料枠は追加しない。
 
 ### 実OpenAI生成
 

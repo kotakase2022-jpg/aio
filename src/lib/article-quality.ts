@@ -643,6 +643,7 @@ export function evaluateArticleQuality(
   });
   const structureFit = evaluateStructureFit({
     articleStructure: resolveArticleStructure({ ...context, theme: context.themeText }),
+    allowLegacyFaqBody: context.supplementalFaqMode === undefined,
     html,
     text,
     headings,
@@ -1226,6 +1227,7 @@ function evaluateAudienceFit({
 
 function evaluateStructureFit({
   articleStructure,
+  allowLegacyFaqBody,
   html,
   text,
   headings,
@@ -1234,6 +1236,7 @@ function evaluateStructureFit({
   hasTable,
 }: {
   articleStructure?: ArticleStructure;
+  allowLegacyFaqBody: boolean;
   html: string;
   text: string;
   headings: string[];
@@ -1250,7 +1253,7 @@ function evaluateStructureFit({
     const mainQuestions = mainQuestionHeadings(html).length;
     const mainHeadingCount = extractHeadings(removeAuxiliaryQualityHtml(html)).length;
     const passed = mainQuestions >= 3 && mainQuestions >= Math.ceil(mainHeadingCount / 2)
-      || faqItemCount >= 3 && mainHeadingCount <= 1;
+      || allowLegacyFaqBody && faqItemCount >= 3 && mainHeadingCount <= 1;
     return {
       id: "article-structure-faq",
       label: "FAQ型への適合",
@@ -1263,17 +1266,19 @@ function evaluateStructureFit({
   }
 
   if (articleStructure === "comparison") {
-    const axes = headings.filter((heading) => /比較|選|条件|基準|負担|費用|書類|時期|速度|リスク|期間|返済|手数料/.test(heading));
-    const passed = axes.length >= 2 && /場合|向いて|適し|選|判断/.test(text);
+    const mainBody = removeAuxiliaryQualityHtml(html);
+    const axes = extractHeadings(mainBody).filter((heading) => /比較|選|条件|基準|負担|費用|書類|時期|速度|リスク|期間|返済|手数料/.test(heading));
+    const passed = axes.length >= 2 && /場合|向いて|適し|選|判断/.test(stripHtml(mainBody));
     return { id: "article-structure-comparison", label: "比較型への適合", passed,
       detail: passed ? "複数の比較軸と選択基準が記事全体に示されています。" : "表だけでなく、複数の見出しで同じ比較軸による選択肢と選択基準を説明してください。" };
   }
 
   if (articleStructure === "problem_solution") {
+    const mainHeadings = extractHeadings(removeAuxiliaryQualityHtml(html));
     const stages = [/問題|課題|困|不足|悩|支払/, /原因|背景|なぜ|要因/, /対処|対策|方法|解消|対応|手段/, /判断|基準|選|見極/, /行動|相談|準備|次|始め|確認/];
     let position = -1;
     const passed = stages.every((stage) => {
-      const found = headings.findIndex((heading, index) => index > position && stage.test(heading));
+      const found = mainHeadings.findIndex((heading, index) => index > position && stage.test(heading));
       if (found < 0) return false;
       position = found;
       return true;

@@ -11,6 +11,16 @@ describe("generateAioArticle", () => {
     vi.clearAllMocks();
   });
 
+  test("retains model-only evidence cautions for editors before quality-list truncation", async () => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    const caution = "入力情報には具体的な料率の根拠がないため、編集者が確認してください。";
+    vi.mocked(createStructuredResponse).mockResolvedValue({ ...sampleArticleResult, aio_score_self_evaluation: { ...sampleArticleResult.aio_score_self_evaluation, improvements: [caution] } });
+    const result = await generateAioArticle({ form: sampleFormPayload, fetchedReferences: [], fetchedCompetitors: [] });
+    expect(result.editor_warnings).toContain(caution);
+    expect(result.body_html).not.toContain(caution);
+  });
+
   test("resolves a structure instruction before shortening a long theme", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");

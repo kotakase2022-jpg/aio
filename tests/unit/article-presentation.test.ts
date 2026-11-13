@@ -23,6 +23,24 @@ describe("November 11 article presentation requirements", () => {
     expect(quality.checks.find((check) => check.id === "article-structure-comparison")?.passed).toBe(true);
   });
 
+  test("automatic structure ignores explicitly negated formats", () => {
+    expect(resolveArticleStructure({ structureInstruction: "比較型ではなくFAQ型にしてください" })).toBe("faq");
+    expect(resolveArticleStructure({ theme: "課題解決型を避け、ケース型で" })).toBe("case");
+    expect(resolveArticleStructure({ structureInstruction: "FAQ型にしない" })).toBe("auto");
+  });
+
+  test("supplemental questions cannot establish new FAQ or comparison structure", () => {
+    const html = buildDraftArticleHtml(createSampleDraft({
+      editedBodyHtml: "<h2>概要</h2><p>条件で判断します。</p>",
+      faqItems: [{ question: "費用は？", answer: "個別条件次第です。" }, { question: "必要書類は？", answer: "契約前に確認します。" }, { question: "返済負担は？", answer: "比較して選びます。" }],
+    }));
+    for (const articleStructure of ["faq", "comparison"] as const) {
+      const check = evaluateArticleQuality(html, { articleStructure, supplementalFaqMode: "on" }).checks.find((item) => item.id === `article-structure-${articleStructure}`);
+      expect(check?.passed).toBe(false);
+    }
+    expect(evaluateArticleQuality(html, { articleStructure: "faq" }).checks.find((item) => item.id === "article-structure-faq")?.passed).toBe(true);
+  });
+
   test("a table alone is not a comparison article and a closing FAQ is not a Q&A article", () => {
     expect(evaluateArticleQuality("<h2>概要</h2><table><tr><td>比較</td></tr></table>", { articleStructure: "comparison" }).checks.find((check) => check.id === "article-structure-comparison")?.passed).toBe(false);
     const body = "<h2>説明</h2><p>解説。</p><h2>概要</h2><p>解説。</p><h2>詳細</h2>";
@@ -88,6 +106,25 @@ describe("November 11 article presentation requirements", () => {
     expect(buildDraftArticleHtml({ ...draft, editedBodyHtml: html })).toBe(html);
   });
 
+  test("preserves editor-added questions that have no supplemental counterpart", () => {
+    const draft = createSampleDraft({
+      inputPayload: { ...sampleFormPayload, supplementalFaqMode: "auto" },
+      editedBodyHtml: "<h2>FAQ</h2><h3>編集者だけが追加した質問ですか？</h3><p>編集済みの固有回答。</p>",
+      faqItems: [],
+    });
+    expect(buildDraftArticleHtml(draft)).toContain("編集済みの固有回答。");
+  });
+
+  test("FAQ-type main body remains when the editor groups questions under Q&A", () => {
+    const draft = createSampleDraft({
+      inputPayload: { ...sampleFormPayload, articleStructure: "faq", supplementalFaqMode: "none" },
+      editedBodyHtml: "<h2>Q&A</h2><h3>編集した本文質問ですか？</h3><p>主本文の回答は残します。</p>",
+      faqItems: [],
+    });
+    expect(buildDraftArticleHtml(draft)).toContain("主本文の回答は残します。");
+    expect(buildDraftArticleHtml(draft)).not.toContain("aio-faq-block");
+  });
+
   test.each(["auto", "none"] as const)("%s does not penalize missing tables or supplemental FAQ", (mode) => {
     const quality = evaluateArticleQuality("<h2>必要時期を確認する</h2><p>返済原資を整理します。</p><ul><li>書類を確認する</li></ul>", { tableMode: mode, supplementalFaqMode: mode });
     expect(quality.checks.filter((check) => ["comparison-table", "structured-elements"].includes(check.id)).every((check) => check.passed)).toBe(true);
@@ -113,6 +150,26 @@ describe("November 11 article presentation requirements", () => {
   test("does not borrow scope from a different block", () => {
     const html = "<p>デルタのファクタリング相談について</p><h2>資金調達全般の目安</h2><p>希望日の5営業日前</p>";
     expect(evaluatePublicationReadiness(html, { evidenceTexts: [scopedEvidence] }).publishReady).toBe(false);
+  });
+
+  test("keeps one row context when table cells contain block markup", () => {
+    const html = "<table><tr><td><p>デルタのファクタリング相談</p></td><td><p>希望日の5営業日前に相談</p></td></tr></table>";
+    expect(evaluatePublicationReadiness(html, { evidenceTexts: [scopedEvidence] }).issues).toEqual([]);
+    const differentRows = "<table><tr><td><p>デルタのファクタリング相談</p></td></tr><tr><td><p>資金調達全般は5営業日前</p></td></tr></table>";
+    expect(evaluatePublicationReadiness(differentRows, { evidenceTexts: [scopedEvidence] }).publishReady).toBe(false);
+  });
+
+  test("table-to-prose retains caption conditions and source links", () => {
+    const draft = createSampleDraft({
+      inputPayload: { ...sampleFormPayload, tableMode: "none", supplementalFaqMode: "none" },
+      editedBodyHtml: '<table><caption>デルタのファクタリング相談に限る。<a href="https://example.com/conditions">適用条件</a></caption><tr><td>希望日の5営業日前</td></tr></table>',
+    });
+    const html = buildDraftArticleHtml(draft);
+    expect(html).not.toContain("<table");
+    expect(html).toContain("デルタのファクタリング相談に限る。");
+    expect(html).toContain('href="https://example.com/conditions"');
+    expect(html).toContain("希望日の5営業日前");
+    expect(buildDraftArticleHtml({ ...draft, editedBodyHtml: html })).toBe(html);
   });
 
   test("accepts the original scoped claim and preserves legitimate source commentary", () => {

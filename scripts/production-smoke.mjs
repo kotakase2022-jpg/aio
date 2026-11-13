@@ -71,6 +71,7 @@ try {
   await expect(page.getByTestId("article-structure-select")).toHaveValue("problem_solution");
   await expect(page.getByTestId("table-mode-select")).toHaveValue("none");
   await expect(page.getByTestId("supplemental-faq-mode-select")).toHaveValue("none");
+  await page.getByTestId("supplemental-faq-mode-select").scrollIntoViewIfNeeded();
   const directory = path.join(process.cwd(), ".verification-files");
   await mkdir(directory, { recursive: true });
   const screenshot = path.join(directory, "production-smoke.png");
