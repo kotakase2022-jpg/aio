@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import { normalizeFaqQuestion } from "@/lib/draft-html";
-import { canonicalSourceUrlKey } from "@/lib/source-url";
+import { canonicalSourceUrlKey, normalizeSourceUrl } from "@/lib/source-url";
 
 export type PublicationIssueSeverity = "blocker" | "warning";
 
@@ -215,7 +215,8 @@ function detectLinkIssues(html: string, requiredSourceUrls: string[]): Publicati
       .get()
       .filter(Boolean),
   );
-  for (const sourceUrl of requiredSourceUrls) {
+  // Manual/file provenance is evidence, but cannot require a public HTTP link.
+  for (const sourceUrl of requiredSourceUrls.map(normalizeSourceUrl).filter(Boolean)) {
     const key = canonicalSourceUrlKey(sourceUrl);
     if (key && !linkedSourceKeys.has(key)) {
       issues.push({

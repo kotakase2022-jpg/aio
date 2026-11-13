@@ -26,6 +26,8 @@ for (const mode of ["auto", "on", "none"] as const) {
     completed.draft!.images = [];
     completed.draft!.editedBodyHtml = '<h2>必要書類は？</h2><p>返済原資と売掛金を確認します。</p><h2>何を比較しますか？</h2><p>必要時期と負担を比べます。</p><h2>いつ相談しますか？</h2><p>個別条件を確認します。</p><table><tr><th>比較軸</th><td>返済負担</td></tr></table>';
     completed.draft!.faqItems = [{ question: "追加書類は？", answer: "契約条件を確認します。" }];
+    completed.draft!.aiResult.sources = [];
+    completed.draft!.fetchedReferences = [{ url: "manual-text", ok: true, sourceType: "manual", text: "返済原資と売掛金を確認します。" }];
     const calls = await mockCommonApiRoutes(page, completed);
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => localStorage.setItem("nov11-copy", text) } });
@@ -42,6 +44,7 @@ for (const mode of ["auto", "on", "none"] as const) {
     await page.getByTestId("supplemental-faq-mode-select").selectOption(mode);
     await page.getByTestId("article-primary-button").click();
     await expect(page.getByRole("article")).toContainText("必要書類は？");
+    await expect(page.getByTestId("publication-readiness-issue").filter({ hasText: "manual-text" })).toHaveCount(0);
     expect(calls.articleTableMode).toBe(mode);
     expect(calls.articleSupplementalFaqMode).toBe(mode);
     expect(calls.articleStructureInstruction).toBe("経営者が判断できる質問順");
@@ -67,6 +70,7 @@ for (const mode of ["auto", "on", "none"] as const) {
     await page.getByTestId("generation-logs-toggle").click();
     await page.getByTestId(`generation-log-open-${completed.id}`).click();
     await expect(page.getByRole("article")).toContainText("編集後の条件確認。");
+    await expect(page.getByTestId("publication-readiness-issue").filter({ hasText: "manual-text" })).toHaveCount(0);
     await page.getByTestId("article-primary-button").click();
     await page.getByTestId("article-regeneration-instruction").fill("現在の一次情報を使って全文を再作成");
     await page.getByTestId("article-regeneration-start").click();
