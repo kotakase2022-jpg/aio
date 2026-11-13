@@ -12,7 +12,7 @@
 11/11付の4項目（構成追加、表/補足FAQ選択、制作過程文言、一次情報の限定条件）を局所改修し、protected PR/CI、本番反映、本番確認まで行う。ユーザーが今回の本番反映を明示承認。既存記事変更、顧客WordPress公開、追加課金/権限拡大は禁止。
 
 ## 2. Current Branch / Commit / PR
-- Branch: `codex/aizawa-nov11-faq-preservation`
+- Branch: `codex/aizawa-internal-source-metadata`
 - Latest commit at start / baseline: `749301de18e847c6de777f21c11743ec28562ae5`
 - Last known good production commit: `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`
 - PR: https://github.com/kotakase2022-jpg/aio/pull/44
@@ -87,6 +87,10 @@
 - Production smoke/CI/review: pending, not counted as success.
 - Latest full quality after final review fixes: PASS (585 tests, contract15, E2E59, build19). Coverage S/B/F/L87.65/79.34/92.82/88.31%. Final live matrix8/8PASS in280.04s; 30.21-39.43s/article. No model instruction changes after that run, only covered HTML preservation fixes.
 - PR44 CI43355420330 PASS (4m15s), merged as dd5707dd1f07d80afec1ff331017642e53ca2421. Follow-up CodeRabbit comment arrived at merge: supplemental none + matching leftover faqItems still drops body answer. Reproduced1failed/32passed; retain unmanaged Q&A entirely when none. Separate follow-up PR required before production. No production release yet.
+- PR45 CI43356154031 PASS, merged c56a5f9. Full quality586/contract15/E2E59/build19 PASS. Final renderer replay of8 live artifacts9/9PASS. c56a5f9 promoted12:08 JST to dpl_CytsVri8oEtVPRW8qC1oUZ6pAs6q, read-only production smoke PASS.
+- Production disposable generation completed but smoke correctly FAILED on missing source link manual-text. Model invented a non-URL source placeholder and acquisition-only note. Own job454104b7-aacb-4d21-bb69-e502370c038d / draft62f62b95-057a-4f6a-9a5b-b523a6069e8e remain for exact-ID cleanup. Marker AIO-RELEASE-SMOKE-08c3240b-9b01-40c6-a6ca-ad75ab7f0106. No customer data changed. Added red/green regression1failed/39passed then139 related PASS; move invalid source metadata and this exact acquisition-only paragraph to private warnings, retain real citations/ordinary prose. Follow-up PR/full quality pending; do not report all production checks passed yet.
+- PR46 CI43358391758 PASS for initial source fix; additional review found mixed acquisition/factual paragraph loss. Reproduced2failed/40passed. Restrict automatic removal to acquisition-only full paragraph, keep mixed facts/URLs and flag them for editors. Cleanup confirmation expired, so first disposable rows remain (do not bypass confirmation). Full quality/release pending final fix.
+- CodeRabbit PR46 review8595ace completed5m44s and identified same-sentence condition loss. Removed variable-content deletion entirely: only content-free fixed acquisition phrases may be removed. Descriptive notes remain and are flagged, including the original production note. Corrected prior test expectation because it implicitly permitted fact loss; retained URL validation/private metadata assertions and added fixed-note vs same-sentence-condition cases. Recheck before release.
 
 ## 10. Next Recommended Action
 1. Commit scoped diff, create PR, obtain CodeRabbit/required CI. No protection bypass or direct main push.

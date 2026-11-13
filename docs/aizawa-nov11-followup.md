@@ -77,6 +77,8 @@ PR44の最終CI43355420330成功、dd5707dへマージ。ただしマージ時�
 - 実行前の読み取りfingerprint: article_inputs29/`379331e28ff23e21e7c632bb0419fa28`、article_drafts26/`1a9dbf1f1a7ead9b22f3c6488efc235a`、article_images47/`5426c49a4892f96552248716d1bf2a77`、wordpress_posts0/`d41d8cd98f00b204e9800998ecf8427e`、wordpress_connections2/`9de4ff8d11d15869f2cc958c4b43934e`。秘密値・本文は出力していない。
 - リリース日時・commit・PR・本番smoke結果は完了後に追記する。未実施の確認を成功扱いにしない。
 
+初回本番切替は11/13 12:08 JST、c56a5f9（PR45、CI43356154031成功）、dpl_CytsVri8oEtVPRW8qC1oUZ6pAs6q。読取smoke成功。ただし本番合成記事でAIがmanual-textを出典URLとして返し、公開前チェックが出典リンク不足を正しく検出したため、書込smokeは失敗扱い。型不正な出典と厳密に識別した取得メモを編集者向け注意へ保持する追加修正を別PRで実施。実在出典・通常本文は保持。再現1 failed/39 passed、修正後関連139 tests成功。最終本番再確認は未実施。
+
 ## 操作と残る人の確認
 
 1. テーマ欄で読者・構成・構成方針を指定する。矛盾する場合は明示的な構成選択が優先。

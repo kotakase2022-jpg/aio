@@ -121,6 +121,7 @@ function detectInternalProcessNotes(html: string): PublicationIssue[] {
   const text = visibleText(html);
   const hits = internalProcessNotes.filter((note) => text.includes(note));
   const processPatterns = [
+    /出典メモ[：:]\s*手動入力テキスト[（(]manual-text[）)]/g,
     /入力(?:元|情報|資料|データ|内容)[^。！？\n]{0,60}(?:省略|根拠がな|根拠はな|記載がな|記載されていな)/g,
     /競合記事では[^。！？\n]{0,100}(?:挙げていますが|紹介していますが|説明していますが|不足して|触れていな)/g,
     /\[入力短縮[^\]]*\]/g,
