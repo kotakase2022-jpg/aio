@@ -50,6 +50,15 @@ try {
     if (step === "theme") {
       await page.getByTestId("audience-type-select").selectOption("btoc");
       await page.getByTestId("article-structure-select").selectOption("faq");
+      for (const structure of ["comparison", "problem_solution"]) {
+        await page.getByTestId("article-structure-select").selectOption(structure);
+        await expect(page.getByTestId("article-structure-select")).toHaveValue(structure);
+      }
+      await page.getByTestId("structure-instruction").fill("問題、原因、対処方法、判断基準、行動の順に説明する。");
+      for (const mode of ["auto", "on", "none"]) {
+        await page.getByTestId("table-mode-select").selectOption(mode);
+        await page.getByTestId("supplemental-faq-mode-select").selectOption(mode);
+      }
     }
     if (step === "primary-info") {
       await page.getByTestId("primary-info-type-criteria-knowhow").click();
@@ -59,6 +68,9 @@ try {
   await page.getByTestId("word-count-select").selectOption("3000");
   await expect(page.getByTestId("article-primary-button")).toBeEnabled();
   await page.getByTestId("input-wizard-step-button-theme").click();
+  await expect(page.getByTestId("article-structure-select")).toHaveValue("problem_solution");
+  await expect(page.getByTestId("table-mode-select")).toHaveValue("none");
+  await expect(page.getByTestId("supplemental-faq-mode-select")).toHaveValue("none");
   const directory = path.join(process.cwd(), ".verification-files");
   await mkdir(directory, { recursive: true });
   const screenshot = path.join(directory, "production-smoke.png");
@@ -66,7 +78,8 @@ try {
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ result: "PASS", baseURL, checks: [
     "unauthenticated API denied", "login", "durable logs read", "six input steps",
-    "audience/structure controls", "required primary information", "ready-to-generate state",
+    "audience/structure controls including comparison/problem-solution", "table/supplemental FAQ modes",
+    "required primary information", "ready-to-generate state",
     "no console/page/network errors", "no application mutations",
   ], screenshot }));
 } finally {

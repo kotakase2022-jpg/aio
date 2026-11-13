@@ -1,7 +1,7 @@
 import type { ArticleQualityEvaluation } from "@/lib/article-quality";
 import { canonicalizeFaqItems } from "@/lib/draft-html";
 import { englishTokenAppearsInText } from "@/lib/english-token";
-import type { FaqItem } from "@/types/aio";
+import type { ArticleElementMode, FaqItem } from "@/types/aio";
 
 export type FaqQualityInput = {
   faqItems: FaqItem[];
@@ -9,6 +9,7 @@ export type FaqQualityInput = {
   primaryInfo?: string;
   referenceTexts?: string[];
   competitorTexts?: string[];
+  supplementalFaqMode?: ArticleElementMode;
 };
 
 const genericQuestionPatterns = [
@@ -95,8 +96,12 @@ export function evaluateFaqQuality({
   primaryInfo = "",
   referenceTexts = [],
   competitorTexts = [],
+  supplementalFaqMode,
 }: FaqQualityInput): ArticleQualityEvaluation {
   const normalizedItems = canonicalizeFaqItems(faqItems);
+  if (supplementalFaqMode === "none" || supplementalFaqMode === "auto" && normalizedItems.length === 0) {
+    return { score: 100, checks: [], strengths: [], improvements: [] };
+  }
   const faqText = normalizedItems
     .map((item) => `${item.question} ${item.answer}`)
     .join(" ");
@@ -120,11 +125,11 @@ export function evaluateFaqQuality({
     {
       id: "faq-count",
       label: "FAQ件数",
-      passed: normalizedItems.length >= 3,
+      passed: normalizedItems.length >= (supplementalFaqMode ? 1 : 3),
       detail:
-        normalizedItems.length >= 3
-          ? "FAQが3件以上あり、読後の疑問に答える量があります。"
-          : "FAQは3件以上あると、読者の不安・比較・次の行動に答えやすくなります。",
+        normalizedItems.length >= (supplementalFaqMode ? 1 : 3)
+          ? "読後に残る疑問へ答えるFAQがあります。"
+          : supplementalFaqMode ? "補足FAQを「あり」に指定しています。本文で未解決の疑問と回答を1組以上追加してください。" : "FAQは3件以上あると、読者の不安・比較・次の行動に答えやすくなります。",
     },
     {
       id: "faq-question-specificity",

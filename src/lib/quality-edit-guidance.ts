@@ -24,7 +24,15 @@ export function qualityCheckEditGuidance(checkId: string) {
   }
 
   if (checkId === "article-structure-faq") {
-    return "修正先: FAQ。記事の中心を読者の具体的な疑問と回答に組み替え、条件、例外、比較、次の行動まで答えるFAQを3組以上そろえます。";
+    return "修正先: 本文HTML。記事の中心を質問のH2見出しと回答に組み替え、条件、例外、比較、次の行動まで答えるQ&Aを3組以上そろえます。末尾の補足FAQとは別です。";
+  }
+
+  if (checkId === "article-structure-comparison") {
+    return "修正先: 本文HTML。表だけでなく記事全体を比較軸と選択基準で構成し、条件ごとの選び方を示します。";
+  }
+
+  if (checkId === "article-structure-problem-solution") {
+    return "修正先: 本文HTML。問題、原因、対処方法、判断基準、行動を順に示します。";
   }
 
   if (checkId === "article-structure-case") {

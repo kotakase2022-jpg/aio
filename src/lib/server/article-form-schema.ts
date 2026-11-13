@@ -29,6 +29,9 @@ export const articleFormSchema = z.object({
   imageCount: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]).optional(),
   wordCount: z.union([z.literal(1000), z.literal(2000), z.literal(3000), z.literal(4000), z.literal(5000), z.literal(6000)]).optional(),
   audienceType: z.enum(["auto", "btob", "btoc"]).optional(),
-  articleStructure: z.enum(["auto", "textbook", "faq", "case"]).optional(),
+  articleStructure: z.enum(["auto", "textbook", "faq", "case", "comparison", "problem_solution"]).optional(),
+  structureInstruction: z.string().max(2000).optional(),
+  tableMode: z.enum(["auto", "on", "none"]).optional(),
+  supplementalFaqMode: z.enum(["auto", "on", "none"]).optional(),
   regenerationInstruction: z.string().optional(),
 });

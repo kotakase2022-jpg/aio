@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { ArticleDraft, ArticleImage, AuthorInput, FaqItem } from "@/types/aio";
 import { sanitizeArticleHtml } from "@/lib/article-html";
+import { convertTablesToProse, mainQuestionHeadings, type ArticlePresentation } from "@/lib/article-presentation";
 import {
   articleContainsCanonicalSourceLink,
   canonicalSourceUrlKey,
@@ -22,11 +23,23 @@ export function buildDraftArticleHtml(
 ) {
   const publicBody = removeInternalProcessNotes(draft.editedBodyHtml);
   const withImages = replaceDraftImageReferences(publicBody, draft.images, options);
-  const withFaq = appendFaqBlockWhenNeeded(withImages, draft.faqItems, {
-    preserveUnmatchedBodyFaq: true,
-  });
+  const withFaq = buildPresentedArticleBody(withImages, draft.faqItems, draft.inputPayload,
+    draft.aiResult.content_policy_version === 2);
   const withAuthor = appendAuthorBlockWhenNeeded(withFaq, draft.author, options);
   return sanitizeArticleHtml(appendSourceBlockWhenNeeded(withAuthor, draft));
+}
+
+export function buildPresentedArticleBody(html: string, faqItems: FaqItem[], input: ArticlePresentation, newPolicy = false) {
+  const body = input.tableMode === "none" ? convertTablesToProse(html) : html;
+  const usesNewPolicy = newPolicy || input.supplementalFaqMode !== undefined;
+  if (!usesNewPolicy) return appendFaqBlockWhenNeeded(body, faqItems, { preserveUnmatchedBodyFaq: true });
+  const withoutSupplement = removeManagedFaqBlock(body);
+  const cleanBody = removeGeneratedFaqBlocks(withoutSupplement, [], false);
+  const mainQuestions = new Set(mainQuestionHeadings(cleanBody).map(normalizeFaqQuestion));
+  const items = input.supplementalFaqMode === "none" ? [] : canonicalizeFaqItems(faqItems)
+    .filter((item) => !mainQuestions.has(normalizeFaqQuestion(item.question)));
+  // Main Q&A remains editor-owned body HTML. Only the supplemental block is managed.
+  return joinHtmlBlocks(cleanBody, items.length ? buildFaqBlockHtml(items) : "");
 }
 
 function removeInternalProcessNotes(html: string) {

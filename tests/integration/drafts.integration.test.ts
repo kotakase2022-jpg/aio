@@ -4,6 +4,8 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createCompletedGenerationJob, createSampleDraft } from "../fixtures/article";
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
+import { deltaNov11Form } from "../fixtures/delta-nov11";
+import { buildDraftArticleHtml } from "@/lib/draft-html";
 
 let tempDir = "";
 const processEnvSnapshot = snapshotProcessEnv();
@@ -24,6 +26,24 @@ afterEach(async () => {
 });
 
 describe("draft persistence route handlers", () => {
+  test("preserves presentation options and body Q&A across save, edit, approve and reload", async () => {
+    const { POST: save } = await import("@/app/api/save-draft/route");
+    const { POST: approve } = await import("@/app/api/approve-draft/route");
+    const { getDraft } = await import("@/lib/server/drafts");
+    const draft = createSampleDraft({ id: "nov11-options", inputPayload: { ...deltaNov11Form, articleStructure: "faq", tableMode: "none", supplementalFaqMode: "none" }, editedBodyHtml: "<h2>いつ相談しますか？</h2><p>デルタのファクタリング相談では希望日の5営業日前に相談します。</p>", images: [], author: {} });
+    const saved = await save(new Request("http://localhost/api/save-draft", { method: "POST", body: JSON.stringify({ draft }) }));
+    expect(saved.status).toBe(200);
+    const reloaded = await getDraft(draft.id);
+    expect(reloaded?.inputPayload).toEqual(draft.inputPayload);
+    expect(buildDraftArticleHtml(reloaded!)).toBe(buildDraftArticleHtml(draft));
+    const edited = { ...reloaded!, editedBodyHtml: `${reloaded!.editedBodyHtml}<p>編集者が追加した個別条件。</p>` };
+    const approved = await approve(new Request("http://localhost/api/approve-draft", { method: "POST", body: JSON.stringify({ draft: edited }) }));
+    expect(approved.status).toBe(200);
+    const restored = await getDraft(draft.id);
+    expect(restored?.status).toBe("approved");
+    expect(buildDraftArticleHtml(restored!)).toContain("編集者が追加した個別条件。");
+    expect(buildDraftArticleHtml(restored!)).not.toMatch(/<table|aio-faq-block/);
+  });
   test("saving rejects a malformed local store without overwriting it", async () => {
     const { saveDraft } = await import("@/lib/server/drafts");
     const draftFile = path.join(tempDir, "drafts.json");

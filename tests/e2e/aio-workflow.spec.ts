@@ -19,6 +19,64 @@ const competitorResearchFixture = {
   ],
 };
 
+for (const mode of ["auto", "on", "none"] as const) {
+  test(`presentation ${mode} survives generation, edit, copy, reload and regeneration`, async ({ page }) => {
+    const errors = collectUnexpectedBrowserErrors(page);
+    const completed = createCompletedGenerationJob();
+    completed.draft!.images = [];
+    completed.draft!.editedBodyHtml = '<h2>必要書類は？</h2><p>返済原資と売掛金を確認します。</p><h2>何を比較しますか？</h2><p>必要時期と負担を比べます。</p><h2>いつ相談しますか？</h2><p>個別条件を確認します。</p><table><tr><th>比較軸</th><td>返済負担</td></tr></table>';
+    completed.draft!.faqItems = [{ question: "追加書類は？", answer: "契約条件を確認します。" }];
+    const calls = await mockCommonApiRoutes(page, completed);
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => localStorage.setItem("nov11-copy", text) } });
+    });
+    await login(page);
+    await page.getByTestId("reference-text-0").fill("資金調達では返済原資、売掛金、必要時期を確認します。");
+    await openInputStep(page, "theme");
+    await page.getByTestId("audience-type-select").selectOption("btob");
+    await page.getByTestId("article-structure-select").selectOption("comparison");
+    await page.getByTestId("article-structure-select").selectOption("problem_solution");
+    await page.getByTestId("article-structure-select").selectOption("faq");
+    await page.getByTestId("structure-instruction").fill("経営者が判断できる質問順");
+    await page.getByTestId("table-mode-select").selectOption(mode);
+    await page.getByTestId("supplemental-faq-mode-select").selectOption(mode);
+    await page.getByTestId("article-primary-button").click();
+    await expect(page.getByRole("article")).toContainText("必要書類は？");
+    expect(calls.articleTableMode).toBe(mode);
+    expect(calls.articleSupplementalFaqMode).toBe(mode);
+    expect(calls.articleStructureInstruction).toBe("経営者が判断できる質問順");
+    await expect(page.getByRole("article").locator("table")).toHaveCount(mode === "none" ? 0 : 1);
+    await expect(page.getByRole("article").locator(".aio-faq-block")).toHaveCount(mode === "none" ? 0 : 1);
+    await page.getByTestId("fullscreen-preview-button").click();
+    await expect(page.getByRole("dialog", { name: "全画面プレビュー" })).toContainText("必要書類は？");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "編集", exact: true }).click();
+    await page.getByTestId("draft-body-html-textarea").fill(`${completed.draft!.editedBodyHtml}<p>編集後の条件確認。</p>`);
+    await page.getByTestId("save-draft-button").click();
+    await expect.poll(() => calls.saveDraft).toBe(1);
+    expect(calls.lastSavedDraft?.inputPayload).toMatchObject({ tableMode: mode, supplementalFaqMode: mode, structureInstruction: "経営者が判断できる質問順" });
+    await page.getByRole("button", { name: "プレビュー", exact: true }).click();
+    await page.getByTestId("copy-handoff-button").click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("nov11-copy"))).toContain("編集後の条件確認。");
+    const copied = await page.evaluate(() => localStorage.getItem("nov11-copy") ?? "");
+    if (mode === "none") expect(copied).not.toMatch(/<table|aio-faq-block/);
+    // Completed drafts are reopened from the durable log, not auto-restored from localStorage.
+    await page.route("**/api/generation-logs", async (route) => route.fulfill({ json: { ok: true, logs: [{ id: completed.id, status: "completed", createdAt: completed.createdAt, updatedAt: completed.updatedAt, inputSummary: "November 11 options", outputTitle: "Saved QA draft", draftStatus: "draft" }] } }));
+    await page.route(`**/api/generation-jobs/${completed.id}`, async (route) => route.fulfill({ json: { ok: true, job: { ...completed, inputPayload: calls.lastSavedDraft?.inputPayload, draft: calls.lastSavedDraft } } }));
+    await page.reload();
+    await page.getByTestId("generation-logs-toggle").click();
+    await page.getByTestId(`generation-log-open-${completed.id}`).click();
+    await expect(page.getByRole("article")).toContainText("編集後の条件確認。");
+    await page.getByTestId("article-primary-button").click();
+    await page.getByTestId("article-regeneration-instruction").fill("現在の一次情報を使って全文を再作成");
+    await page.getByTestId("article-regeneration-start").click();
+    await expect.poll(() => calls.articleGenerationJobs).toBe(2);
+    expect(calls.articleTableMode).toBe(mode);
+    expect(calls.articleSupplementalFaqMode).toBe(mode);
+    expect(errors()).toEqual([]);
+  });
+}
+
 test("PC browser can complete the core AIO draft workflow with mocked external services", async ({
   page,
 }) => {
@@ -480,6 +538,8 @@ test("editing the title to a generic label updates the quality checklist", async
   await page
     .getByTestId("reference-text-0")
     .fill("Reference text for title quality checklist.");
+  await openInputStep(page, "theme");
+  await page.getByTestId("supplemental-faq-mode-select").selectOption("on");
   await page.getByTestId("article-primary-button").click();
   await expect(
     page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" }),
@@ -535,6 +595,9 @@ test("editing the title to a generic label updates the quality checklist", async
     .getByTestId("quality-edit-draft-button")
     .click();
   await expect(page.getByTestId("draft-images-section")).toBeFocused();
+  // Supplemental FAQ now needs one useful answer, not an unconditional three.
+  // Remove the final item to exercise the required-empty error and recovery.
+  await page.getByTestId("draft-faq-remove-0").click();
   await page.getByTestId("draft-preview-tab").click();
   await expect(
     page.getByTestId("quality-check-failed").filter({ hasText: "FAQ件数" }),
@@ -546,6 +609,9 @@ test("editing the title to a generic label updates the quality checklist", async
     .click();
   await expect(page.getByTestId("draft-faq-add-button")).toBeVisible();
   await expect(page.getByTestId("draft-faq-add-button")).toBeFocused();
+  await page.getByTestId("draft-faq-add-button").click();
+  await page.getByTestId("draft-faq-question-0").fill("メリットは何ですか？");
+  await page.getByTestId("draft-faq-answer-0").fill("重要です。");
   await page.getByTestId("draft-preview-tab").click();
   await expect(
     page.getByTestId("quality-check-failed").filter({ hasText: "FAQ質問の具体性" }),
@@ -3757,6 +3823,9 @@ async function mockCommonApiRoutes(
     articleClosingText: "",
     articleAudienceType: "",
     articleStructure: "",
+    articleTableMode: "",
+    articleSupplementalFaqMode: "",
+    articleStructureInstruction: "",
     articleRegenerationInstruction: "",
     articleCompetitorResearchSummary: "",
     articleCompetitorFileNames: [] as string[],
@@ -3860,6 +3929,9 @@ async function mockCommonApiRoutes(
         closingText?: string;
         audienceType?: string;
         articleStructure?: string;
+        tableMode?: string;
+        supplementalFaqMode?: string;
+        structureInstruction?: string;
         regenerationInstruction?: string;
         competitorFiles?: Array<{ name?: string }>;
       };
@@ -3871,6 +3943,9 @@ async function mockCommonApiRoutes(
     calls.articleClosingText = body.form?.closingText ?? "";
     calls.articleAudienceType = body.form?.audienceType ?? "";
     calls.articleStructure = body.form?.articleStructure ?? "";
+    calls.articleTableMode = body.form?.tableMode ?? "";
+    calls.articleSupplementalFaqMode = body.form?.supplementalFaqMode ?? "";
+    calls.articleStructureInstruction = body.form?.structureInstruction ?? "";
     calls.articleRegenerationInstruction = body.form?.regenerationInstruction ?? "";
     calls.articleCompetitorFileNames =
       body.form?.competitorFiles?.map((file) => file.name ?? "") ?? [];

@@ -4,159 +4,106 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 9
-- Loop number inferred from: 前回Current ownerがCodexでClaude Codeへの引継ぎ後、Claudeによる新ループ完了記録はない。相沢様対応PR #42の追加検証・本番反映としてLoop 9を継続。
-- Phase: Handoff / Production released and verified
-- Last updated: 2026-11-09 23:20 +09:00
+- Loop number inferred from: 前回Codexからの引継ぎ後、Claude完了の新記録はない。相沢様11/11追加指摘へのフォローアップとしてLoop9を継続。旧作業はdocs/adversarial-verification-2026-11-09.mdとgit履歴に保持。
+- Phase: Development / PR and release verification
+- Last updated: 2026-11-13 11:23 +09:00
 
 ## 1. Current Goal
-ユーザーの最新指示により、厳格・敵対的検証、再現テスト、必要な修正、保護されたPR経由のmerge、本番Vercel反映までを実施する。
-前回の「本番反映なし」制限は今回の明示承認で変更された。既存記事一括変更、本番WordPressへのテスト投稿、相沢様への送信は実施しない。
+11/11付の4項目（構成追加、表/補足FAQ選択、制作過程文言、一次情報の限定条件）を局所改修し、protected PR/CI、本番反映、本番確認まで行う。ユーザーが今回の本番反映を明示承認。既存記事変更、顧客WordPress公開、追加課金/権限拡大は禁止。
 
 ## 2. Current Branch / Commit / PR
-- Branch: `codex/loop9-release-handoff` (release-status documentation only)
-- Latest commit at start: `30e0ab35ef1646c506563bf02a6d9f83541c3a56`
-- Last known good implementation before this follow-up: `0304a04`
-- Baseline/main at start: `8c2a9b5a584ede25d94d2747550cc692db4d6f90`
-- PR: https://github.com/kotakase2022-jpg/aio/pull/42
-- Latest reviewed commit: `4fcb514fdd3cf0985477adc715f6da6655077814`
-- Final implementation head: `994b0445560b1c8112617bca32fd99d06d2a236d`
-- Merged main / last known good commit: `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`
-- PR #42: MERGED through protected squash merge; no direct main push or bypass.
-- Release-evidence PR: https://github.com/kotakase2022-jpg/aio/pull/43 (documentation only)
-- CodeRabbit OSS review status: 4fcb514の追加6 inline + 1 outside-diffを確認。6件修正、正本取得エラー時の古いsnapshotへのfallback提案1件はデータ保全のため不採用。根拠と再試行テストを記録。
-- Production at start: `dpl_HaGiMSgjDJ4ygs757JvsnNy7n5Pt`、runtime `742370e`
+- Branch: `codex/aizawa-nov11-article-options`
+- Latest commit at start / baseline: `749301de18e847c6de777f21c11743ec28562ae5`
+- Last known good production commit: `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`
+- PR: not created yet; implementation and local quality complete
+- CodeRabbit OSS review status: pending new PR
 - Production URL: https://aio-article-generator.vercel.app/
-- Release status: DEPLOYED / READY. Main e150927 staged, browser-verified and promoted without rebuilding.
-- Production deployment: `dpl_ByP6QrgAv4ehCXL7ECP54PwfK5mS`, unique URL https://aio-article-generator-2ovfy85ge-sl2026.vercel.app, remote build 51s / Next16.4.5.
-- Supabase: remote migration `20261109140927_atomic_draft_save` maps to local `20261109125814_atomic_draft_save.sql`; gateway `aio-store` version5 ACTIVE. Existing custom token authentication and verify_jwt=false retained.
+- Current production / rollback: `dpl_ByP6QrgAv4ehCXL7ECP54PwfK5mS`, https://aio-article-generator-2ovfy85ge-sl2026.vercel.app (READY confirmed this turn)
+- Intended team/project: `sl2026` / `aio-article-generator` / `prj_rIIxUXcj7bOgZMaKxUgHad353Dpf`
+- No Supabase migration or gateway change is required.
 
 ## 3. What Was Done
-- 必須文書、差分、PR、レビュー、現在のVercel本番コードを確認。相沢様の実ログ照合・8項目回答案は前回報告に保持。
-- FAQの意味を変える記号・小数・符号を保持し、wrapped/複数段落FAQ、編集者のみが追加した質問、CTA、出典注記の保持を検証。
-- 実リンクでないコメント/data-hrefの誤検出と、取得成功・失敗が混在するURLのfallback再混入を修正。
-- 小数の根拠照合、限定条件の一般化、一覧ページ判別、1文字の置換文字、ブロック境界で数字が連結する問題を修正。
-- OpenAI timeoutをレスポンス本文読取まで適用。ヘッダーのみ到着して本文が停止する回帰を修正。
-- ドラフト本文・承認・画像保存を単一RPCトランザクションへ変更。画像失敗時の部分保存を防止。
-- ジョブ更新をCAS化し、キャンセルが遅い完了応答に上書きされる競合を防止。不正入力を保存前に検証。
-- 生成ログは最新canonical draftから復元。補助ログ同期の失敗は保存成功と区別して警告を表示。
-- WordPress投稿前に永続予約を取得。重複送信防止、結果不明時の保留、投稿成功後の補助保存失敗時に投稿URLを保持。
-- 画像再生成完了の条件付き保存、公開済み画像保持、local JSONの直列化・atomic rename・読取エラー伝播。
-- 保存・承認・投稿・画像再作成中の編集/同時操作を抑止し、遅いログ復元応答を無効化。save/approveの遅延E2Eを追加。
-- Vercel実行上限でworkerが終了した際の無限進行を防止。status GETで6分経過ジョブをfailedへ復旧し、遅いworkerの再上書きを防ぐ23件の回帰を追加。
-- 本番smokeのCommonJS importをNodeで再現・修正。ビルド済みクライアント12ファイルにローカル設定server秘密値の露出0件を確認。
-- CodeRabbit追加対応：slash-backslashリンクを拒否、長文の根拠を文単位で数値優先抽出、破損job storeを維持、RPC迂回がないことを明示検証。正本取得失敗では古い回答に戻さずエラーと再試行を維持。
-- Next 16.4.5等へ互換更新。本番依存監査0件。E2Eをdev serverから隔離production build/serverへ変更。
-- 本番read-only smokeを追加し、アプリデータのmutationを遮断。`output/`、env、local data、test artifactsをVercelアップロードから除外。
-- PR #42を保護ルールのままsquash merge。PR CI run42628456722（3m26s）とmain CI run42629017490ともにPASS。
-- CodeRabbitの13スレッドはすべて解決。canonical fallback不採用はレビュアーも指摘を取り下げ。最新994b044の自動再レビューはOSS時間枠制限でNEUTRAL/skippingであり、再レビュー成功とは扱わない。
-- ユーザーの再提示依頼後、Supabase確認が承認されmigration適用成功。security invoker/fixed search_path/service_role専用EXECUTEを実DBで確認。
-- gateway v5反映、認証なしPOSTは401。恒久RPC適用後の実Supabase3テスト成功・cleanup完了。既存4テーブルの件数と内容fingerprintは変更前と同一。
-- main e150927をVercelへstage。Chrome既存GoogleログインでVercel認証を完了し、アプリログイン・6入力ステップ・BtoC/FAQ選択保持・生成可能状態・生成ログ20件表示を確認。
-- 同一buildを本番URLへpromote。canonicalの自動smokeはPASS、アプリmutationなし、console/page/networkエラー0。新deploymentの直近15分errorログ0。
+- Required documents, source specification, current branch/history and actual production deployment checked fresh.
+- Added comparison/problem-solution structures, dedicated structure brief, independent auto/on/none table and supplemental FAQ modes.
+- Resolved structure before long-input compaction; persisted the resolved plan for evaluation after restoration/regeneration.
+- Main FAQ body is editor-owned Q&A; supplemental FAQ is separate. Main answer wins over duplicate supplemental question; old saved drafts keep legacy behavior.
+- Shared final renderer honors none across preview/copy/export/WordPress, preserves table content/links as prose and is idempotent.
+- Optional tables/FAQ are not penalized; structure checks have positive and negative cases.
+- Private generation warnings and publication checks cover workflow wording and scoped quantities across paragraphs/table rows/answers/summaries/takeaways.
+- Synthetic Delta fixture, regression tests, three E2E mode flows, real OpenAI eight-case matrix, separately gated one-disposable-article production smoke added.
 
 ## 4. Files Changed
-主な変更範囲：
-- `src/lib/{draft-html,faq-quality,publication-quality,source-url}.ts`
-- `src/lib/server/{content,openai,drafts,generation-jobs,draft-image-regeneration,wordpress,wordpress-posts,local-store,article-form-schema}.ts`
-- save/approve/generate-article/generation-jobs API handlers
-- `src/components/aio/article-generator-app.tsx`
-- `supabase/functions/aio-store/index.ts`
-- `supabase/migrations/20261109125814_atomic_draft_save.sql`
-- unit/integration/contract/E2E/live tests, `tests/fixtures/sql/draft-atomicity.sql`
-- `package.json`, lockfile, `playwright.config.ts`, `.gitignore`, `.vercelignore`
-- `scripts/production-smoke.mjs`, `docs/testing.md`
-- `docs/adversarial-verification-2026-11-09.md`, this handoff
-AGENTS.md/CLAUDE.mdの運用ルールは現在のCodeRabbit標準・PR前提に適合するため変更不要。
+- `src/lib/article-presentation.ts` (new shared plan/format helper)
+- types/aio, server/article-form-schema, ai-schemas, article-generation
+- draft-html, article-quality, faq-quality, publication-quality, quality-edit-guidance, quality-regeneration-action
+- article-generator-app.tsx
+- unit/article-presentation, article-generation; integration/drafts, wordpress; E2E/aio-workflow
+- fixtures/delta-nov11.ts, live/article-options.live.test.ts
+- scripts/production-smoke.mjs, production-article-smoke.mjs
+- docs/aizawa-nov11-followup.md, docs/testing.md, this file
+- AGENTS.md/CLAUDE.md already match current operating rules; no unnecessary edits.
 
 ## 5. Current Status
-- 先行combined quality PASS。typecheck/lint/integrity/535 tests/contract 15/coverageすべて成功。
-- production Chromium E2E 56/56、Next 16.4.5 build 19 routes PASS。
-- 独立静的レビューで新たなblockerなし。ライブDBの証明とは区別する。
-- 最終CodeRabbit対応後のcombined quality PASS（544 tests、contract15、E2E56/56、build19 routes）。最新PR/main CIもPASS。
-- 本番migration/gateway/app反映完了。以前の確認期限切れは、ユーザー操作による確認承認で解消。確認迂回はしていない。
-- 実OpenAI文章・画像はPASS。WordPress実接続試験は専用sandbox不足で未実施。
+- Local full quality PASS for final implementation: 575 tests, contract15, E2E59, build19 routes.
+- Real OpenAI eight-case matrix PASS; not evidence about all customer inputs.
+- Production release and disposable smoke pending. Do not report them completed yet.
+- No production writes so far; read-only row counts/fingerprints in the follow-up report.
 
 ## 6. Known Issues
-- 公開前チェックはヒューリスティックであり、事実の真偽・高度な意味重複を保証しない。
-- 再作成は現在フォームと追加指示からの全文生成。手編集本文を保持する部分修正ではない。
-- Client updatedAtは厳密なセッション横断revision tokenではない。完全な多人数同時編集制御は未実装。
-- WordPress不明結果では予約を保持する。管理者が実投稿を確認してから照合する。exactly-once保証ではない。
-- local fallbackのlockはprocess内のみ。本番VercelはSupabase必須。
-- JS描画/ログイン必須/画像のみの参照ページは手動補足が必要。
-- 開発依存typescript-eslint/minimatch系moderate 8件が残る。npm audit fix --forceの破壊的downgradeは未実施。
-- 共通デモコードは既存仕様。ユーザー別データ分離を提供する認証ではない。
-- Supabase advisorは既存のLeaked Password Protection Disabled警告1件のみ。現在アプリはSupabaseパスワードAuthを使用しないが、導入時は https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection を確認する。
+- Semantic correctness, all paraphrases, complicated exceptions and medical/financial truth cannot be proved by heuristic checks. Human source review remains required.
+- New workflow wording is flagged, not indiscriminately deleted from otherwise valid paragraphs/sources.
+- Recreate remains full generation from current inputs, not preservation of hand-edited prose. Save first.
+- No live WordPress sandbox; outbound HTML parity tested locally, no real WP post.
+- Prior limitations remain: shared demo auth is not per-user isolation; multi-session revision handling is not full collaborative editing; WordPress unknown outcomes need manual reconciliation.
+- User-owned untracked `output/` remains untouched.
 
 ## 7. CodeRabbit Review
-- Review status: 4fcb514のCodeRabbitレビュー完了（13m41s）。994b044の再レビューはOSS時間枠上限でNEUTRAL/skipping。全13スレッド解決、最新required CI成功後にmerge。
-- Critical findings: 初回なし。
-- Resolved findings: 初回8件は0304a04。追加の同一URL成功/失敗混在fallback指摘はrenderer/UI共通の最終filterとunit/E2Eで解消。
-- Deferred findings: なし。追加修正の返信・resolve済み。新しい自動差分レビュー自体は時間枠回復後となる。
-- Intentional non-adoption: canonical draft取得失敗時のjob.draft fallbackは、補助同期に失敗した古い編集・承認内容を復元し上書きするリスクがある。APIは500を返して再試行で最新正本を取得する。専用integration testで保存内容を変えないことを確認。
-- False positives / not applicable: 一律docstring coverage警告は既存コメント方針と合わず機能検証とは分離。過去Codex GitHub reviewは使用上限で失敗、標準レビューはCodeRabbit。
+- Review status: pending PR
+- Critical findings: not yet reviewed for this change
+- Resolved findings: none yet
+- Deferred findings: none yet
+- False positives / not applicable: none yet
 
 ## 8. Optional Bugbot Findings
 - Status: Not run
 - Optional Bugbot: Not run
-- Findings: なし
-- Actions taken: CodeRabbitと独立ローカルレビューを使用。
+- Findings: none
+- Actions taken: standard CodeRabbit PR review will be used
 
 ## 9. Verification Results
-- 修正前の回帰失敗を確認：URL3、OpenAI本文停止1、workflow8、FAQ拡張、WP5xx1、UI遅延save/approve2、local破損store1など。
-- 中間full quality PASS: 510 tests、contract15、E2E54、build19 routes。
-- 先行full quality: PASS。535 tests、contract15、coverage S/B/F/L 87.27/77.96/92.60/87.99%、Chromium E2E56/56、Next 16.4.5 build19 routes。
-- 最終 `npm run quality`: PASS。54 test files / 544 tests、contract15、coverage S/B/F/L 87.37/78.19/92.61/88.08%、production Chromium E2E56/56、Next16.4.5 build19 routes。integrity59files、型/LintもPASS。
-- 本番反映後も同じ `npm run quality` を再実行して全項目PASS（544 tests/E2E56、coverage同値）。今回の追加差分はリリース証跡文書2ファイルのみ。
-- 最終追加回帰：リンク/長文抽出の修正前5 failed / 55 passed、修正後60/60 PASS。job JSON破損の修正前1 failed / 22 passed、修正後23/23 PASS。正本取得失敗と再試行1/1 PASS。
-- `npm run test:live:openai`: PASS、3種類の読者/構成を含む1契約、147.96秒。最終transportコードで再実行もPASS、156.75秒。
-- 期限超過復旧の修正前16 failed / 7 passed、修正後23/23、関連6 suites 53/53 PASS。
-- `npm run test:live:openai:image`: PASS、メモリ内PNG1枚、57.28秒、保存なし。
-- `npm run test:live:supabase`: 恒久RPC適用後3/3 PASS、3.27秒。無効画像時に本文・承認・画像・revisionが全てrollback、ジョブCRUD、画像置換/削除を実DBで確認しdisposable行をcleanup。
-- live PostgreSQL: BEGIN + migration + SQL fixture + ROLLBACK PASS。atomic rollback/CAS/role権限を確認。仮関数と行が残らないことも確認。
-- `npm audit --omit=dev`: PASS、0 vulnerabilities。full auditはdev moderate8件。
-- `test:live:readiness`: WordPressのみ未設定でFAIL。実WordPress成功とは報告しない。
-- `git diff --check`: PASS。
-- PR CI: https://github.com/kotakase2022-jpg/aio/actions/runs/42628456722 PASS。
-- main CI: https://github.com/kotakase2022-jpg/aio/actions/runs/42629017490 PASS。
-- Historical release failure: Supabase確認2回期限切れ。ユーザー再依頼後の確認承認で成功し、migration履歴とRPC権限を再確認済み。
-- Stage smoke初回はVercel SSOへの302転送後200で失敗。OIDCの試行は403 TRUSTED_SOURCES_ENVIRONMENT_MISMATCH。Trusted Sourcesを拡張せず、Chromeの通常Vercelログインで検証した。一時スクリプト変更は取り消し、アプリコードの追加変更なし。
-- Vercel CLI curlは既存認証でproject用protection bypass tokenを自動作成した（秘密値の表示/commitなし）。scopeフラグをcurlへ誤転送するCLI挙動を避け、明示deployment URLとリンク済みprojectで401を確認。不要なら管理者がVercel設定でこの自動化tokenを失効できる。
-- Stage Chrome: 入力6段階・required情報・選択保持・ログ表示PASS、アプリ由来console error0。Vercelログイン画面のGoogle FedCM AbortError1件は別originの既存認証UIで発生し、アプリの失敗とは分離。
-- `node scripts/production-smoke.mjs` on canonical production: PASS。未認証API401、login、認証済みログ200、入力6段階、読者/構成、必須一次情報、generate enabled、console/page/network error0、mutation0。
-- `vercel inspect`でcanonicalがdpl_ByP6QrgAv4ehCXL7ECP54PwfK5mS / production / READYを指すことを確認。`vercel logs ... --level error --since 15m --no-branch` は該当ログ0。
-- Windows sandboxのSSR cache rename EPERMはテスト実行前の環境障害。同一検査を許可済みローカル環境で再実行し成功。
-- 復元E2EのlocalStorage即時判定は非同期処理を待たないテスト不備だったため同じ期待値のexpect.pollへ変更。テスト削除/skip/緩和なし。
+- `npm.cmd run quality`: PASS 2026-11-13. typecheck/lint/integrity61files, 55files/575tests, contract15, coverage S/B/F/L87.54/79.25/92.78/88.27%, Chromium PC E2E59/59, Next16.4.5 build19 routes.
+- `npx.cmd vitest run --config vitest.live.config.ts tests/live/article-options.live.test.ts`: 8/8 PASS, gpt-5.5, 307.31s total, ~33-48s/article, image0, no DB/WP writes. Comparison on/on, none/none, auto/auto; FAQ none/none; problem-solution auto/auto; case on/auto; textbook auto/on; BtoC FAQ none/none. Actual output in ignored `.verification-files/nov11-live/`.
+- Initial reproductions:14failed/1passed then fixed. Generic-FAQ loss:1failed/22passed then fixed. Long-theme structure loss:1failed/37passed then fixed.
+- Intermediate failures: new E2E assumed automatic completed-draft restoration (correct workflow opens the log), missing browser-error collector invocation, old mandatory-FAQ expectation. Corrected with reasons, preserving success/error assertions.
+- Old prompt expectations updated for new FAQ-body/optional-supplement specification. No test deletion/skip/threshold relaxation.
+- Windows sandbox EPERM on SSR cache rename before execution; permitted local rerun passed.
+- `git diff --check`: PASS.
+- Production smoke/CI/review: pending, not counted as success.
 
 ## 10. Next Recommended Action
-1. 本番反映済み。PR #42/e150927を再deployしたりmigrationを重複適用したりする必要はない。remote/local migration番号の対応に注意。
-2. PR #43のリリース証跡をレビュー。実装レビューは#42のdiffと本報告を読む。文書のみのmergeにアプリ再deployは不要。
-3. 専用WordPress sandboxが用意されたら許可範囲を確認しlive media/post/delete契約テストを行う。本番WordPressをテスト投稿先にしない。
-4. 開発依存の互換更新、意味解析の限界、多人数同時編集のrevision管理は別タスク。現在の動作/UIを無関係に変更しない。
+1. Commit scoped diff, create PR, obtain CodeRabbit/required CI. No protection bypass or direct main push.
+2. Merge, stage production with --prod --skip-domain, verify, promote same build.
+3. Read-only production smoke then explicitly gated disposable article generate/edit/save/reload/copy/export. Compare existing DB fingerprints, cleanup only manifest IDs after marker verification.
+4. Record actual release timestamp/SHA/deployment/screenshots/errors/cleanup in handoff/report.
 
 ## 11. Suggested Review Scope for Claude Code
-- transactional saveの権限/rollback/画像所有関係。
-- cancellation CAS、canonical draft restore、補助保存失敗と主処理成功の区別。
-- WordPress予約・不明結果・既存履歴との互換性、管理者照合。
-- FAQの正本と編集保持、URL候補fallback、数値/条件の保守的評価。
-- 実API検証とmock検証の境界、本番smokeでmutationが起きないこと。
+- Main/supplemental FAQ ownership, canonicalization order, old draft compatibility.
+- Mode consistency, table evidence/link preservation.
+- Numeric scope per independent surface and noun-anchor matching limitations.
+- Structure precedence before truncation / after regeneration instruction removal.
+- Production smoke allowlist and marker+ID-scoped cleanup.
 
 ## 12. Risk Notes
-- 専用WordPress sandboxを用意して実media/post/delete contractを実行するまでは実サービス結合は未証明。
-- 公開前の数値/対象/期間/条件/例外/出典、医療・金融内容は人が確認する。
-- rollout時は旧WordPress投稿workerが完了してから更新する。旧バージョンは予約方式を使わない。
-- 新アプリはRPCがないと保存が失敗するためmigration/gatewayを先に反映する。
-- 反映前後の既存件数・fingerprint一致：article_inputs22（completed18/failed2/canceled2、active0）、article_drafts19、article_images33、wordpress_posts0。顧客データは変更していない。
-- 設定済みdrainや長期監視は今回未監査。直近ログ0は継続的な無障害保証ではない。
+- Eight real generations are synthetic examples, not commercial-term verification or a guarantee.
+- High editorial score does not establish safe publication; human number/condition/source review required.
+- Production disposable smoke is separate from default read-only smoke and requires opt-in; preserve manifest on failure for exact-ID recovery.
+- No DB/RLS/auth/SSRF/timeout changes. Recorded previous READY deployment is rollback target; no DB rollback needed.
 
 ## 13. Do Not Touch
-- env/keys/passwords/tokensを表示・commitしない。
-- ユーザー所有untracked `output/`を削除・stage・アップロードしない。
-- 本番既存記事の更新・WordPress公開・顧客宛送信は行わない。
-- main直接push/force/branch protection迂回は禁止。
-- 認証/SSRF/容量/timeout/HTML sanitization/RLSを弱めない。
+- Secrets/env/token values; user-owned output/; existing production drafts; WP publication; customer messaging.
+- No force push, protection bypass, test weakening or silent evidence deletion.
 
 ## 14. Notes for Claude Code
-- 詳細は `docs/adversarial-verification-2026-11-09.md` と相沢様回答案 `docs/aizawa-content-integrity-review.md`。
-- Windowsではnpm.cmd/npx.cmd。
-- 前回handoffの「本番反映なし」「456 tests」は過去記録。今回の承認・結果と混同しない。
-- 完全無欠や全入力での成功は保証しない。再現可能な検証範囲と未検証範囲を区別する。
+- Detail: docs/aizawa-nov11-followup.md. Previous release: docs/adversarial-verification-2026-11-09.md.
+- Windows uses npm.cmd/npx.cmd; .verification-files ignored/excluded from deploy.
+- Current evidence is November13 runs. Previous 544-test count is historical, not this task.

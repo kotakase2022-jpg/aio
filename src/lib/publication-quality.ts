@@ -27,6 +27,7 @@ export type PublicationReadiness = {
 export type PublicationQualityContext = {
   evidenceTexts?: string[];
   requiredSourceUrls?: string[];
+  additionalTexts?: string[];
 };
 
 const internalProcessNotes = [
@@ -38,7 +39,7 @@ const internalProcessNotes = [
 ];
 
 const numericClaimPattern =
-  /[0-9０-９][0-9０-９,，.．]*(?:\s*(?:%|％|割|倍|件|社|人|名|円|万円|時間|日|週間|か月|ヶ月|年|ページ|本|個|回|文字)|(?:以上|以下|未満|以内|超|前後|程度|ほど))/g;
+  /[0-9０-９][0-9０-９,，.．]*(?:\s*(?:%|％|割|倍|件|社|人|名|万円|円|営業時間|営業日|時間|週間|か月|ヶ月|日|年|ページ|本|個|回|文字)|(?:以上|以下|未満|以内|超|前後|程度|ほど))/g;
 
 const scopedEvidencePattern =
   /(当社|弊社|自社|同社|特定|一部|支援(?:した|事例|記録|現場)|相談|ケース|事例|条件|場合|対象|のみ|に限|時点)/;
@@ -82,6 +83,10 @@ export function evaluatePublicationReadiness(
     ...detectDuplicateFaq(html),
     ...detectLinkIssues(html, context.requiredSourceUrls ?? []),
     ...detectNumericIssues(html, context.evidenceTexts ?? []),
+    ...(context.additionalTexts ?? []).flatMap((text) => {
+      const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return [...detectNumericIssues(`<p>${escaped}</p>`, context.evidenceTexts ?? []), ...detectInternalProcessNotes(`<p>${escaped}</p>`)];
+    }),
   ];
 
   const uniqueIssues = Array.from(
@@ -115,6 +120,12 @@ function detectMojibake(html: string): PublicationIssue[] {
 function detectInternalProcessNotes(html: string): PublicationIssue[] {
   const text = visibleText(html);
   const hits = internalProcessNotes.filter((note) => text.includes(note));
+  const processPatterns = [
+    /入力(?:元|情報|資料|データ|内容)[^。！？\n]{0,60}(?:省略|根拠がな|根拠はな|記載がな|記載されていな)/g,
+    /競合記事では[^。！？\n]{0,100}(?:挙げていますが|紹介していますが|説明していますが|不足して|触れていな)/g,
+    /\[入力短縮[^\]]*\]/g,
+  ];
+  for (const pattern of processPatterns) hits.push(...(text.match(pattern) ?? []));
   if (hits.length === 0) {
     return [];
   }
@@ -134,7 +145,7 @@ function detectDuplicateFaq(html: string): PublicationIssue[] {
   const seen = new Set<string>();
   const duplicateQuestions: string[] = [];
 
-  $("h3, h4").each((_, element) => {
+  $("h2, h3, h4").each((_, element) => {
     const question = cleanText($(element).text());
     if (!looksLikeQuestion(question)) {
       return;
@@ -221,7 +232,12 @@ function detectLinkIssues(html: string, requiredSourceUrls: string[]): Publicati
 function detectNumericIssues(html: string, evidenceTexts: string[]): PublicationIssue[] {
   const $ = cheerio.load(html, null, false);
   $(".aio-source-block, .aio-author-block, script, style, noscript").remove();
-  const articleText = cleanText($.root().text()).replace(/https?:\/\/\S+/g, " ");
+  // Keep row context together, but never borrow a qualifier from a different
+  // paragraph, FAQ answer or table row merely because markup has no whitespace.
+  $("br").replaceWith("\n");
+  $("p, li, tr, h1, h2, h3, h4, h5, h6, section, div").append("\n");
+  $("th, td").append(" ");
+  const articleText = $.root().text().replace(/https?:\/\/\S+/g, " ");
   const evidenceSentences = evidenceTexts.flatMap(extractSentences);
   const issues: PublicationIssue[] = [];
 
@@ -264,6 +280,13 @@ function detectNumericIssues(html: string, evidenceTexts: string[]): Publication
 }
 
 function preservesEvidenceScope(articleSentence: string, evidenceSentence: string, claim: string) {
+  const scopedSubject = evidenceSentence.match(/^(.{2,100}?)(?:では|に限(?:り|る|って|定))/)?.[1];
+  if (scopedSubject) {
+    const anchors = scopedSubject.split(/の|で|は|に|、|\s/)
+      .map((term) => term.replace(/(?:への)?相談$|支援$|事例$/g, ""))
+      .filter((term) => term.length >= 2 && !scopeQualifierStopWords.has(term) && !/\p{Script=Hiragana}/u.test(term));
+    if (anchors.length && !anchors.every((term) => articleSentence.normalize("NFKC").includes(term.normalize("NFKC")))) return false;
+  }
   const exclusiveSubjects = exclusiveScopeSubjects(evidenceSentence);
   const articleExclusiveSubjects = new Set(exclusiveScopeSubjects(articleSentence));
   if (exclusiveSubjects.some((subject) => !articleExclusiveSubjects.has(subject))) {

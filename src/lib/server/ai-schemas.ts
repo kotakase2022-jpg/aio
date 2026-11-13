@@ -92,7 +92,7 @@ export const articleGenerationSchema = {
     body_html: { type: "string", maxLength: 9000 },
     faq_items: {
       type: "array",
-      minItems: 3,
+      minItems: 0,
       maxItems: 6,
       items: {
         type: "object",

@@ -380,6 +380,13 @@ required workflow job result before merge.
 
 ## Adding Features
 
+November 11 article controls are covered by `tests/unit/article-presentation.test.ts`,
+`tests/live/article-options.live.test.ts` and the presentation-mode E2E cases. The live test
+requires the existing live OpenAI opt-in and consumes API usage; it never writes DB/WP data.
+See [the release verification record](aizawa-nov11-followup.md) for the separately gated,
+single-disposable-article production smoke and cleanup requirements. The default
+`scripts/production-smoke.mjs` remains read-only except authentication.
+
 Every new feature must add or update tests at the correct level:
 
 - Pure logic: unit tests

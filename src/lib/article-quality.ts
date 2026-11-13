@@ -7,7 +7,8 @@ import {
   evaluatePublicationReadiness,
   type PublicationReadiness,
 } from "@/lib/publication-quality";
-import type { ArticleStructure, AudienceType } from "@/types/aio";
+import type { ArticleElementMode, ArticleStructure, AudienceType } from "@/types/aio";
+import { mainQuestionHeadings, resolveArticleStructure } from "@/lib/article-presentation";
 
 export type ArticleQualityCheck = {
   id: string;
@@ -36,6 +37,11 @@ export type ArticleQualityContext = {
   targetWordCount?: number;
   audienceType?: AudienceType;
   articleStructure?: ArticleStructure;
+  structureInstruction?: string;
+  regenerationInstruction?: string;
+  tableMode?: ArticleElementMode;
+  supplementalFaqMode?: ArticleElementMode;
+  additionalPublicationTexts?: string[];
 };
 
 const genericPhrases = [
@@ -636,7 +642,7 @@ export function evaluateArticleQuality(
     text,
   });
   const structureFit = evaluateStructureFit({
-    articleStructure: context.articleStructure,
+    articleStructure: resolveArticleStructure({ ...context, theme: context.themeText }),
     html,
     text,
     headings,
@@ -892,10 +898,8 @@ export function evaluateArticleQuality(
     {
       id: "structured-elements",
       label: "構造要素",
-      passed: hasList && hasFaq,
-      detail: hasList && hasFaq
-        ? "箇条書きとFAQが含まれています。"
-        : "箇条書きとFAQの両方を入れると業務利用しやすくなります。",
+      passed: (hasList || mainQuestionHeadings(html).length >= 3) && (context.supplementalFaqMode !== "on" || hasFaq),
+      detail: "内容に合う箇条書きまたはQ&Aを確認します。補足FAQは「あり」を指定した場合のみ必須です。",
     },
     {
       id: "editorial-headings",
@@ -929,8 +933,10 @@ export function evaluateArticleQuality(
     {
       id: "comparison-table",
       label: "比較・整理のしやすさ",
-      passed: hasUsefulTable,
-      detail: hasUsefulTable
+      passed: !hasTable && context.tableMode !== "on" || hasUsefulTable,
+      detail: !hasTable && context.tableMode !== "on"
+        ? "表は任意です。表がないことは減点対象ではありません。"
+        : hasUsefulTable
         ? "判断基準や比較軸が入った表が含まれており、要点整理がしやすい構成です。"
         : hasTable
           ? "表はありますが、項目/内容だけの薄い整理に見えます。判断基準、比較軸、条件、費用、期間、担当、注意点を入れると実務で使いやすくなります。"
@@ -1042,6 +1048,7 @@ export function evaluateArticleQuality(
       ...(context.competitorTexts ?? []),
     ]),
     requiredSourceUrls: context.sourceUrls,
+    additionalTexts: context.additionalPublicationTexts,
   });
 
   return {
@@ -1240,15 +1247,39 @@ function evaluateStructureFit({
 
   if (articleStructure === "faq") {
     const faqItemCount = (html.match(/class=(?:"|')[^"']*\baio-faq-item\b/gi) ?? []).length;
+    const mainQuestions = mainQuestionHeadings(html).length;
+    const mainHeadingCount = extractHeadings(removeAuxiliaryQualityHtml(html)).length;
+    const passed = mainQuestions >= 3 && mainQuestions >= Math.ceil(mainHeadingCount / 2)
+      || faqItemCount >= 3 && mainHeadingCount <= 1;
     return {
       id: "article-structure-faq",
       label: "FAQ型への適合",
-      passed: faqItemCount >= 3,
+      passed,
       detail:
-        faqItemCount >= 3
+        passed
           ? "質問と回答が記事の中心としてまとまっています。"
           : "FAQ型では、読者の具体的な疑問と回答を3組以上そろえ、通常解説へFAQを付け足すだけの構成にしないでください。",
     };
+  }
+
+  if (articleStructure === "comparison") {
+    const axes = headings.filter((heading) => /比較|選|条件|基準|負担|費用|書類|時期|速度|リスク|期間|返済|手数料/.test(heading));
+    const passed = axes.length >= 2 && /場合|向いて|適し|選|判断/.test(text);
+    return { id: "article-structure-comparison", label: "比較型への適合", passed,
+      detail: passed ? "複数の比較軸と選択基準が記事全体に示されています。" : "表だけでなく、複数の見出しで同じ比較軸による選択肢と選択基準を説明してください。" };
+  }
+
+  if (articleStructure === "problem_solution") {
+    const stages = [/問題|課題|困|不足|悩|支払/, /原因|背景|なぜ|要因/, /対処|対策|方法|解消|対応|手段/, /判断|基準|選|見極/, /行動|相談|準備|次|始め|確認/];
+    let position = -1;
+    const passed = stages.every((stage) => {
+      const found = headings.findIndex((heading, index) => index > position && stage.test(heading));
+      if (found < 0) return false;
+      position = found;
+      return true;
+    });
+    return { id: "article-structure-problem-solution", label: "課題解決型への適合", passed,
+      detail: passed ? "問題・原因・対処・判断・行動の流れがあります。" : "問題→原因→対処方法→判断基準→行動の順で、読者が次に取る行動まで示してください。" };
   }
 
   if (articleStructure === "case") {

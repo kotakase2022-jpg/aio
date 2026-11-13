@@ -15,7 +15,15 @@ export function qualityRegenerationAction(checkId: string) {
   }
 
   if (checkId === "article-structure-faq") {
-    return "記事の中心を読者の具体的な疑問と回答に組み替え、条件、例外、比較、次の行動まで答えるFAQを3組以上そろえる。本文中に重複FAQは作らない。";
+    return "body_htmlの中心を質問H2と回答に組み替え、条件、例外、比較、次の行動まで答えるQ&Aを3組以上そろえる。末尾の補足FAQは指定の有無に従い、本文の質問と重複させない。";
+  }
+
+  if (checkId === "article-structure-comparison") {
+    return "記事全体を比較軸と選択基準で構成し、複数の選択肢を同じ条件で比べて、条件ごとの選び方を示す。表だけの比較で終わらせない。";
+  }
+
+  if (checkId === "article-structure-problem-solution") {
+    return "問題、原因、対処方法、判断基準、行動の順に本文を構成し、読者が取る具体的な行動まで示す。";
   }
 
   if (checkId === "article-structure-case") {
