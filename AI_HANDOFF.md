@@ -44,8 +44,8 @@
 - AGENTS.md/CLAUDE.md already match current operating rules; no unnecessary edits.
 
 ## 5. Current Status
-- Local full quality PASS after review fixes: 582 tests, contract15, E2E59, build19 routes.
-- Real OpenAI eight-case matrix PASS; not evidence about all customer inputs.
+- Local full quality PASS after review/case fixes: 583 tests, contract15, E2E59, build19 routes.
+- Real OpenAI initial matrix PASS; subsequent rerun 7/8, case structure failed. Case prompt corrected without loosening evaluation; final matrix rerun in progress. Release waits for it.
 - Production release and disposable smoke pending. Do not report them completed yet.
 - No production writes so far; read-only row counts/fingerprints in the follow-up report.
 
@@ -62,7 +62,7 @@
 - Critical findings: no security/permission issue identified.
 - Resolved findings: 7件すべて実装対応。否定構成指定、caption条件/出典保持、新FAQ型の本文必須、補足FAQを比較軸から除外、編集済みQ&A保持、表セル内段落の文脈維持、モデル固有注意の非公開表示保持。
 - Deferred findings: none. Follow-up automatic review may be unavailable because the one included hourly review was consumed; no billing/plan change.
-- False positives / not applicable: none. Review replies/resolutions pending push of fixes.
+- False positives / not applicable: none. All 9 threads replied/resolved at a8a31b4. Incremental CodeRabbit status NEUTRAL due allowance, not a successful new review.
 
 ## 8. Optional Bugbot Findings
 - Status: Not run
@@ -80,6 +80,8 @@
 - `git diff --check`: PASS.
 - Review fixes full `npm.cmd run quality`: PASS, 582 tests / contract15 / E2E59 / build19; coverage S/B/F/L87.63/79.38/92.80/88.30%.
 - Review reproductions: table2 failed/23passed, editor-Q&A2 failed/25passed, remaining3 failed/65passed; all fixed. Additional targeted suites158/158 PASS.
+- Live rerun271.32s:7/8 PASS, case-type generated a normal comparison with a short late example. Preserved failure in ignored .verification-files/nov11-case-before-fix.json. Strengthened case plan to follow one explicitly hypothetical scenario across the whole article; no structure-test relaxation. Added prompt regression (red then green). Full quality after this change:583 tests/E2E59/build19 PASS, coverage unchanged87.63/79.38/92.80/88.30%.
+- PR second CI run43353618949 PASS at a8a31b4. Final case-only prompt commit requires its own CI before release.
 - PR initial CI run43351995407: PASS (4m14s). `npm audit --omit=dev`: PASS, 0 vulnerabilities. Local production-build Chrome screenshot checked (1440x1000).
 - Production smoke/CI/review: pending, not counted as success.
 

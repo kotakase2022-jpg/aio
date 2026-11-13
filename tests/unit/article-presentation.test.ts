@@ -56,6 +56,13 @@ describe("November 11 article presentation requirements", () => {
     expect(check(render([...stages].reverse()))).toBe(false);
   });
 
+  test("case planning follows one scenario throughout rather than appending an example", () => {
+    const plan = buildPresentationInstruction({ articleStructure: "case" });
+    expect(plan).toContain("ONE concrete scenario throughout");
+    expect(plan).toContain("not a generic comparison article with one example added");
+    expect(plan).toContain("hypothetical");
+  });
+
   test("checks standalone summaries and takeaways even when the body is correctly scoped", () => {
     const readiness = evaluateArticleQuality(`<p>${scopedEvidence}</p>`, {
       primaryInfo: scopedEvidence,
