@@ -11,7 +11,7 @@ describe("generateAioArticle", () => {
     vi.clearAllMocks();
   });
 
-  test("keeps manual source identifiers and acquisition notes private while retaining valid citations", async () => {
+  test("keeps non-URL source metadata private but preserves potentially substantive note text", async () => {
     const { createStructuredResponse } = await import("@/lib/server/openai");
     const { generateAioArticle } = await import("@/lib/server/article-generation");
     const note = "出典メモ：手動入力テキスト（manual-text）は、融資とファクタリングの比較軸を整理するために参照しました。";
@@ -19,10 +19,24 @@ describe("generateAioArticle", () => {
     vi.mocked(createStructuredResponse).mockResolvedValue({ ...sampleArticleResult, sources: [...sampleArticleResult.sources, source], body_html: `${sampleArticleResult.body_html}<p>${note}</p><p>顧客の手動入力テキストを分析する業務です。</p>` });
     const result = await generateAioArticle({ form: sampleFormPayload, fetchedReferences: [], fetchedCompetitors: [] });
     expect(result.sources).toEqual(sampleArticleResult.sources);
-    expect(result.body_html).not.toContain("manual-text");
+    // A descriptive provenance sentence may contain facts; retain it and flag for human editing.
+    expect(result.body_html).toContain(note);
     expect(result.body_html).toContain("顧客の手動入力テキストを分析する業務です。");
     expect(result.editor_warnings).toEqual(expect.arrayContaining([expect.stringContaining(note), expect.stringContaining("manual-text")]));
     expect(result.body_html).toContain(sampleArticleResult.sources[0].url);
+  });
+
+  test.each([
+    { note: "出典メモ：手動入力テキスト（manual-text）を参照しました。", retained: false },
+    { note: "出典メモ：手動入力テキスト（manual-text）は、対象が既存会員のみと明記しているため参照しました。", retained: true },
+  ])("removes only content-free acquisition notes: $retained", async ({ note, retained }) => {
+    const { createStructuredResponse } = await import("@/lib/server/openai");
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    vi.mocked(createStructuredResponse).mockResolvedValue({ ...sampleArticleResult, body_html: `<p>${note}</p>` });
+    const result = await generateAioArticle({ form: sampleFormPayload, fetchedReferences: [], fetchedCompetitors: [] });
+    expect(result.body_html.includes(note)).toBe(retained);
+    expect(result.editor_warnings).toContain(note);
+    if (retained) expect(result.editor_warnings).toEqual(expect.arrayContaining([expect.stringContaining("読者向けではない内部メモ")]));
   });
 
   test.each(["対象は既存会員のみです。", "対象は既存会員のみです。出典：https://example.com/terms"])("retains substantive text appended to a manual source note: %s", async (suffix) => {

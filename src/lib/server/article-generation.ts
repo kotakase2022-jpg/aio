@@ -260,9 +260,9 @@ function normalizeGeneratedSources(raw: ArticleGenerationResult) {
   $("p").each((_, element) => {
     const text = $(element).text().trim();
     // Only a known acquisition-only placeholder note; never remove real citations.
-    if (!$(element).find("a").length && !/https?:\/\//i.test(text) && /^出典メモ[：:]\s*手動入力テキスト[（(]manual-text[）)](?:[。.]?|は、?[^。！？\n]*(?:参照しました|参照しています)[。.]?)$/.test(text)) {
+    if (/^出典メモ[：:]\s*手動入力テキスト[（(]manual-text[）)]/.test(text)) {
       sourceWarnings.push(text);
-      $(element).remove();
+      if (!$(element).find("a").length && /^出典メモ[：:]\s*手動入力テキスト[（(]manual-text[）)](?:を参照しました|を参照しています)?[。.]?$/.test(text)) $(element).remove();
     }
   });
   return { result: { ...raw, sources, body_html: $.root().html() ?? "" }, sourceWarnings };
