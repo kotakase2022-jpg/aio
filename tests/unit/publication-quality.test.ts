@@ -2,6 +2,32 @@ import { describe, expect, test } from "vitest";
 import { evaluatePublicationReadiness } from "@/lib/publication-quality";
 
 describe("evaluatePublicationReadiness", () => {
+  test("does not require public links for manual or file provenance", () => {
+    const result = evaluatePublicationReadiness("<p>条件は個別に確認してください。</p>", {
+      requiredSourceUrls: ["manual-text", "file:reference.pdf"],
+    });
+    expect(result).toEqual({ publishReady: true, issues: [] });
+  });
+
+  test("still checks real source links alongside private provenance", () => {
+    const result = evaluatePublicationReadiness("<p>条件は個別に確認してください。</p>", {
+      requiredSourceUrls: ["manual-text", "file:reference.pdf", "https://example.com/evidence"],
+    });
+    expect(result.issues).toEqual([expect.objectContaining({
+      id: "missing-source-link",
+      detail: expect.stringContaining("https://example.com/evidence"),
+    })]);
+    expect(result.publishReady).toBe(false);
+  });
+
+  test("rejects private provenance rendered as an actual broken article link", () => {
+    const result = evaluatePublicationReadiness('<p><a href="manual-text">手入力</a></p>', {
+      requiredSourceUrls: ["manual-text"],
+    });
+    expect(result.issues).toEqual([expect.objectContaining({ id: "broken-link" })]);
+    expect(result.publishReady).toBe(false);
+  });
+
   test.each([
     ["9.5%", "1.5%"],
     ["９．５％", "１．５％"],
