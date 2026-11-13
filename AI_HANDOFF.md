@@ -4,120 +4,106 @@
 - Current owner: Codex
 - Next owner: Claude Code
 - Loop: 9
-- Loop number inferred from: 前回Codexからの引継ぎ後、Claude完了の新記録はない。相沢様11/11追加指摘へのフォローアップとしてLoop9を継続。旧作業はdocs/adversarial-verification-2026-11-09.mdとgit履歴に保持。
-- Phase: Development / PR and release verification
-- Last updated: 2026-11-13 11:38 +09:00
+- Loop number inferred from: 前回Codex引継ぎ後にClaude完了の新記録はなく、相沢様11/11追加指摘への対応としてLoop9を継続。
+- Phase: Handoff / production verified
+- Last updated: 2026-11-13 13:52 +09:00
 
 ## 1. Current Goal
-11/11付の4項目（構成追加、表/補足FAQ選択、制作過程文言、一次情報の限定条件）を局所改修し、protected PR/CI、本番反映、本番確認まで行う。ユーザーが今回の本番反映を明示承認。既存記事変更、顧客WordPress公開、追加課金/権限拡大は禁止。
+11/11付の構成追加、表/補足FAQ選択、制作過程文言、一次情報の限定条件を局所改修し、protected PR/CI、本番反映、本番確認まで実施。今回の本番反映と合成入力による確認はユーザー承認済み。顧客WordPress公開、既存記事の一括変更、追加課金/権限拡大は禁止。
 
 ## 2. Current Branch / Commit / PR
-- Branch: `codex/aizawa-internal-source-metadata`
-- Latest commit at start / baseline: `749301de18e847c6de777f21c11743ec28562ae5`
-- Last known good production commit: `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`
-- PR: https://github.com/kotakase2022-jpg/aio/pull/44
-- CodeRabbit OSS review status: dc45267 reviewed, 7 findings fixed with reproduction tests; follow-up review is subject to OSS hourly allowance (no paid review requested).
-- Production URL: https://aio-article-generator.vercel.app/
-- Current production / rollback: `dpl_ByP6QrgAv4ehCXL7ECP54PwfK5mS`, https://aio-article-generator-2ovfy85ge-sl2026.vercel.app (READY confirmed this turn)
-- Intended team/project: `sl2026` / `aio-article-generator` / `prj_rIIxUXcj7bOgZMaKxUgHad353Dpf`
-- No Supabase migration or gateway change is required.
+- Branch: `codex/aizawa-nov11-release-record` (documentation-only)
+- Latest runtime commit / last known verified production: `324b880ab2bfc7fbab9c2352319352764b447814`
+- Baseline main: `749301de18e847c6de777f21c11743ec28562ae5`; baseline runtime: `e150927d7e5ddc5c82b54d946a9b21db49e8c4c5`.
+- Runtime PRs: https://github.com/kotakase2022-jpg/aio/pull/44 through /48, all merged after required CI without bypass/direct main push.
+- Production: https://aio-article-generator.vercel.app/
+- Final release: **2026-11-13 13:05:31 JST**, `dpl_9aoGSRfatAYc1MqScMyPTgPecVAU`, https://aio-article-generator-rh8577ut7-sl2026.vercel.app , READY. Canonical alias/releaseCommit verified after promotion.
+- Team/project: `sl2026` / `aio-article-generator` / `prj_rIIxUXcj7bOgZMaKxUgHad353Dpf`.
+- Original rollback: `dpl_ByP6QrgAv4ehCXL7ECP54PwfK5mS`, https://aio-article-generator-2ovfy85ge-sl2026.vercel.app . No DB migration/schema rollback needed.
+- Documentation-only commits after this runtime SHA do not require redeployment.
 
 ## 3. What Was Done
-- Required documents, source specification, current branch/history and actual production deployment checked fresh.
-- Added comparison/problem-solution structures, dedicated structure brief, independent auto/on/none table and supplemental FAQ modes.
-- Resolved structure before long-input compaction; persisted the resolved plan for evaluation after restoration/regeneration.
-- Main FAQ body is editor-owned Q&A; supplemental FAQ is separate. Main answer wins over duplicate supplemental question; old saved drafts keep legacy behavior.
-- Shared final renderer honors none across preview/copy/export/WordPress, preserves table content/links as prose and is idempotent.
-- Optional tables/FAQ are not penalized; structure checks have positive and negative cases.
-- Private generation warnings and publication checks cover workflow wording and scoped quantities across paragraphs/table rows/answers/summaries/takeaways.
-- Synthetic Delta fixture, regression tests, three E2E mode flows, real OpenAI eight-case matrix, separately gated one-disposable-article production smoke added.
+- Added comparison/problem-solution structures, structure brief, independent auto/on/none table/supplemental FAQ modes. Resolve structure before compaction and persist the resolved plan.
+- Main Q&A remains editor-owned. Supplemental FAQ is separate; preserve matching/unmatched body answers when none. Legacy drafts retain compatibility.
+- Shared preview/copy/export/WordPress renderer honors none, preserves table content/caption/links as prose, and is idempotent.
+- Optional absence is not penalized. Structure checks have positive/negative cases. Case generation follows one explicitly hypothetical scenario across the whole article.
+- Workflow wording and scoped quantities are checked across body/table rows/answers/summaries/takeaways; private warnings remain visible to editors.
+- Invalid generated source identifiers move to private warnings. Only exact content-free manual-text acquisition phrases may be removed; descriptive/mixed factual notes remain and are flagged, not silently deleted.
+- Fixed production false missing-link alarms for manual/file evidence; real missing/broken links and numeric evidence checks remain enforced.
+- Fixed existing save400 after DB restoration without competitor research: DB null becomes undefined; legacy null is accepted as absence at the input boundary, while string/array/boolean are still rejected.
+- Added synthetic Delta/live matrix, unit/integration/E2E regressions and gated production verification.
 
 ## 4. Files Changed
-- `src/lib/article-presentation.ts` (new shared plan/format helper)
-- types/aio, server/article-form-schema, ai-schemas, article-generation
-- draft-html, article-quality, faq-quality, publication-quality, quality-edit-guidance, quality-regeneration-action
-- article-generator-app.tsx
-- unit/article-presentation, article-generation; integration/drafts, wordpress; E2E/aio-workflow
-- fixtures/delta-nov11.ts, live/article-options.live.test.ts
-- scripts/production-smoke.mjs, production-article-smoke.mjs
-- docs/aizawa-nov11-followup.md, docs/testing.md, this file
-- AGENTS.md/CLAUDE.md already match current operating rules; no unnecessary edits.
+- `src/lib/article-presentation.ts`, article/FAQ/publication quality, draft HTML/schema, edit/regeneration guidance.
+- Server article generation/form/AI schemas, `drafts.ts`, types/aio, article-generator-app.tsx.
+- Unit presentation/generation/publication tests; integration draft/Supabase/WordPress tests; E2E workflow.
+- `tests/fixtures/delta-nov11.ts`, `tests/live/article-options.live.test.ts`, production smoke scripts.
+- `docs/aizawa-nov11-followup.md`, `docs/testing.md`, this file.
+- AGENTS.md/CLAUDE.md operating rules remain appropriate; no unnecessary edits.
 
 ## 5. Current Status
-- Local full quality PASS after review/case fixes: 583 tests, contract15, E2E59, build19 routes.
-- Real OpenAI initial matrix PASS; subsequent rerun 7/8, case structure failed. Case prompt corrected without loosening evaluation; final matrix 8/8 PASS in 280.04s.
-- Production release and disposable smoke pending. Do not report them completed yet.
-- No production writes so far; read-only row counts/fingerprints in the follow-up report.
+- Final local quality and required CI PASS; all runtime PRs merged and production deployed.
+- Final production read-only smoke PASS. The second real generated article subsequently passed edit/save/reload/preview/copy/export after deterministic fixes: publication issues0, save warnings0, browser errors0.
+- No real WordPress post. Existing five-table fingerprints match baseline, excluding only our two synthetic articles.
+- **Cleanup pending:** Supabase deletion confirmation did not complete (earlier expired, final attempt aborted). Read-only query confirmed both own jobs/drafts remain. Do not bypass confirmation using another credential/tool.
 
 ## 6. Known Issues
-- Semantic correctness, all paraphrases, complicated exceptions and medical/financial truth cannot be proved by heuristic checks. Human source review remains required.
-- New workflow wording is flagged, not indiscriminately deleted from otherwise valid paragraphs/sources.
-- Recreate remains full generation from current inputs, not preservation of hand-edited prose. Save first.
-- No live WordPress sandbox; outbound HTML parity tested locally, no real WP post.
-- Prior limitations remain: shared demo auth is not per-user isolation; multi-session revision handling is not full collaborative editing; WordPress unknown outcomes need manual reconciliation.
-- User-owned untracked `output/` remains untouched.
+- Semantic correctness, complex conditions/paraphrases, and financial/medical truth require human source review regardless of score.
+- Production example still has editorial warnings (word count above target, repetition; test marker affects a meta keyword check). Zero publication issues does not mean perfect editorial quality. No score was inflated.
+- Recreate remains full generation from current inputs, not hand-edited text preservation. Save first.
+- No live WordPress post or new live image generation this task; outbound HTML tested in integration, existing image flows in E2E.
+- Existing limits: shared demo auth is not per-user isolation; no full collaborative editing; ambiguous WordPress outcomes require reconciliation.
+- GitHub reports one moderate development-dependency advisory; production-only audit returned0 this turn. Older Actions runtime warnings remain. No unrelated dependency/CI refactor.
+- Final Vercel error-log scan found no entries; monitoring/drains/long-term behavior were not audited.
 
 ## 7. CodeRabbit Review
-- Review status: CodeRabbit dc45267 completed (9m30s). GitHub既存Codex自動レビューの2指摘はCodeRabbitの表関連指摘と重複。
-- Critical findings: no security/permission issue identified.
-- Resolved findings: 7件すべて実装対応。否定構成指定、caption条件/出典保持、新FAQ型の本文必須、補足FAQを比較軸から除外、編集済みQ&A保持、表セル内段落の文脈維持、モデル固有注意の非公開表示保持。
-- Deferred findings: none. Follow-up automatic review may be unavailable because the one included hourly review was consumed; no billing/plan change.
-- False positives / not applicable: none. All 9 threads replied/resolved at a8a31b4. Incremental CodeRabbit status NEUTRAL due allowance, not a successful new review.
+- PR44/46 received actual CodeRabbit reviews. Received substantive findings were fixed and threads resolved: negated structures, caption/row evidence, Q&A ownership, auxiliary FAQ exclusion, private warnings, matching Q&A retention, mixed/same-sentence fact preservation.
+- PR47/48 reached the OSS allowance, status NEUTRAL: **no fresh CodeRabbit review**, not a successful review. Claude should independently review these small boundary fixes.
+- No received substantive finding left unresolved; no false-positive dismissal claimed.
+- Existing GitHub Codex auto review also ran; PR47/48 completed with no findings. This is separate from CodeRabbit.
 
 ## 8. Optional Bugbot Findings
 - Status: Not run
 - Optional Bugbot: Not run
-- Findings: none
-- Actions taken: standard CodeRabbit PR review will be used
+- Findings/actions: none; no paid review/allowance expansion.
 
 ## 9. Verification Results
-- `npm.cmd run quality`: PASS 2026-11-13. typecheck/lint/integrity61files, 55files/575tests, contract15, coverage S/B/F/L87.54/79.25/92.78/88.27%, Chromium PC E2E59/59, Next16.4.5 build19 routes.
-- `npx.cmd vitest run --config vitest.live.config.ts tests/live/article-options.live.test.ts`: 8/8 PASS, gpt-5.5, 307.31s total, ~33-48s/article, image0, no DB/WP writes. Comparison on/on, none/none, auto/auto; FAQ none/none; problem-solution auto/auto; case on/auto; textbook auto/on; BtoC FAQ none/none. Actual output in ignored `.verification-files/nov11-live/`.
-- Initial reproductions:14failed/1passed then fixed. Generic-FAQ loss:1failed/22passed then fixed. Long-theme structure loss:1failed/37passed then fixed.
-- Intermediate failures: new E2E assumed automatic completed-draft restoration (correct workflow opens the log), missing browser-error collector invocation, old mandatory-FAQ expectation. Corrected with reasons, preserving success/error assertions.
-- Old prompt expectations updated for new FAQ-body/optional-supplement specification. No test deletion/skip/threshold relaxation.
-- Windows sandbox EPERM on SSR cache rename before execution; permitted local rerun passed.
-- `git diff --check`: PASS.
-- Review fixes full `npm.cmd run quality`: PASS, 582 tests / contract15 / E2E59 / build19; coverage S/B/F/L87.63/79.38/92.80/88.30%.
-- Review reproductions: table2 failed/23passed, editor-Q&A2 failed/25passed, remaining3 failed/65passed; all fixed. Additional targeted suites158/158 PASS.
-- Live rerun271.32s:7/8 PASS, case-type generated a normal comparison with a short late example. Preserved failure in ignored .verification-files/nov11-case-before-fix.json. Strengthened case plan to follow one explicitly hypothetical scenario across the whole article; no structure-test relaxation. Added prompt regression (red then green). Full quality after this change:583 tests/E2E59/build19 PASS, coverage unchanged87.63/79.38/92.80/88.30%.
-- PR second CI run43353618949 PASS at a8a31b4. Final case-only prompt commit requires its own CI before release.
-- PR initial CI run43351995407: PASS (4m14s). `npm audit --omit=dev`: PASS, 0 vulnerabilities. Local production-build Chrome screenshot checked (1440x1000).
-- Final prompt CI43354358059 PASS at1d59a44. Merge blocked by newly arrived review: converted table-cell paragraphs split scope. Also rechecked CodeRabbit follow-up about non-FAQ none losing unmatched editor Q&A. Both reproduced (2failed/30passed), then fixed (98/98 targeted). Test fixture had an invalid top-level sources field, caught by typecheck and removed; full quality restarted with585 tests. Release still waits for final CI.
-- Production smoke/CI/review: pending, not counted as success.
-- Latest full quality after final review fixes: PASS (585 tests, contract15, E2E59, build19). Coverage S/B/F/L87.65/79.34/92.82/88.31%. Final live matrix8/8PASS in280.04s; 30.21-39.43s/article. No model instruction changes after that run, only covered HTML preservation fixes.
-- PR44 CI43355420330 PASS (4m15s), merged as dd5707dd1f07d80afec1ff331017642e53ca2421. Follow-up CodeRabbit comment arrived at merge: supplemental none + matching leftover faqItems still drops body answer. Reproduced1failed/32passed; retain unmanaged Q&A entirely when none. Separate follow-up PR required before production. No production release yet.
-- PR45 CI43356154031 PASS, merged c56a5f9. Full quality586/contract15/E2E59/build19 PASS. Final renderer replay of8 live artifacts9/9PASS. c56a5f9 promoted12:08 JST to dpl_CytsVri8oEtVPRW8qC1oUZ6pAs6q, read-only production smoke PASS.
-- Production disposable generation completed but smoke correctly FAILED on missing source link manual-text. Model invented a non-URL source placeholder and acquisition-only note. Own job454104b7-aacb-4d21-bb69-e502370c038d / draft62f62b95-057a-4f6a-9a5b-b523a6069e8e remain for exact-ID cleanup. Marker AIO-RELEASE-SMOKE-08c3240b-9b01-40c6-a6ca-ad75ab7f0106. No customer data changed. Added red/green regression1failed/39passed then139 related PASS; move invalid source metadata and this exact acquisition-only paragraph to private warnings, retain real citations/ordinary prose. Follow-up PR/full quality pending; do not report all production checks passed yet.
-- PR46 CI43358391758 PASS for initial source fix; additional review found mixed acquisition/factual paragraph loss. Reproduced2failed/40passed. Restrict automatic removal to acquisition-only full paragraph, keep mixed facts/URLs and flag them for editors. Cleanup confirmation expired, so first disposable rows remain (do not bypass confirmation). Full quality/release pending final fix.
-- CodeRabbit PR46 review8595ace completed5m44s and identified same-sentence condition loss. Removed variable-content deletion entirely: only content-free fixed acquisition phrases may be removed. Descriptive notes remain and are flagged, including the original production note. Corrected prior test expectation because it implicitly permitted fact loss; retained URL validation/private metadata assertions and added fixed-note vs same-sentence-condition cases. Recheck before release.
-- PR46 merged e1f88d1 after CI43359879324 PASS and full quality591/contract15/E2E59/build19 PASS. Promoted12:43:58 JST, dpl_Hvwy9TASAFiqbPWfMWnVoWRYuYUL. Read-only smoke PASS. Second actual generation completed clean prose/sources[], but UI fallback misclassified fetchedReferences manual-text as a required public URL. Smoke failed correctly; reproduced2failed/27passed. Normalize HTTP source requirements at the common publication-check boundary; keep real missing/broken-link checks and manual evidence intact. Own second job4f8e7082-32c6-4b94-8664-f9b904a86173/draft675536f8-b7dd-44b8-8ba7-6f8b5c211d72 retained. New PR/quality needed; no repeated live generation needed to prove this deterministic check correction.
-- PR47 merged af2b0c4 after CI43361636735 PASS3m28s and quality594/contract15/E2E59/build19 PASS. CodeRabbit rate-limited; existing Codex auto review completed no findings. Promoted12:56:10 JST dpl_JE2Nt1mpQZ3G5YL1RgxfcS9h5r5T. Read-only smoke PASS; resumed same own article shows zero publication issues, but save400 exposed DB null competitorResearch versus optional-object save schema. Actual artifact parse failed; committed reproduction2failed/18passed. Normalize DB null to undefined on read and accept legacy null as absence at input boundary, still reject string/array/boolean. No schema/data migration; pending full quality/PR/release before repeating save.
+- `npm.cmd run quality`: **PASS 2026-11-13 12:58-13:00 JST**, after final runtime changes. Typecheck/lint/integrity61files, 55files/**598 tests**, contract15 rerun, coverage S/B/F/L **87.75/79.44/92.85/88.40%**, Chromium PC **59/59 E2E**, Next16.4.5 build19 routes.
+- Null-research regression:2failed/18passed before fix,20/20 after. Manual provenance regression:2failed/27passed before fix,119 related tests after; three mode E2Es assert no false warning after restoration.
+- Real OpenAI matrix: **8/8 PASS**, gpt-5.5,280.04s,30.21-39.43s/article, images0, no DB/WP writes. Earlier8/8 then7/8 case failure retained; prompt corrected without weakening criteria.
+- Matrix preceded final source/null-boundary fixes. Final artifact replay/schema verification **12/12 PASS**, not additional live calls: `npx.cmd vitest run --config .verification-files/nov11-replay.config.ts`.
+- Real production jobs completed in71s and82s. First strict smoke failed on source metadata; second failed on provenance false alarm, then save400. Failures retained, not counted as successes.
+- Final same-article continuation: `AIO_SMOKE_WRITE_CONFIRM=resume-own-disposable-article node .verification-files/resume-production-article.mjs`, **13:05:35-13:06:01 JST PASS**, no new generation. Save200/warnings[], restored edits/modes, no table/supplemental FAQ, preview=clipboard=downloaded body HTML, browser errors0.
+- `node scripts/production-smoke.mjs`: final PASS; auth/API401/login/logs/controls/required inputs, mutations blocked except login.
+- Protected stage login200/logs401 before promotion; team/project/SHA verified. Final runtime CI **43362566563 PASS3m49s** (PR48), PR47 CI43361636735 PASS3m28s; previous runtime PR CI also passed.
+- `git diff --check`: PASS. `npm audit --omit=dev`:0 earlier this turn, not an all-dependency guarantee. Final deployment error-level logs/15min: no entries.
+- Reproduction history and changed old-expectation reasons: release report/PR history. No test deletion, skip or threshold relaxation.
 
 ## 10. Next Recommended Action
-1. Commit scoped diff, create PR, obtain CodeRabbit/required CI. No protection bypass or direct main push.
-2. Merge, stage production with --prod --skip-domain, verify, promote same build.
-3. Read-only production smoke then explicitly gated disposable article generate/edit/save/reload/copy/export. Compare existing DB fingerprints, cleanup only manifest IDs after marker verification.
-4. Record actual release timestamp/SHA/deployment/screenshots/errors/cleanup in handoff/report.
+1. Read `docs/aizawa-nov11-followup.md`, review PR44-48, especially Q&A ownership, mixed notes, manual provenance and null roundtrip.
+2. Do not redeploy/regenerate merely for documentation. The production runtime SHA above is verified.
+3. After completed deletion confirmation, clean up only the two exact own pairs below after marker/status/no-image/no-WP checks. Otherwise leave intact.
+4. Human review of actual Delta/PayStruct conditions remains necessary before customer publication. No message sent to Aizawa.
 
 ## 11. Suggested Review Scope for Claude Code
-- Main/supplemental FAQ ownership, canonicalization order, old draft compatibility.
-- Mode consistency, table evidence/link preservation.
-- Numeric scope per independent surface and noun-anchor matching limitations.
-- Structure precedence before truncation / after regeneration instruction removal.
-- Production smoke allowlist and marker+ID-scoped cleanup.
+- FAQ canonicalization/edited answers, lossless table conversion, per-surface numeric scope and semantic limits.
+- Keep factual mixed notes while flagging internal prose; do not broaden automatic deletion.
+- Null optional research compatibility without relaxing malformed input validation.
+- Exact-ID smoke/cleanup allowlists; distinguish real API calls from replay/mock tests.
 
 ## 12. Risk Notes
-- Eight real generations are synthetic examples, not commercial-term verification or a guarantee.
-- High editorial score does not establish safe publication; human number/condition/source review required.
-- Production disposable smoke is separate from default read-only smoke and requires opt-in; preserve manifest on failure for exact-ID recovery.
-- No DB/RLS/auth/SSRF/timeout changes. Recorded previous READY deployment is rollback target; no DB rollback needed.
+- Pending own records, Supabase `npdyfhqugniuxfxpgngh`:
+  - marker `AIO-RELEASE-SMOKE-08c3240b-9b01-40c6-a6ca-ad75ab7f0106`; job `454104b7-aacb-4d21-bb69-e502370c038d`; draft `62f62b95-057a-4f6a-9a5b-b523a6069e8e` (first failed verification).
+  - marker `AIO-RELEASE-SMOKE-ab7832f3-8e5a-4418-bda5-95c825bf61c0`; job `4f8e7082-32c6-4b94-8664-f9b904a86173`; draft `675536f8-b7dd-44b8-8ba7-6f8b5c211d72` (final successful edit/save/export).
+- Both are unpublished, image0. Deletion was not executed; recheck before any future action.
+- Input/draft/image/WP-post/WP-connection fingerprints excluding only these IDs matched baseline after final save. Exact counts/hashes in release report.
+- No migration/gateway/RLS/auth/SSRF change. Original rollback retained.
 
 ## 13. Do Not Touch
-- Secrets/env/token values; user-owned output/; existing production drafts; WP publication; customer messaging.
-- No force push, protection bypass, test weakening or silent evidence deletion.
+- Secrets/env/token values; user-owned untracked `output/`; existing production articles; WP publication; customer messaging.
+- No force push, protection bypass, weakened tests, silent evidence deletion, or cleanup-confirmation bypass.
 
 ## 14. Notes for Claude Code
-- Detail: docs/aizawa-nov11-followup.md. Previous release: docs/adversarial-verification-2026-11-09.md.
-- Windows uses npm.cmd/npx.cmd; .verification-files ignored/excluded from deploy.
-- Current evidence is November13 runs. Previous 544-test count is historical, not this task.
+- Previous release evidence: `docs/adversarial-verification-2026-11-09.md` and git history.
+- Windows uses npm.cmd/npx.cmd. Ignored/deploy-excluded `.verification-files/` holds synthetic outputs, screenshots, manifests, replay/resume scripts. Do not upload sessions/env files.
+- Final counts are current November13 runs, not historical counts.
