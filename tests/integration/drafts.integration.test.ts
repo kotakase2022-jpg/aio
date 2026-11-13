@@ -26,6 +26,27 @@ afterEach(async () => {
 });
 
 describe("draft persistence route handlers", () => {
+  test("saving a restored draft accepts null as absent optional competitor research", async () => {
+    const { POST } = await import("@/app/api/save-draft/route");
+    const { getDraft } = await import("@/lib/server/drafts");
+    const draft = { ...createSampleDraft({ id: "legacy-null-research", images: [], faqItems: [] }), competitorResearch: null };
+    const response = await POST(new Request("http://localhost/api/save-draft", { method: "POST", body: JSON.stringify({ draft }) }));
+    expect(response.status).toBe(200);
+    const restored = await getDraft(draft.id);
+    expect(restored?.competitorResearch).toBeUndefined();
+    expect(restored?.editedBodyHtml).toBe(draft.editedBodyHtml);
+    expect(restored?.faqItems).toEqual([]);
+  });
+
+  test.each(["not research", [], false])("still rejects malformed competitor research: %j", async (competitorResearch) => {
+    const { POST } = await import("@/app/api/save-draft/route");
+    const { getDraft } = await import("@/lib/server/drafts");
+    const draft = { ...createSampleDraft({ id: "invalid-research" }), competitorResearch };
+    const response = await POST(new Request("http://localhost/api/save-draft", { method: "POST", body: JSON.stringify({ draft }) }));
+    expect(response.status).toBe(400);
+    expect(await getDraft(draft.id)).toBeNull();
+  });
+
   test("preserves presentation options and body Q&A across save, edit, approve and reload", async () => {
     const { POST: save } = await import("@/app/api/save-draft/route");
     const { POST: approve } = await import("@/app/api/approve-draft/route");

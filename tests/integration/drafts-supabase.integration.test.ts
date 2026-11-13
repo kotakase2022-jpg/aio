@@ -195,6 +195,9 @@ describe("draft persistence with Supabase", () => {
     } as unknown as ReturnType<typeof getSupabaseAdmin>);
 
     const hydrated = await getDraft("draft-supabase-load");
+    const { parseArticleDraft } = await import("@/lib/article-draft-schema");
+    expect(hydrated?.competitorResearch).toBeUndefined();
+    expect(() => parseArticleDraft(hydrated)).not.toThrow();
 
     expect(hydrated).toMatchObject({
       id: "draft-supabase-load",

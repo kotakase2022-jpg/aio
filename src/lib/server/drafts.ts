@@ -174,7 +174,7 @@ function rowToDraft(
     inputPayload: row.input_payload as ArticleDraft["inputPayload"],
     fetchedReferences: row.fetched_references as ArticleDraft["fetchedReferences"],
     fetchedCompetitors: row.fetched_competitors as ArticleDraft["fetchedCompetitors"],
-    competitorResearch: row.competitor_research as ArticleDraft["competitorResearch"],
+    competitorResearch: (row.competitor_research ?? undefined) as ArticleDraft["competitorResearch"],
     aiResult: row.ai_result as ArticleDraft["aiResult"],
     editedTitle: String(row.edited_title ?? ""),
     editedSlug: String(row.edited_slug ?? ""),
