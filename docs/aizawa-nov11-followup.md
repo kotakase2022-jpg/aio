@@ -66,6 +66,8 @@
 
 再実行の全qualityはPASS（585 tests、contract15、PC E2E59、build19、coverage S/B/F/L87.65/79.34/92.82/88.31%）。最終実モデル8件は各30.21〜39.43秒、ケース型の自動補足FAQは0問。追加のHTML保持修正後はモデル指示の変更なし。
 
+PR44の最終CI43355420330成功、dd5707dへマージ。ただしマージ時にCodeRabbitから、補足なしでもfaqItemsに同じ質問が残る場合の追加欠落条件を受領。1 failed/32 passedで再現し、補足なしでは管理対象外の本文Q&Aを質問一致にかかわらず保持する局所修正を別PRにした。本番切り替えはこの修正の検証後まで保留。
+
 ### 本番前後の確認
 
 - 通常のprotected PR/CIを通してmainからstage、確認後に同一buildをpromoteする。

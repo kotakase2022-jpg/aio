@@ -144,6 +144,19 @@ describe("November 11 article presentation requirements", () => {
     expect(buildDraftArticleHtml({ ...draft, editedBodyHtml: html })).toBe(html);
   });
 
+  test("disabled supplemental FAQ cannot remove a matching edited body answer", () => {
+    const draft = createSampleDraft({
+      inputPayload: { ...sampleFormPayload, articleStructure: "comparison", supplementalFaqMode: "none" },
+      editedBodyHtml: "<h2>質問と回答</h2><h3>必要書類は？</h3><p>編集者が確定した本文回答。</p>",
+      faqItems: [{ question: "必要書類は?", answer: "古い補足回答。" }],
+    });
+    const html = buildDraftArticleHtml(draft);
+    expect(html).toContain("編集者が確定した本文回答。");
+    expect(html).not.toMatch(/aio-faq-block|古い補足回答/);
+    expect(html.match(/必要書類は/g)).toHaveLength(1);
+    expect(buildDraftArticleHtml({ ...draft, editedBodyHtml: html })).toBe(html);
+  });
+
   test("table-to-prose keeps a valid row context with cell blocks and inline links", () => {
     const draft = createSampleDraft({
       inputPayload: { ...sampleFormPayload, tableMode: "none", supplementalFaqMode: "none" },

@@ -38,7 +38,7 @@ export function buildPresentedArticleBody(html: string, faqItems: FaqItem[], inp
   if (!usesNewPolicy) return appendFaqBlockWhenNeeded(body, faqItems, { preserveUnmatchedBodyFaq: true });
   const withoutSupplement = removeManagedFaqBlock(body);
   const canonicalItems = canonicalizeFaqItems(faqItems);
-  const cleanBody = resolveArticleStructure(input) === "faq"
+  const cleanBody = resolveArticleStructure(input) === "faq" || input.supplementalFaqMode === "none"
     ? withoutSupplement
     : removeGeneratedFaqBlocks(withoutSupplement, canonicalItems, true);
   const mainQuestions = new Set(mainQuestionHeadings(cleanBody).map(normalizeFaqQuestion));
