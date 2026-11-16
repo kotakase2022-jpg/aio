@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import nextEnv from "@next/env";
-import { chromium, expect } from "@playwright/test";
+import { chromium, expect as baseExpect } from "@playwright/test";
 
 // November 16 release check, run once with explicit approval.
 // 1. Read-only: an unposted customer article older than the first 20 logs opens from page 2 and the
@@ -21,6 +21,8 @@ assert.equal(
 const accessCode = process.env.DEMO_ACCESS_CODE?.trim();
 assert.ok(accessCode, "Set DEMO_ACCESS_CODE to the production access code; this check has no fallback.");
 const baseURL = "https://aio-article-generator.vercel.app";
+// Production reads (job + canonical draft) and the save round trip can take several seconds.
+const expect = baseExpect.configure({ timeout: 30_000 });
 const ownMarker = "AIO-RELEASE-SMOKE-";
 const ownLabel = "検証専用。公開しない。";
 const pageSize = 20;
@@ -53,11 +55,34 @@ const browser = await chromium.launch({ channel: "chrome" });
 const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 1000 } });
 const page = await context.newPage();
 const errors = [];
+// Older articles may embed images on other hosts (for example expired storage links). Those do not
+// decide this check; they are only counted, without URLs, which can carry access tokens.
+record.externalResourceFailures = 0;
+const isAppUrl = (value) => {
+  try {
+    return new URL(value).origin === baseURL;
+  } catch {
+    return true;
+  }
+};
 page.on("pageerror", (error) => errors.push(error.message));
-page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
-page.on("requestfailed", (request) => errors.push(`network failure: ${new URL(request.url()).pathname}`));
+page.on("console", (message) => {
+  if (message.type() !== "error") return;
+  const source = message.location().url;
+  if (source && !isAppUrl(source) && message.text().startsWith("Failed to load resource")) {
+    record.externalResourceFailures += 1;
+    return;
+  }
+  errors.push(message.text());
+});
+page.on("requestfailed", (request) => {
+  if (!isAppUrl(request.url())) record.externalResourceFailures += 1;
+  else errors.push(`network failure: ${new URL(request.url()).pathname}`);
+});
 page.on("response", (response) => {
-  if (response.status() >= 400) errors.push(`HTTP ${response.status()}: ${new URL(response.url()).pathname}`);
+  if (response.status() < 400) return;
+  if (!isAppUrl(response.url())) record.externalResourceFailures += 1;
+  else errors.push(`HTTP ${response.status()}: ${new URL(response.url()).pathname}`);
 });
 // Set only around the one approved save: the stored draft that the save payload must equal.
 let saveGate = null;
@@ -126,6 +151,7 @@ try {
   const pageOf = (index) => Math.floor(index / pageSize) + 1;
   const same = (label, actual, expected) =>
     assert.ok(actual === expected, `${label} shown in the editor did not match the stored article`);
+  const draftStatusLabels = { draft: "下書き", approved: "承認済み", posted: "投稿済み", failed: "失敗" };
 
   await page.goto("/");
   await page.getByTestId("demo-access-code").fill(accessCode);
@@ -156,7 +182,7 @@ try {
       assert.ok(attempt < 10, "the log did not appear after loading older pages");
       const shown = await rows.count();
       await page.getByTestId("generation-logs-load-more").click();
-      await expect.poll(() => rows.count()).toBeGreaterThan(shown);
+      await expect.poll(() => rows.count(), { timeout: 30_000 }).toBeGreaterThan(shown);
     }
     await expect(rowOf(jobId)).toContainText("完了");
     await expect(rowOf(jobId)).toContainText("未投稿");
@@ -168,10 +194,11 @@ try {
     await expect
       .poll(async () => (await page.getByTestId("draft-title-input").inputValue()) === draft.editedTitle, {
         message: "the editor shows the stored title",
+        timeout: 30_000,
       })
       .toBe(true);
     same("body", await page.getByTestId("draft-body-html-textarea").inputValue(), asEditorText(draft.editedBodyHtml));
-    await expect(page.getByTestId("draft-status-badge")).toHaveText("下書き");
+    await expect(page.getByTestId("draft-status-badge")).toHaveText(draftStatusLabels[draft.status]);
     await expect(page.getByTestId("generation-step-save")).not.toContainText("処理中");
     await page.getByTestId("input-wizard-step-button-theme").click();
     const input = job.inputPayload;
@@ -183,7 +210,8 @@ try {
   // Read-only first: nothing is written if an older customer article does not open correctly.
   if (customer) {
     const job = await readJob(customer.log.id);
-    assert.ok(job.status === "completed" && job.draft?.status === "draft", "the page-2 article is not an unposted draft");
+    // Draft or approved-but-unposted; either way it is only opened here.
+    assert.ok(job.status === "completed" && job.draft && job.draft.status !== "posted", "the page-2 article is not an unposted article");
     await openFromList(customer.log.id);
     await verifyEditorShows(job);
     record.pageTwoReadOnlyOpen = { jobId: customer.log.id, page: pageOf(customer.index), saved: false, editorMatchesStored: true };
@@ -213,7 +241,7 @@ try {
     saved.catch(() => {});
     await page.getByTestId("save-draft-button").click();
     await expect
-      .poll(() => savesSent > 0 || saveBlocked !== null, { message: "the save request left the browser" })
+      .poll(() => savesSent > 0 || saveBlocked !== null, { message: "the save request left the browser", timeout: 30_000 })
       .toBe(true);
     // Fail fast with the reason; nothing was written when the guard refused the save.
     assert.equal(saveBlocked, null);
