@@ -49,7 +49,12 @@ try {
   });
   await page.goto("/");
   await page.getByTestId("demo-access-code").fill(process.env.DEMO_ACCESS_CODE || "202607");
+  const loginAnswer = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/demo-auth");
   await page.getByTestId("demo-login-submit").click();
+  // A rejected code stops here at once; nothing has been sent except the login attempt.
+  const loginStatus = (await loginAnswer).status();
+  if (loginStatus === 401) throw new Error("Production rejected DEMO_ACCESS_CODE (アクセスコードが違います). Nothing was changed. Set the production access code and run again.");
+  assert.equal(loginStatus, 200, `login returned HTTP ${loginStatus}`);
   await page.waitForURL(`${baseURL}/`);
   await page.getByTestId("reference-text-0").fill(deltaNov11Form.references[0].text);
   const step = async (name) => page.getByTestId(`input-wizard-step-button-${name}`).click();
