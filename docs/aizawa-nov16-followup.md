@@ -76,6 +76,7 @@
   - 新規 `tests/integration/generation-job-completion.integration.test.ts`、`generation-logs-pagination.integration.test.ts`、`draft-save-retry.integration.test.ts`
   - E2E追加 `tests/e2e/aio-workflow.spec.ts`
   - `playwright.config.ts`（E2Eサーバー専用の隔離ローカル保存先 `AIO_E2E_LOCAL_DATA_DIR`）
+- 本番smoke: `scripts/production-smoke.mjs`（ページ送りの読み取り確認を追加。更新系リクエストの遮断はそのまま）
 - 既存テストの移行: 削除した `listGenerationLogs` を使っていた4テストを、同じアサーションのまま新API（`listGenerationLogsPage` / `listGenerationJobs`）へ置換した。スキップ・削除・閾値の緩和はしていない。
 
 ## 検証（2026-11-16、このセッションで実行）
@@ -115,6 +116,7 @@
 - 一次情報の数値・適用条件の維持：`publication-quality.test.ts`、`article-generation.test.ts`
 - 競合調査なしの保存：`tests/integration/drafts.integration.test.ts`、上記の新規E2E（null）
 
+- 拡張した本番smokeは、ローカルの本番ビルド（隔離保存先に合成25件と0件）に対して、git管理外の一時コピー（ホスト制限とブラウザ指定だけを変更）で実行し、PASSした（25件で2ページ・重複なし・未投稿の完了記事18件＝投入データと一致）。**本番では未実行。**
 - E2E はこのコンテナに Google Chrome がないため、git管理外のローカル設定 `.verification-files/playwright.local.config.ts` でプリインストールの Chromium（rev 1243）を使った。プロジェクト指定の Chrome チャネル・CIのブラウザとは異なる。
 - 「生成済み記事」は合成データを投入して代用した。実AI生成は行っていない（費用・資格情報なし）。生成完了の処理は、AI応答をモックした結合テストで検証した。
 - WordPress の実投稿は行っていない。投稿APIはモックで、同じ記事IDで投稿リクエストが送られることだけを確認した。
@@ -126,7 +128,7 @@
   1. PRで必須CI `Typecheck, lint, tests, E2E, build` とCodeRabbitを確認する。
   2. 通常merge する。
   3. mainを `vercel --prod --skip-domain` でステージする。
-  4. `AIO_SMOKE_BASE_URL=<ステージURL> node scripts/production-smoke.mjs` を実行する。
+  4. `AIO_SMOKE_BASE_URL=<ステージURL> node scripts/production-smoke.mjs` を実行する。今回、smoke に読み取りだけの確認を追加した。ページ送り版APIが配信されていること、全ページを重複なく取得できること、「さらに古いログを表示」で件数が増えることを確認し、件数（総数・未投稿の完了記事数）を出力する。
   5. promote する。
   6. canonical URL で再度 smoke を実行する。
 - DBマイグレーション・Edge Function のデプロイ・環境変数の変更は不要。

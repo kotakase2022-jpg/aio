@@ -42,7 +42,42 @@ try {
   await expect(page.getByTestId("input-wizard-step-references")).toBeVisible();
   const logs = await context.request.get("/api/generation-logs");
   assert.equal(logs.status(), 200);
-  assert.equal((await logs.json()).ok, true);
+  const firstLogPage = await logs.json();
+  assert.equal(firstLogPage.ok, true);
+  // Paged logs (November 16): every older page must be reachable read-only, without duplicates.
+  assert.ok(Array.isArray(firstLogPage.logs), "generation logs response has no logs array");
+  assert.ok("nextCursor" in firstLogPage && typeof firstLogPage.complete === "boolean",
+    "deployed generation logs API is not the paged version");
+  const listedLogIds = new Set(firstLogPage.logs.map((log) => log.id));
+  const isUnpostedCompleted = (log) => log.status === "completed" && !log.wordpressPostStatus;
+  let unpostedCompletedLogs = firstLogPage.logs.filter(isUnpostedCompleted).length;
+  let logPages = 1;
+  let logsComplete = firstLogPage.complete;
+  for (let cursor = firstLogPage.nextCursor; cursor; logPages += 1) {
+    assert.ok(logPages < 50, "generation log paging did not end");
+    const next = await context.request.get(`/api/generation-logs?cursor=${encodeURIComponent(cursor)}`);
+    assert.equal(next.status(), 200);
+    const body = await next.json();
+    assert.equal(body.ok, true);
+    assert.ok(body.logs.length > 0, "an issued cursor returned an empty page");
+    for (const log of body.logs) {
+      assert.ok(!listedLogIds.has(log.id), "a generation log appeared on two pages");
+      listedLogIds.add(log.id);
+    }
+    unpostedCompletedLogs += body.logs.filter(isUnpostedCompleted).length;
+    logsComplete = logsComplete && body.complete;
+    cursor = body.nextCursor;
+  }
+  await page.getByTestId("generation-logs-toggle").click();
+  const logRows = page.getByTestId("generation-logs-content").locator("tbody tr");
+  if (firstLogPage.nextCursor) {
+    await expect(logRows).toHaveCount(firstLogPage.logs.length);
+    await page.getByTestId("generation-logs-load-more").click();
+    await expect.poll(() => logRows.count()).toBeGreaterThan(firstLogPage.logs.length);
+  } else {
+    await expect(page.getByTestId("generation-logs-load-more")).toHaveCount(0);
+  }
+  await page.getByTestId("generation-logs-toggle").click();
   await page.getByTestId("reference-text-0").fill("公開前確認用の一時入力。生成・保存は実行しません。");
   for (const step of ["competitors", "theme", "primary-info", "visual-tone", "word-count"]) {
     await page.getByTestId(`input-wizard-step-button-${step}`).click();
@@ -78,11 +113,13 @@ try {
   await page.screenshot({ path: screenshot, fullPage: true });
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ result: "PASS", baseURL, checks: [
-    "unauthenticated API denied", "login", "durable logs read", "six input steps",
+    "unauthenticated API denied", "login", "durable logs read", "older log pages reachable without duplicates",
+    "load-more control", "six input steps",
     "audience/structure controls including comparison/problem-solution", "table/supplemental FAQ modes",
     "required primary information", "ready-to-generate state",
     "no console/page/network errors", "no application mutations",
-  ], screenshot }));
+  ], logs: { pages: logPages, listed: listedLogIds.size, unpostedCompleted: unpostedCompletedLogs, complete: logsComplete },
+  screenshot }));
 } finally {
   await browser.close();
 }
