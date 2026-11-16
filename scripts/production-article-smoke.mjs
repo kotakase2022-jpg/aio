@@ -79,9 +79,17 @@ try {
     if (result.job?.status === "failed") throw new Error(result.job.error);
     return result.job?.status === "completed";
   }, { timeout: 240_000 });
-  const draft = (await completedResponse.json()).job.draft;
+  const completedJob = (await completedResponse.json()).job;
+  const draft = completedJob.draft;
   record.draftId = draft.id;
   await persist();
+  // November 16 ②: the first completed poll already reports the draft as saved, never 処理中.
+  const saveStep = completedJob.steps.find((item) => item.id === "save");
+  assert.equal(saveStep?.status, "done");
+  assert.equal(saveStep?.detail, "ドラフトを保存しました");
+  await expect(page.getByTestId("generation-step-save")).toContainText("ドラフトを保存しました");
+  await expect(page.getByTestId("generation-step-save")).not.toContainText("処理中");
+  record.saveStepShown = "ドラフトを保存しました";
   assert.equal(draft.aiResult.content_policy_version, 2);
   assert.equal(draft.inputPayload.tableMode, "none");
   assert.equal(draft.inputPayload.supplementalFaqMode, "none");
@@ -100,10 +108,22 @@ try {
   assert.equal(savedResult.ok, true);
   assert.deepEqual(savedResult.warnings, []);
   await page.reload();
+  // The new article is on the first log page, after only logs created later, as 完了 / 未投稿.
+  const firstLogPage = await (await context.request.get("/api/generation-logs")).json();
+  const logPosition = firstLogPage.logs.findIndex((log) => log.id === record.jobId);
+  assert.ok(logPosition >= 0, "the new article is not on the first log page");
+  const createdAt = Date.parse(firstLogPage.logs[logPosition].createdAt);
+  assert.ok(firstLogPage.logs.slice(0, logPosition).every((log) => Date.parse(log.createdAt) >= createdAt));
+  record.logPosition = logPosition;
   await page.getByTestId("generation-logs-toggle").click();
+  const logRow = page.getByTestId("generation-logs-content").locator("tbody tr")
+    .filter({ has: page.getByTestId(`generation-log-open-${record.jobId}`) });
+  await expect(logRow).toContainText("完了");
+  await expect(logRow).toContainText("未投稿");
   await page.getByTestId(`generation-log-open-${record.jobId}`).click();
   const article = page.getByRole("article");
   await expect(article).toContainText(editMarker);
+  await expect(page.getByTestId("generation-step-save")).toContainText("ドラフトを保存しました");
   await expect(article.locator("table, .aio-faq-block")).toHaveCount(0);
   const preview = await article.locator(":scope > div").innerHTML();
   await page.getByTestId("copy-body-html-button").click();
