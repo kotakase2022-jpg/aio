@@ -800,25 +800,40 @@ export function ArticleGeneratorApp() {
     const requestId = generationLogsRequestRef.current + 1;
     generationLogsRequestRef.current = requestId;
     // Refresh the range already shown, so an older log opened from a later page stays listed
-    // with its new save/WordPress state instead of falling back to the first page.
-    const refreshLimit = Math.min(
-      Math.max(loadedGenerationLogCountRef.current, generationLogPageSize),
-      generationLogRefreshLimit,
-    );
+    // with its new save/WordPress state instead of falling back to the first page. Each request
+    // stays within the API page cap; a longer range is read page by page before replacing it.
+    const targetCount = Math.max(loadedGenerationLogCountRef.current, generationLogPageSize);
     setLogsLoading(true);
     setLogsLoadingMore(false);
     setLogsError("");
     setLogsMoreError("");
     try {
-      const result = await apiGet<GenerationLogPage>(
-        refreshLimit > generationLogPageSize
-          ? `/api/generation-logs?limit=${refreshLimit}`
-          : "/api/generation-logs",
-      );
-      if (generationLogsRequestRef.current !== requestId) return;
-      setGenerationLogs(result.logs);
-      setLogsNextCursor(result.nextCursor ?? null);
-      setLogsComplete(result.complete !== false);
+      const logs: GenerationLogSummary[] = [];
+      const listed = new Set<string>();
+      let cursor: string | null = null;
+      let complete = true;
+      for (let pageIndex = 0; pageIndex < 20; pageIndex += 1) {
+        const limit = Math.min(targetCount - logs.length, generationLogRefreshLimit);
+        const params = new URLSearchParams();
+        if (cursor) params.set("cursor", cursor);
+        if (cursor || limit !== generationLogPageSize) params.set("limit", String(limit));
+        const query = params.toString();
+        const result: GenerationLogPage = await apiGet<GenerationLogPage>(
+          query ? `/api/generation-logs?${query}` : "/api/generation-logs",
+        );
+        if (generationLogsRequestRef.current !== requestId) return;
+        for (const log of result.logs) {
+          if (listed.has(log.id)) continue;
+          listed.add(log.id);
+          logs.push(log);
+        }
+        cursor = result.nextCursor ?? null;
+        complete = complete && result.complete !== false;
+        if (!cursor || logs.length >= targetCount || result.logs.length === 0) break;
+      }
+      setGenerationLogs(logs);
+      setLogsNextCursor(cursor);
+      setLogsComplete(complete);
     } catch (error) {
       if (generationLogsRequestRef.current !== requestId) return;
       setLogsError(readError(error));

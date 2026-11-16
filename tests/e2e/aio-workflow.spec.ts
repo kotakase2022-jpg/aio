@@ -3972,6 +3972,35 @@ for (const count of [0, 20, 21]) {
   });
 }
 
+test("a refresh keeps more than 100 listed logs by reading the range page by page", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  await seedLocalStore(Array.from({ length: 105 }, (_, index) => buildSeededJob(index)));
+  try {
+    await login(page, { preparePrimaryInfo: false });
+    await page.getByTestId("generation-logs-toggle").click();
+    const rows = page.getByTestId("generation-logs-content").locator("tbody tr");
+    for (const expected of [40, 60, 80, 100, 105]) {
+      await page.getByTestId("generation-logs-load-more").click();
+      await expect(rows).toHaveCount(expected);
+    }
+    const oldestRow = rows.filter({ has: page.getByTestId("generation-log-open-e2e-log-00") });
+    await expect(oldestRow).toContainText("保存済み記事 00");
+    // Only the refreshed range can carry this title, so it proves the result reached the screen.
+    await updateSeededJob("e2e-log-00", (job) => ({ ...job, draft: { ...job.draft!, editedTitle: "100件超の更新後にだけ表示される題名" } }));
+    const firstPage = waitForGenerationLogRefresh(page, 100);
+    const secondPage = waitForGenerationLogRefresh(page, 5);
+    await page.getByTestId("generation-logs-panel").getByRole("button", { name: "更新" }).click();
+    expect(((await (await firstPage).json()) as { logs: unknown[] }).logs).toHaveLength(100);
+    expect(((await (await secondPage).json()) as { logs: unknown[] }).logs).toHaveLength(5);
+    await expect(oldestRow).toContainText("100件超の更新後にだけ表示される題名");
+    await expect(rows).toHaveCount(105);
+    await expect(page.getByTestId("generation-logs-load-more")).toHaveCount(0);
+    expect(errors()).toEqual([]);
+  } finally {
+    await clearLocalStore();
+  }
+});
+
 test("a completed log whose draft-save step was stored as running opens as saved, not processing", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   await seedLocalStore([buildSeededJob(0, { saveStepRunning: true })]);

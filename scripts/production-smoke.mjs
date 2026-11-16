@@ -48,7 +48,14 @@ try {
   assert.ok(Array.isArray(firstLogPage.logs), "generation logs response has no logs array");
   assert.ok("nextCursor" in firstLogPage && typeof firstLogPage.complete === "boolean",
     "deployed generation logs API is not the paged version");
-  const listedLogIds = new Set(firstLogPage.logs.map((log) => log.id));
+  const listedLogIds = new Set();
+  const addListedLogs = (logs) => {
+    for (const log of logs) {
+      assert.ok(!listedLogIds.has(log.id), "a generation log was listed twice");
+      listedLogIds.add(log.id);
+    }
+  };
+  addListedLogs(firstLogPage.logs);
   const isUnpostedCompleted = (log) => log.status === "completed" && !log.wordpressPostStatus;
   let unpostedCompletedLogs = firstLogPage.logs.filter(isUnpostedCompleted).length;
   let logPages = 1;
@@ -60,10 +67,7 @@ try {
     const body = await next.json();
     assert.equal(body.ok, true);
     assert.ok(body.logs.length > 0, "an issued cursor returned an empty page");
-    for (const log of body.logs) {
-      assert.ok(!listedLogIds.has(log.id), "a generation log appeared on two pages");
-      listedLogIds.add(log.id);
-    }
+    addListedLogs(body.logs);
     unpostedCompletedLogs += body.logs.filter(isUnpostedCompleted).length;
     logsComplete = logsComplete && body.complete;
     cursor = body.nextCursor;
