@@ -94,6 +94,37 @@ describe("generation job completion visibility", () => {
     expect(canonicalDrafts.get(final!.draftId!)?.editedTitle).toBe(sampleArticleResult.selected_title);
   });
 
+  test("a worker that runs past the job deadline stops without saving an article", async () => {
+    const { generateAioArticle } = await import("@/lib/server/article-generation");
+    const { createArticleImagesForDraft } = await import("@/lib/server/article-images");
+    const { saveDraft } = await import("@/lib/server/drafts");
+    const { createGenerationJob, getGenerationJob } = await import("@/lib/server/generation-jobs");
+    const { runArticleGenerationJob } = await import("@/lib/server/article-generation-job-runner");
+    // Outside Vercel nothing ends the request at 300 s; here the model call alone takes 7 minutes.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.mocked(generateAioArticle).mockImplementationOnce(async () => {
+        vi.setSystemTime(Date.now() + 7 * 60 * 1000);
+        return sampleArticleResult;
+      });
+      vi.mocked(createArticleImagesForDraft).mockResolvedValueOnce([]);
+      const job = await createGenerationJob({
+        inputPayload: { ...sampleFormPayload, references: [{ id: "manual", text: "Manual evidence" }], imageCount: 0 },
+      });
+
+      await runArticleGenerationJob(job.id);
+
+      const final = await getGenerationJob(job.id);
+      expect(final?.status).toBe("failed");
+      expect(final?.error).toContain("記事生成が制限時間を超えたため停止しました");
+      expect(final?.draftId).toBeUndefined();
+      expect(vi.mocked(saveDraft)).not.toHaveBeenCalled();
+      expect(canonicalDrafts.size).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("a completed job whose save step was left running is shown as saved only when the article is stored", async () => {
     const { saveGenerationJob } = await import("@/lib/server/generation-jobs");
     const { GET } = await import("@/app/api/generation-jobs/[id]/route");
