@@ -236,6 +236,8 @@ export function ArticleGeneratorApp() {
   const [logsComplete, setLogsComplete] = useState(true);
   const [logsLoadingMore, setLogsLoadingMore] = useState(false);
   const [logsMoreError, setLogsMoreError] = useState("");
+  // A stored job whose outcome could not be confirmed; the primary button re-checks it.
+  const [unconfirmedJobPending, setUnconfirmedJobPending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftActionMessage, setDraftActionMessage] = useState("");
   const [draftActionError, setDraftActionError] = useState("");
@@ -747,6 +749,7 @@ export function ArticleGeneratorApp() {
     if (generationPollingRef.current === jobId) {
       generationPollingRef.current = null;
     }
+    setUnconfirmedJobPending(keepResumeKey);
     setActiveGenerationJobId((current) => (current === jobId ? null : current));
     if (!keepResumeKey && window.localStorage.getItem(activeGenerationJobStorageKey) === jobId) {
       window.localStorage.removeItem(activeGenerationJobStorageKey);
@@ -1630,7 +1633,12 @@ export function ArticleGeneratorApp() {
             <Button
               data-testid="article-primary-button"
               onClick={handlePrimaryArticleButton}
-              disabled={!generationResumeChecked || (!isGenerating && (!canGenerate || draftMutationPending))}
+              // Re-checking an unconfirmed job needs no form input (the form is restored only from a
+              // successful status read); starting a new job still does.
+              disabled={
+                !generationResumeChecked ||
+                (!isGenerating && (draftMutationPending || (!unconfirmedJobPending && !canGenerate)))
+              }
               variant={isGenerating ? "secondary" : "default"}
             >
               {isGenerating ? <StopCircle /> : <Sparkles />}

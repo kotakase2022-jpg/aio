@@ -4284,6 +4284,48 @@ test("an unconfirmed generation is checked again instead of starting a second on
   expect(errors()).toEqual([]);
 });
 
+test("after a reload whose status checks are lost, the button re-checks the job without any form input", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedRequests: [/\/api\/generation-jobs\/job-completed-1$/],
+  });
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  let startRequests = 0;
+  await page.route((url) => url.pathname === "/api/generation-jobs", async (route) => {
+    startRequests += 1;
+    await route.fulfill({ json: { ok: true, job } });
+  });
+  let dropStatusChecks = Number.POSITIVE_INFINITY;
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    if (dropStatusChecks > 0) {
+      dropStatusChecks -= 1;
+      await route.abort("connectionreset");
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/demo-login");
+  await page.evaluate(() => {
+    window.localStorage.setItem("aio-active-generation-job-id", "job-completed-1");
+  });
+  await page.getByTestId("demo-access-code").fill("202607");
+  await page.getByTestId("demo-login-submit").click();
+  await page.waitForURL("**/");
+  await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（通信が切断されました）", { timeout: 20_000 });
+  // No status read succeeded, so the form was never restored and a new start would lack input.
+  await expect(page.getByTestId("reference-text-0")).toHaveValue("");
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
+
+  dropStatusChecks = 0;
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" })).toBeVisible();
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成は完了していました。");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBeNull();
+  expect(startRequests).toBe(0);
+  expect(errors()).toEqual([]);
+});
+
 test("a status read that fails on the server keeps the job, and a failing re-check releases it with guidance", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/generation-jobs\/job-completed-1$/],
