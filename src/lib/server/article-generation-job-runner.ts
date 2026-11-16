@@ -9,6 +9,7 @@ import { fetchUrlContent } from "@/lib/server/content";
 import { saveDraft } from "@/lib/server/drafts";
 import {
   assertGenerationJobActive,
+  assertGenerationJobWithinDeadline,
   DRAFT_SAVED_STEP_DETAIL,
   getGenerationJob,
   updateGenerationJob,
@@ -111,7 +112,7 @@ export async function runArticleGenerationJob(jobId: string) {
       summarizeImageGeneration(images, imageFailures),
     );
 
-    await assertGenerationJobActive(jobId);
+    const activeJob = await assertGenerationJobActive(jobId);
     await updateGenerationStep(jobId, "save", "running");
     const now = new Date().toISOString();
     const bodyWithImages = injectImages(article.body_html, images);
@@ -135,6 +136,9 @@ export async function runArticleGenerationJob(jobId: string) {
       createdAt: now,
       updatedAt: now,
     };
+    // Checked again with no I/O in between: a late step write must not let a save start after
+    // the deadline.
+    assertGenerationJobWithinDeadline(activeJob);
     await saveDraft(nextDraft);
     // Clients stop polling once they see "completed", so the completed status and the
     // finished save step must become visible in the same write.

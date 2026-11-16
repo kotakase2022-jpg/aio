@@ -263,16 +263,22 @@ export async function assertGenerationJobActive(id: string) {
     throw new ApiError("記事作成は終了済みです。", 409);
   }
 
-  // Enforced by the worker itself too: outside Vercel nothing stops it at its 300-second budget,
-  // and a job past its deadline must not save an article after the editor may have started anew.
-  if (isGenerationJobExpired(job, Date.now())) {
+  assertGenerationJobWithinDeadline(job);
+  return job;
+}
+
+/**
+ * Enforced by the worker itself too: outside Vercel nothing stops it at its 300-second budget,
+ * and a job past its deadline must not save an article after the editor may have started anew.
+ * Synchronous, so it can run immediately before the write it guards.
+ */
+export function assertGenerationJobWithinDeadline(job: GenerationJob, now = Date.now()) {
+  if (isGenerationJobExpired(job, now)) {
     throw new ApiError(
       "記事生成が制限時間を超えたため停止しました。入力内容を確認し、もう一度「AIによる記事作成」を実行してください。",
       409,
     );
   }
-
-  return job;
 }
 
 export async function listGenerationJobs(limit = 30) {
