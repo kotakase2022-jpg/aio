@@ -1042,7 +1042,11 @@ export function ArticleGeneratorApp() {
           : "WordPressへ下書き投稿しました。", ...(result.warnings ?? [])].join(" "),
       );
     } catch (error) {
-      setActiveError(readError(error));
+      setActiveError(
+        error instanceof ApiOutcomeUnknownError
+          ? `WordPress投稿の結果を確認できませんでした（${error.message}）。重複投稿を防ぐため、もう一度投稿する前にWordPress管理画面で投稿の有無を確認してください。`
+          : readError(error),
+      );
     } finally {
       setPosting(false);
     }

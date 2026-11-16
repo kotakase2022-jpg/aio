@@ -4060,6 +4060,34 @@ for (const failure of ["dropped connection", "gateway error page"] as const) {
   });
 }
 
+test("a WordPress post cut off by a gateway error page asks to check WordPress before posting again", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, { allowedFailedResponses: [/\/api\/wordpress\/post$/] });
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  let posts = 0;
+  await page.route("**/api/wordpress/post", async (route) => {
+    posts += 1;
+    await route.fulfill({ status: 504, contentType: "text/html", body: "<html><body>Gateway Timeout</body></html>" });
+  });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for an unconfirmed WordPress post.");
+  await page.getByTestId("article-primary-button").click();
+  await page.getByTestId("approve-draft-button").click();
+  await expect(page.getByTestId("draft-status-badge")).toHaveText("承認済み");
+  await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+  await page.getByTestId("wordpress-username").fill("editor");
+  await page.getByTestId("wordpress-application-password").fill("test-only-password");
+  await page.getByTestId("wordpress-connect-button").click();
+  await page.getByTestId("wordpress-post-button").click();
+  await expect(page.getByTestId("active-error")).toContainText(
+    "WordPress投稿の結果を確認できませんでした（サーバーの応答が途中で途切れました）。重複投稿を防ぐため、もう一度投稿する前にWordPress管理画面で投稿の有無を確認してください。",
+  );
+  await expect(page.getByTestId("wordpress-post-message")).toBeHidden();
+  expect(posts).toBe(1);
+  expect(errors()).toEqual([]);
+});
+
 test("double-clicking save sends one request for the article", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   const job = createCompletedGenerationJob();
