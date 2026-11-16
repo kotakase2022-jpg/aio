@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { parseArticleDraft } from "@/lib/article-draft-schema";
 import { sanitizeArticleHtml } from "@/lib/article-html";
-import { saveDraft } from "@/lib/server/drafts";
+import { saveDraftAgainstStoredRevision } from "@/lib/server/drafts";
 import { syncGenerationJobDraft } from "@/lib/server/generation-jobs";
 import { errorJson, okJson } from "@/lib/server/http";
 
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       editedBodyHtml: sanitizeArticleHtml(draft.editedBodyHtml),
       updatedAt: new Date().toISOString(),
     };
-    const result = await saveDraft(cleanDraft);
+    const result = await saveDraftAgainstStoredRevision(cleanDraft);
     const warnings: string[] = [];
     await syncGenerationJobDraft(result.draft).catch((error: unknown) => {
       warnings.push(`生成ログの同期に失敗しました: ${error instanceof Error ? error.message : "Unknown error"}`);

@@ -129,9 +129,10 @@ describe("generation job persistence with Supabase", () => {
         })),
       })),
     });
-    const { listGenerationLogs } = await import("@/lib/server/generation-jobs");
+    // Draft sync and WordPress status marking still read jobs through this window query.
+    const { listGenerationJobs } = await import("@/lib/server/generation-jobs");
 
-    await expect(listGenerationLogs()).rejects.toMatchObject({
+    await expect(listGenerationJobs()).rejects.toMatchObject({
       message: "生成ログの読み込みに失敗しました。",
       detail: "job log select failed",
       status: 500,

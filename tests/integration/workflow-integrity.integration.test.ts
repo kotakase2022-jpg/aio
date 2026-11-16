@@ -96,8 +96,8 @@ describe("workflow integrity regressions", () => {
       method: "POST", body: JSON.stringify({ form: { ...sampleFormPayload, competitors: null } }),
     }));
     expect(response.status).toBe(400);
-    const { listGenerationLogs } = await import("@/lib/server/generation-jobs");
-    await expect(listGenerationLogs()).resolves.toEqual([]);
+    const { listGenerationLogsPage } = await import("@/lib/server/generation-jobs");
+    await expect(listGenerationLogsPage()).resolves.toEqual({ logs: [], nextCursor: null, complete: true });
   });
 
   test("accepted cancellation wins over a delayed worker write", async () => {

@@ -86,6 +86,7 @@ import type {
   FetchResult,
   FaqItem,
   GenerationJob,
+  GenerationLogPage,
   GenerationLogSummary,
   GenerationStep,
   ImageCount,
@@ -98,6 +99,12 @@ import type {
 } from "@/types/aio";
 
 const activeGenerationJobStorageKey = "aio-active-generation-job-id";
+const generationLogPageSize = 20;
+const generationLogRefreshLimit = 100;
+// Saves normally finish within seconds; after this the result is reported as unconfirmed.
+const draftSubmissionTimeoutMs = 60_000;
+const generationPollTimeoutMs = 20_000;
+const generationPollUnconfirmedAttempts = 4;
 const lastClosingTextStorageKey = "aio-last-closing-text";
 const lastAuthorStorageKey = "aio-last-author";
 const generatedImageSlotOrder = ["featured", "inline-1", "inline-2"] as const;
@@ -225,6 +232,10 @@ export function ArticleGeneratorApp() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [logsError, setLogsError] = useState("");
+  const [logsNextCursor, setLogsNextCursor] = useState<string | null>(null);
+  const [logsComplete, setLogsComplete] = useState(true);
+  const [logsLoadingMore, setLogsLoadingMore] = useState(false);
+  const [logsMoreError, setLogsMoreError] = useState("");
   const [saving, setSaving] = useState(false);
   const [draftActionMessage, setDraftActionMessage] = useState("");
   const [draftActionError, setDraftActionError] = useState("");
@@ -258,6 +269,9 @@ export function ArticleGeneratorApp() {
   const generationPollRunRef = useRef(0);
   const generationResumeStartedRef = useRef(false);
   const generationLogOpenRequestRef = useRef(0);
+  const generationLogsRequestRef = useRef(0);
+  const loadedGenerationLogCountRef = useRef(0);
+  const draftSubmissionInFlightRef = useRef(false);
   const formRestoreVersionRef = useRef(0);
   const competitorResearchRequestRef = useRef(0);
   const themeCandidateRequestRef = useRef(0);
@@ -269,6 +283,10 @@ export function ArticleGeneratorApp() {
       inputWizardPanelRef.current.scrollTop = 0;
     }
   }, [activeInputStep]);
+
+  useEffect(() => {
+    loadedGenerationLogCountRef.current = generationLogs.length;
+  }, [generationLogs]);
 
   const formPayload: ArticleFormPayload = useMemo(
     () => ({
@@ -537,8 +555,17 @@ export function ArticleGeneratorApp() {
       if (isRegeneration && previousDraft) {
         setDraft(previousDraft);
       }
-      setActiveError(readError(error));
-      markRunningAsError(readError(error));
+      // A start request whose response was lost may still have created a job; retrying
+      // blindly could create a second article.
+      const message =
+        error instanceof ApiOutcomeUnknownError
+          ? `記事作成の開始結果を確認できませんでした（${error.message}）。記事作成が始まっている可能性があるため、もう一度実行する前に生成ログの「更新」で確認してください。`
+          : readError(error);
+      setActiveError(message);
+      markRunningAsError(message);
+      if (error instanceof ApiOutcomeUnknownError) {
+        void loadGenerationLogs();
+      }
     }
   }
 
@@ -592,13 +619,31 @@ export function ArticleGeneratorApp() {
     generationPollingRef.current = jobId;
     setActiveGenerationJobId(jobId);
     let shouldRestoreInputs = restoreInputsOnFirstPoll;
+    let unconfirmedPolls = 0;
 
     try {
       while (
         generationPollingRef.current === jobId &&
         generationPollRunRef.current === pollRunId
       ) {
-        const result = await apiGet<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}`);
+        let result: { job: GenerationJob };
+        try {
+          result = await apiGet<{ job: GenerationJob }>(`/api/generation-jobs/${jobId}`, {
+            timeoutMs: generationPollTimeoutMs,
+          });
+          unconfirmedPolls = 0;
+        } catch (error) {
+          // The job keeps running on the server; a dropped status read is retried, not a failure.
+          unconfirmedPolls += 1;
+          if (
+            !(error instanceof ApiOutcomeUnknownError) ||
+            unconfirmedPolls >= generationPollUnconfirmedAttempts
+          ) {
+            throw error;
+          }
+          await delay(1800);
+          continue;
+        }
         if (
           generationPollingRef.current !== jobId ||
           generationPollRunRef.current !== pollRunId
@@ -641,6 +686,17 @@ export function ArticleGeneratorApp() {
       if (shouldRestoreInputs) {
         setGenerationResumeChecked(true);
       }
+      if (error instanceof ApiOutcomeUnknownError) {
+        // Neither success nor failure is known. Keep the stored job ID so a reload resumes the
+        // status check, and replace the running spinners with an explicit unconfirmed state.
+        finishGenerationPolling(jobId, { keepResumeKey: true });
+        setActiveError(
+          `記事作成の状況を確認できませんでした（${error.message}）。記事作成はサーバー側で続いている可能性があります。ページを再読み込みすると状況の確認を再開します。完了した記事は生成ログからも開けます。`,
+        );
+        markRunningAsError("通信が途切れたため状況を確認できません。再読み込みで確認を再開できます。");
+        void loadGenerationLogs();
+        return;
+      }
       finishGenerationPolling(jobId);
       setActiveError(readError(error));
       markRunningAsError(readError(error));
@@ -648,12 +704,12 @@ export function ArticleGeneratorApp() {
     }
   }
 
-  function finishGenerationPolling(jobId: string) {
+  function finishGenerationPolling(jobId: string, { keepResumeKey = false } = {}) {
     if (generationPollingRef.current === jobId) {
       generationPollingRef.current = null;
     }
     setActiveGenerationJobId((current) => (current === jobId ? null : current));
-    if (window.localStorage.getItem(activeGenerationJobStorageKey) === jobId) {
+    if (!keepResumeKey && window.localStorage.getItem(activeGenerationJobStorageKey) === jobId) {
       window.localStorage.removeItem(activeGenerationJobStorageKey);
     }
   }
@@ -741,15 +797,78 @@ export function ArticleGeneratorApp() {
   }
 
   async function loadGenerationLogs() {
+    const requestId = generationLogsRequestRef.current + 1;
+    generationLogsRequestRef.current = requestId;
+    // Refresh the range already shown, so an older log opened from a later page stays listed
+    // with its new save/WordPress state instead of falling back to the first page. Each request
+    // stays within the API page cap; a longer range is read page by page before replacing it.
+    const targetCount = Math.max(loadedGenerationLogCountRef.current, generationLogPageSize);
     setLogsLoading(true);
+    setLogsLoadingMore(false);
     setLogsError("");
+    setLogsMoreError("");
     try {
-      const result = await apiGet<{ logs: GenerationLogSummary[] }>("/api/generation-logs");
-      setGenerationLogs(result.logs);
+      const logs: GenerationLogSummary[] = [];
+      const listed = new Set<string>();
+      let cursor: string | null = null;
+      let complete = true;
+      for (let pageIndex = 0; pageIndex < 20; pageIndex += 1) {
+        const limit = Math.min(targetCount - logs.length, generationLogRefreshLimit);
+        const params = new URLSearchParams();
+        if (cursor) params.set("cursor", cursor);
+        if (cursor || limit !== generationLogPageSize) params.set("limit", String(limit));
+        const query = params.toString();
+        const result: GenerationLogPage = await apiGet<GenerationLogPage>(
+          query ? `/api/generation-logs?${query}` : "/api/generation-logs",
+        );
+        if (generationLogsRequestRef.current !== requestId) return;
+        for (const log of result.logs) {
+          if (listed.has(log.id)) continue;
+          listed.add(log.id);
+          logs.push(log);
+        }
+        cursor = result.nextCursor ?? null;
+        complete = complete && result.complete !== false;
+        if (!cursor || logs.length >= targetCount || result.logs.length === 0) break;
+      }
+      setGenerationLogs(logs);
+      setLogsNextCursor(cursor);
+      setLogsComplete(complete);
     } catch (error) {
+      if (generationLogsRequestRef.current !== requestId) return;
       setLogsError(readError(error));
     } finally {
-      setLogsLoading(false);
+      if (generationLogsRequestRef.current === requestId) {
+        setLogsLoading(false);
+      }
+    }
+  }
+
+  async function loadMoreGenerationLogs() {
+    const cursor = logsNextCursor;
+    if (!cursor || logsLoading || logsLoadingMore) return;
+    const requestId = generationLogsRequestRef.current + 1;
+    generationLogsRequestRef.current = requestId;
+    setLogsLoadingMore(true);
+    setLogsMoreError("");
+    try {
+      const result = await apiGet<GenerationLogPage>(
+        `/api/generation-logs?cursor=${encodeURIComponent(cursor)}`,
+      );
+      if (generationLogsRequestRef.current !== requestId) return;
+      setGenerationLogs((current) => {
+        const listed = new Set(current.map((log) => log.id));
+        return [...current, ...result.logs.filter((log) => !listed.has(log.id))];
+      });
+      setLogsNextCursor(result.nextCursor ?? null);
+      setLogsComplete((current) => current && result.complete !== false);
+    } catch (error) {
+      if (generationLogsRequestRef.current !== requestId) return;
+      setLogsMoreError(readError(error));
+    } finally {
+      if (generationLogsRequestRef.current === requestId) {
+        setLogsLoadingMore(false);
+      }
     }
   }
 
@@ -785,7 +904,8 @@ export function ArticleGeneratorApp() {
   }
 
   async function saveCurrentDraft() {
-    if (!draft || draftEditingLocked) return;
+    // The ref closes the gap between a second click and React disabling the button.
+    if (!draft || draftEditingLocked || draftSubmissionInFlightRef.current) return;
     const validationMessage = validateDraftForSubmission(draft);
     if (validationMessage) {
       setActiveError("");
@@ -794,26 +914,36 @@ export function ArticleGeneratorApp() {
       setTab("edit");
       return;
     }
+    draftSubmissionInFlightRef.current = true;
     setSaving(true);
     generationLogOpenRequestRef.current += 1;
     setActiveError("");
     setDraftActionMessage("");
     setDraftActionError("");
     try {
-      const saved = await apiPost<{ draft: ArticleDraft; warnings?: string[] }>("/api/save-draft", {
-        draft: prepareDraftForSave(draft),
-      });
+      const saved = await apiPost<{ draft: ArticleDraft; warnings?: string[] }>(
+        "/api/save-draft",
+        { draft: prepareDraftForSave(draft) },
+        { timeoutMs: draftSubmissionTimeoutMs },
+      );
       setDraft({ ...draft, updatedAt: saved.draft.updatedAt });
       setDraftActionMessage(["編集内容を保存しました。", ...(saved.warnings ?? [])].join(" "));
     } catch (error) {
-      setActiveError(readError(error));
+      if (error instanceof ApiOutcomeUnknownError) {
+        setDraftActionError(
+          `保存できたかどうかを確認できませんでした（${error.message}）。入力中の内容はこの画面に残っています。少し待ってから「編集内容を保存」をもう一度押してください。同じ記事に上書き保存されるため、記事が増えることはありません。`,
+        );
+      } else {
+        setActiveError(readError(error));
+      }
     } finally {
+      draftSubmissionInFlightRef.current = false;
       setSaving(false);
     }
   }
 
   async function approveCurrentDraft() {
-    if (!draft || draftEditingLocked) return;
+    if (!draft || draftEditingLocked || draftSubmissionInFlightRef.current) return;
     const validationMessage = validateDraftForSubmission(draft);
     if (validationMessage) {
       setActiveError("");
@@ -822,16 +952,18 @@ export function ArticleGeneratorApp() {
       setTab("edit");
       return;
     }
+    draftSubmissionInFlightRef.current = true;
     setSaving(true);
     generationLogOpenRequestRef.current += 1;
     setActiveError("");
     setDraftActionMessage("");
     setDraftActionError("");
     try {
-      const approved = await apiPost<{ draft: ArticleDraft; warnings?: string[] }>("/api/approve-draft", {
-        draftId: draft.id,
-        draft: prepareDraftForSave(draft),
-      });
+      const approved = await apiPost<{ draft: ArticleDraft; warnings?: string[] }>(
+        "/api/approve-draft",
+        { draftId: draft.id, draft: prepareDraftForSave(draft) },
+        { timeoutMs: draftSubmissionTimeoutMs },
+      );
       setDraft({
         ...draft,
         status: "approved",
@@ -839,8 +971,15 @@ export function ArticleGeneratorApp() {
       });
       setDraftActionMessage(["承認済みに変更しました。WordPress投稿が可能です。", ...(approved.warnings ?? [])].join(" "));
     } catch (error) {
-      setActiveError(readError(error));
+      if (error instanceof ApiOutcomeUnknownError) {
+        setDraftActionError(
+          `承認できたかどうかを確認できませんでした（${error.message}）。入力中の内容はこの画面に残っています。少し待ってから「承認済みに変更」をもう一度押してください。同じ記事が承認されるため、記事が増えることはありません。`,
+        );
+      } else {
+        setActiveError(readError(error));
+      }
     } finally {
+      draftSubmissionInFlightRef.current = false;
       setSaving(false);
     }
   }
@@ -918,7 +1057,11 @@ export function ArticleGeneratorApp() {
           : "WordPressへ下書き投稿しました。", ...(result.warnings ?? [])].join(" "),
       );
     } catch (error) {
-      setActiveError(readError(error));
+      setActiveError(
+        error instanceof ApiOutcomeUnknownError
+          ? `WordPress投稿の結果を確認できませんでした（${error.message}）。重複投稿を防ぐため、もう一度投稿する前にWordPress管理画面で投稿の有無を確認してください。`
+          : readError(error),
+      );
     } finally {
       setPosting(false);
     }
@@ -2180,6 +2323,11 @@ export function ArticleGeneratorApp() {
             logs={generationLogs}
             loading={logsLoading}
             error={logsError}
+            hasMore={Boolean(logsNextCursor)}
+            complete={logsComplete}
+            loadingMore={logsLoadingMore}
+            moreError={logsMoreError}
+            onLoadMore={loadMoreGenerationLogs}
             expanded={logsExpanded}
             onToggle={() => setLogsExpanded((current) => !current)}
             onRefresh={loadGenerationLogs}
@@ -2197,6 +2345,7 @@ export function ArticleGeneratorApp() {
                 {steps.map((step) => (
                   <div
                     key={step.id}
+                    data-testid={`generation-step-${step.id}`}
                     className="min-h-24 rounded-md border border-slate-200 bg-slate-50 p-3"
                   >
                     <div className="flex items-center gap-2 text-sm font-medium">
@@ -2889,6 +3038,11 @@ function GenerationLogsPanel({
   logs,
   loading,
   error,
+  hasMore,
+  complete,
+  loadingMore,
+  moreError,
+  onLoadMore,
   expanded,
   onToggle,
   onRefresh,
@@ -2899,6 +3053,11 @@ function GenerationLogsPanel({
   logs: GenerationLogSummary[];
   loading: boolean;
   error: string;
+  hasMore: boolean;
+  complete: boolean;
+  loadingMore: boolean;
+  moreError: string;
+  onLoadMore: () => void;
   expanded: boolean;
   onToggle: () => void;
   onRefresh: () => void;
@@ -2919,7 +3078,9 @@ function GenerationLogsPanel({
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Badge variant="default">{logs.length}件</Badge>
+            <Badge variant="default" data-testid="generation-logs-count">
+              {logs.length}件{hasMore ? "表示（続きあり）" : ""}
+            </Badge>
             <Button
               data-testid="generation-logs-toggle"
               type="button"
@@ -2951,6 +3112,7 @@ function GenerationLogsPanel({
             まだ生成ログはありません。
           </div>
         ) : (
+          <>
           <div className="max-h-[360px] overflow-auto rounded-md border border-slate-200">
             <table className="w-full min-w-[1030px] table-fixed text-left text-sm">
               <thead className="sticky top-0 bg-slate-50 text-xs font-semibold text-slate-500">
@@ -3012,6 +3174,42 @@ function GenerationLogsPanel({
               </tbody>
             </table>
           </div>
+          {hasMore || moreError || !complete || logs.length > generationLogPageSize ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {hasMore ? (
+                <Button
+                  data-testid="generation-logs-load-more"
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={onLoadMore}
+                  disabled={loading || loadingMore}
+                >
+                  {loadingMore ? <Loader2 className="animate-spin" /> : <ChevronDown />}
+                  さらに古いログを表示（{generationLogPageSize}件ずつ）
+                </Button>
+              ) : (
+                <span data-testid="generation-logs-end" className="text-xs text-slate-500">
+                  {complete ? "最も古い生成ログまで表示しています。" : "表示できる生成ログはここまでです。"}
+                </span>
+              )}
+              {moreError ? (
+                <span
+                  data-testid="generation-logs-more-error"
+                  className="text-xs leading-5 text-rose-700"
+                  aria-live="polite"
+                >
+                  続きを読み込めませんでした。表示中の一覧はそのまま使えます。もう一度お試しください。（{moreError}）
+                </span>
+              ) : null}
+              {!complete ? (
+                <span data-testid="generation-logs-incomplete" className="text-xs leading-5 text-amber-700">
+                  保存件数が多いため、一部の古い生成ログを一覧に表示できない可能性があります。必要な記事が見つからない場合は管理者へご連絡ください。
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          </>
         )}
         </CardContent>
       ) : null}
@@ -4366,36 +4564,80 @@ function escapeHtml(value: string) {
     .replaceAll('"', "&quot;");
 }
 
-async function apiPost<T>(
-  url: string,
-  body: unknown,
-  options: { signal?: AbortSignal } = {},
-): Promise<T> {
-  const response = await fetch(url, {
-    method: "POST",
-    signal: options.signal,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = (await response.json().catch(() => ({}))) as ApiResult<T>;
-  if (response.status === 413) {
-    throw new Error(
-      "送信データが大きすぎます。生成画像やアップロード画像の保存先を確認してください。",
+type ApiRequestOptions = { timeoutMs?: number };
+
+/**
+ * The request may already have reached the server, but no response confirmed whether it was
+ * applied: the connection dropped, the client timed out, or a platform gateway answered instead
+ * of the application. Callers must not report such an outcome as a success or a failure.
+ */
+class ApiOutcomeUnknownError extends Error {
+  constructor(reason: "timeout" | "network" | "incomplete") {
+    super(
+      reason === "timeout"
+        ? "サーバーから応答がありませんでした"
+        : reason === "incomplete"
+          ? "サーバーの応答が途中で途切れました"
+          : "通信が切断されました",
     );
+    this.name = "ApiOutcomeUnknownError";
   }
-  if (!response.ok || json.ok === false) {
-    throw new Error([json.error, json.detail].filter(Boolean).join(" / ") || response.statusText);
-  }
-  return json as T;
 }
 
-async function apiGet<T>(url: string): Promise<T> {
-  const response = await fetch(url, { method: "GET" });
-  const json = (await response.json().catch(() => ({}))) as ApiResult<T>;
-  if (!response.ok || json.ok === false) {
-    throw new Error([json.error, json.detail].filter(Boolean).join(" / ") || response.statusText);
+async function apiPost<T>(url: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+  return requestApi<T>(
+    url,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    options,
+  );
+}
+
+async function apiGet<T>(url: string, options: ApiRequestOptions = {}): Promise<T> {
+  return requestApi<T>(url, { method: "GET" }, options);
+}
+
+async function requestApi<T>(url: string, init: RequestInit, { timeoutMs }: ApiRequestOptions): Promise<T> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = timeoutMs
+    ? window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs)
+    : undefined;
+  try {
+    let response: Response;
+    try {
+      response = await fetch(url, { ...init, signal: controller.signal });
+    } catch {
+      throw new ApiOutcomeUnknownError(timedOut ? "timeout" : "network");
+    }
+    let json: ApiResult<T>;
+    try {
+      json = (await response.json()) as ApiResult<T>;
+    } catch {
+      if (timedOut) throw new ApiOutcomeUnknownError("timeout");
+      // A success status whose body did not arrive intact cannot confirm the outcome either.
+      if (response.ok) throw new ApiOutcomeUnknownError("incomplete");
+      json = {} as ApiResult<T>;
+    }
+    if (response.status === 413) {
+      throw new Error(
+        "送信データが大きすぎます。生成画像やアップロード画像の保存先を確認してください。",
+      );
+    }
+    // Application errors always carry ok:false; a bare 502-504 comes from the platform, which
+    // may have cut off a request that the application had already committed.
+    if (!response.ok && json.ok === undefined && [502, 503, 504].includes(response.status)) {
+      throw new ApiOutcomeUnknownError("incomplete");
+    }
+    if (!response.ok || json.ok === false) {
+      throw new Error([json.error, json.detail].filter(Boolean).join(" / ") || response.statusText);
+    }
+    return json as T;
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer);
   }
-  return json as T;
 }
 
 function delay(ms: number) {

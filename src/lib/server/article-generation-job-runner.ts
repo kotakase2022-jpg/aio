@@ -9,6 +9,7 @@ import { fetchUrlContent } from "@/lib/server/content";
 import { saveDraft } from "@/lib/server/drafts";
 import {
   assertGenerationJobActive,
+  DRAFT_SAVED_STEP_DETAIL,
   getGenerationJob,
   updateGenerationJob,
   updateGenerationStep,
@@ -135,14 +136,18 @@ export async function runArticleGenerationJob(jobId: string) {
       updatedAt: now,
     };
     await saveDraft(nextDraft);
+    // Clients stop polling once they see "completed", so the completed status and the
+    // finished save step must become visible in the same write.
     await updateGenerationJob(jobId, (current) => ({
       ...current,
       status: "completed",
       draft: nextDraft,
       draftId: nextDraft.id,
       completedAt: new Date().toISOString(),
+      steps: current.steps.map((step) =>
+        step.id === "save" ? { ...step, status: "done", detail: DRAFT_SAVED_STEP_DETAIL } : step,
+      ),
     }));
-    await updateGenerationStep(jobId, "save", "done", "ドラフトを保存しました");
   } catch (error) {
     const current = await getGenerationJob(jobId);
     if (current?.status === "canceled") {

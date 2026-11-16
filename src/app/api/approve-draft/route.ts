@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { parseArticleDraft } from "@/lib/article-draft-schema";
 import { sanitizeArticleHtml } from "@/lib/article-html";
-import { approveDraft, saveDraft } from "@/lib/server/drafts";
+import { approveDraft, saveDraft, saveDraftAgainstStoredRevision } from "@/lib/server/drafts";
 import { syncGenerationJobDraft } from "@/lib/server/generation-jobs";
 import { ApiError, errorJson, okJson } from "@/lib/server/http";
 
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const body = schema.parse(await request.json());
     if (body.draft) {
       const draft = parseArticleDraft(body.draft);
-      const result = await saveDraft({
+      const result = await saveDraftAgainstStoredRevision({
         ...draft,
         editedBodyHtml: sanitizeArticleHtml(draft.editedBodyHtml),
         status: "approved",

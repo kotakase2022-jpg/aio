@@ -1,6 +1,12 @@
+import os from "node:os";
+import path from "node:path";
 import { defineConfig } from "@playwright/test";
 
 const port = Number(process.env.E2E_PORT ?? 4310);
+// Isolated local durable store for this suite's server. Tests that exercise the real log/save
+// routes seed and remove it, and a developer's own .data directory is never touched.
+const localDataDir = path.join(os.tmpdir(), `aio-e2e-local-store-${port}`);
+process.env.AIO_E2E_LOCAL_DATA_DIR = localDataDir;
 // Never point the mutation-oriented fixture suite at a deployed app.
 const baseURL = `http://localhost:${port}`;
 if (process.env.PLAYWRIGHT_BASE_URL && process.env.PLAYWRIGHT_BASE_URL !== baseURL) {
@@ -37,6 +43,8 @@ export default defineConfig({
     env: {
       DEMO_ACCESS_CODE: "202607",
       DEMO_AUTH_SECRET: "test-only-e2e-demo-session-secret-32-characters",
+      // An inherited VERCEL value would move the store to the OS temp dir and ignore the seed dir.
+      VERCEL: "",
       NEXT_PUBLIC_SUPABASE_URL: "",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
       SUPABASE_SERVICE_ROLE_KEY: "",
@@ -44,6 +52,7 @@ export default defineConfig({
       SUPABASE_GATEWAY_TOKEN: "",
       OPENAI_API_KEY: "test-openai-key-not-used-in-e2e",
       WORDPRESS_ENCRYPTION_KEY: "test-wordpress-key-for-e2e-only",
+      AIO_LOCAL_DATA_DIR: localDataDir,
     },
   },
   projects: [

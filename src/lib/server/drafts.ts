@@ -54,6 +54,31 @@ export async function saveDraft(draft: ArticleDraft, expectedUpdatedAt?: string)
   return { draft, storageMode: "local" as const };
 }
 
+/**
+ * Saves an editor submission only if no other save committed after this request read the
+ * stored revision. A timed-out request that finishes late therefore cannot overwrite the newer
+ * save the editor retried with; the losing request gets a 409 and the editor keeps its input.
+ */
+export async function saveDraftAgainstStoredRevision(draft: ArticleDraft) {
+  const stored = await getDraft(draft.id);
+  return saveDraftExpectingRevision(draft, stored?.updatedAt);
+}
+
+async function saveDraftExpectingRevision(draft: ArticleDraft, expectedUpdatedAt?: string) {
+  try {
+    return await saveDraft(draft, expectedUpdatedAt);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      throw new ApiError(
+        "同じ記事への別の保存処理と重なったため、今回の内容は保存していません。",
+        409,
+        "入力中の内容はこの画面に残っています。数秒待ってから、もう一度保存してください。",
+      );
+    }
+    throw error;
+  }
+}
+
 export async function getDraft(id: string) {
   const supabase = getSupabaseAdmin();
   if (supabase) {
@@ -112,7 +137,7 @@ export async function approveDraft(id: string) {
     updatedAt: new Date().toISOString(),
   };
 
-  return saveDraft(updated);
+  return saveDraftExpectingRevision(updated, draft.updatedAt);
 }
 
 async function readLocalDrafts(): Promise<LocalDraftStore> {

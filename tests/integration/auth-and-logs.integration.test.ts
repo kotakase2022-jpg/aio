@@ -3,8 +3,9 @@ import { NextRequest } from "next/server";
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 import type { GenerationLogSummary } from "@/types/aio";
 
-vi.mock("@/lib/server/generation-jobs", () => ({
-  listGenerationLogs: vi.fn(),
+vi.mock("@/lib/server/generation-jobs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/generation-jobs")>()),
+  listGenerationLogsPage: vi.fn(),
 }));
 
 const processEnvSnapshot = snapshotProcessEnv();
@@ -105,7 +106,7 @@ describe("demo authentication and log routes", () => {
   });
 
   test("generation logs route returns persisted summaries", async () => {
-    const { listGenerationLogs } = await import("@/lib/server/generation-jobs");
+    const { listGenerationLogsPage } = await import("@/lib/server/generation-jobs");
     const logs: GenerationLogSummary[] = [
       {
         id: "job-1",
@@ -117,14 +118,14 @@ describe("demo authentication and log routes", () => {
         wordpressPostStatus: "draft",
       },
     ];
-    vi.mocked(listGenerationLogs).mockResolvedValueOnce(logs);
+    vi.mocked(listGenerationLogsPage).mockResolvedValueOnce({ logs, nextCursor: null, complete: true });
     const { GET } = await import("@/app/api/generation-logs/route");
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/generation-logs"));
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(listGenerationLogs).toHaveBeenCalledWith(20);
-    expect(json).toMatchObject({ ok: true, logs });
+    expect(listGenerationLogsPage).toHaveBeenCalledWith({ limit: 20, cursor: null });
+    expect(json).toMatchObject({ ok: true, logs, nextCursor: null, complete: true });
   });
 });

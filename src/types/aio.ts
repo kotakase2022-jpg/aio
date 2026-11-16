@@ -248,3 +248,12 @@ export type GenerationLogSummary = {
   wordpressPostUrl?: string;
   error?: string;
 };
+
+export type GenerationLogPage = {
+  /** Newest creation first; the order does not change when a job is later updated. */
+  logs: GenerationLogSummary[];
+  /** Opaque cursor for the next (older) page, or null when no older log exists. */
+  nextCursor: string | null;
+  /** False when the storage backend could only scan a bounded window, so older logs may be unlisted. */
+  complete: boolean;
+};

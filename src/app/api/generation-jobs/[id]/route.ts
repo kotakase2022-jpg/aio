@@ -1,4 +1,8 @@
-import { getGenerationJob, recoverStaleGenerationJob } from "@/lib/server/generation-jobs";
+import {
+  getGenerationJob,
+  presentCompletedSaveStep,
+  recoverStaleGenerationJob,
+} from "@/lib/server/generation-jobs";
 import { getDraft } from "@/lib/server/drafts";
 import { errorJson, okJson } from "@/lib/server/http";
 
@@ -27,7 +31,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const draftId = job.draftId ?? job.draft?.id;
     // A failed canonical read must not silently restore older embedded edits.
     const draft = draftId ? await getDraft(draftId) : null;
-    return okJson({ job: draft ? { ...job, draft } : job });
+    return okJson({ job: presentCompletedSaveStep(draft ? { ...job, draft } : job, Boolean(draft)) });
   } catch (error) {
     return errorJson(error);
   }

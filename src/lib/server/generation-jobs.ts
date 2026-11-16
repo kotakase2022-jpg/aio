@@ -17,6 +17,7 @@ import type {
   ArticleFormPayload,
   DraftStatus,
   GenerationJob,
+  GenerationLogPage,
   GenerationLogSummary,
   GenerationStep,
 } from "@/types/aio";
@@ -30,6 +31,10 @@ const jobFile = path.join(dataDir, "generation-jobs.json");
 
 // The POST worker has a 300-second budget; allow another minute before recovery.
 const GENERATION_JOB_EXPIRY_MS = 6 * 60 * 1000;
+
+export const DRAFT_SAVED_STEP_DETAIL = "ドラフトを保存しました";
+const UNCONFIRMED_SAVE_STEP_DETAIL =
+  "保存された記事本体を確認できませんでした。生成ログの「更新」を押してから開き直し、内容を確認してください。";
 
 const initialSteps: GenerationStep[] = [
   { id: "fetch_refs", label: "参照URL本文抽出", status: "pending" },
@@ -119,6 +124,26 @@ export async function recoverStaleGenerationJob(job: GenerationJob, now = Date.n
       ),
     };
   });
+}
+
+/**
+ * Jobs finished before the completion write became atomic can be stored as "completed" while
+ * their save step still reads "running". Present that step from the canonical draft read
+ * instead of the stale value. This only shapes the response; the stored job is not rewritten.
+ */
+export function presentCompletedSaveStep(job: GenerationJob, canonicalDraftFound: boolean): GenerationJob {
+  if (job.status !== "completed") return job;
+  const saveStep = job.steps.find((step) => step.id === "save");
+  if (saveStep?.status !== "running") return job;
+  return {
+    ...job,
+    steps: job.steps.map((step): GenerationStep => {
+      if (step.id !== "save") return step;
+      return canonicalDraftFound
+        ? { ...step, status: "done", detail: DRAFT_SAVED_STEP_DETAIL }
+        : { ...step, status: "error", detail: UNCONFIRMED_SAVE_STEP_DETAIL };
+    }),
+  };
 }
 
 function isGenerationJobExpired(job: GenerationJob, now: number) {
@@ -275,9 +300,146 @@ export async function listGenerationJobs(limit = 30) {
     .slice(0, limit);
 }
 
-export async function listGenerationLogs(limit = 20) {
-  const jobs = await listGenerationJobs(limit);
-  return jobs.map(jobToLogSummary);
+export const GENERATION_LOG_PAGE_SIZE = 20;
+export const GENERATION_LOG_MAX_PAGE_SIZE = 100;
+// Deployed aio-store gateways expose list_jobs over the most recently updated rows only.
+const LEGACY_GATEWAY_JOB_WINDOW = 100;
+const CURSOR_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const CURSOR_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type GenerationLogCursor = { createdAt: string; id: string };
+
+export function encodeGenerationLogCursor(cursor: GenerationLogCursor) {
+  return Buffer.from(JSON.stringify({ c: cursor.createdAt, i: cursor.id }), "utf8").toString("base64url");
+}
+
+export function decodeGenerationLogCursor(value: string): GenerationLogCursor {
+  if (value.length <= 512 && /^[A-Za-z0-9_-]+$/.test(value)) {
+    try {
+      const parsed: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+      if (
+        isRecord(parsed) &&
+        typeof parsed.c === "string" &&
+        typeof parsed.i === "string" &&
+        CURSOR_TIMESTAMP_PATTERN.test(parsed.c) &&
+        Number.isFinite(Date.parse(parsed.c)) &&
+        CURSOR_ID_PATTERN.test(parsed.i)
+      ) {
+        return { createdAt: parsed.c, id: parsed.i };
+      }
+    } catch {
+      // Reported below as an invalid cursor.
+    }
+  }
+  throw invalidGenerationLogCursorError();
+}
+
+/**
+ * One page of generation logs, newest creation first with the job ID as a tiebreaker.
+ * Creation time never changes, so saving or posting a job cannot move it between pages.
+ */
+export async function listGenerationLogsPage({
+  limit = GENERATION_LOG_PAGE_SIZE,
+  cursor = null,
+}: {
+  limit?: number;
+  cursor?: GenerationLogCursor | null;
+} = {}): Promise<GenerationLogPage> {
+  assertDurableStorageConfigured("生成ログの取得");
+  const pageSize = Math.min(Math.max(Math.floor(limit), 1), GENERATION_LOG_MAX_PAGE_SIZE);
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    // article_inputs.id is a UUID column; anything else cannot be a cursor we issued.
+    if (cursor && !UUID_PATTERN.test(cursor.id)) throw invalidGenerationLogCursorError();
+    let query = supabase
+      .from("article_inputs")
+      .select("id,input_payload,created_at,updated_at")
+      .eq("input_payload->>kind", "article_generation_job")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(pageSize + 1);
+    if (cursor) {
+      query = query.or(
+        `created_at.lt."${cursor.createdAt}",and(created_at.eq."${cursor.createdAt}",id.lt."${cursor.id}")`,
+      );
+    }
+    const { data, error } = await query;
+    if (error) {
+      throw new ApiError("生成ログの読み込みに失敗しました。", 500, error.message);
+    }
+
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const pageRows = rows.slice(0, pageSize);
+    const lastRow = pageRows.at(-1);
+    return {
+      logs: pageRows.map(rowToJob).filter(isGenerationJob).map(jobToLogSummary),
+      nextCursor:
+        rows.length > pageSize && lastRow
+          ? encodeGenerationLogCursor({ createdAt: String(lastRow.created_at), id: String(lastRow.id) })
+          : null,
+      complete: true,
+    };
+  }
+
+  if (isSupabaseGatewayConfigured()) {
+    // The deployed gateway has no cursor action, so page within its widest window and say so
+    // when that window is full instead of silently hiding older jobs.
+    const result = await callSupabaseGateway<{ jobs: GenerationJob[] }>("list_jobs", {
+      limit: LEGACY_GATEWAY_JOB_WINDOW,
+    });
+    const jobs = result.jobs ?? [];
+    return paginateJobsByCreation(jobs, pageSize, cursor, jobs.length < LEGACY_GATEWAY_JOB_WINDOW);
+  }
+
+  const store = await readLocalJobs();
+  return paginateJobsByCreation(Object.values(store), pageSize, cursor, true);
+}
+
+function paginateJobsByCreation(
+  jobs: GenerationJob[],
+  pageSize: number,
+  cursor: GenerationLogCursor | null,
+  complete: boolean,
+): GenerationLogPage {
+  const cursorTime = cursor ? creationTime(cursor.createdAt) : 0;
+  const remaining = [...jobs]
+    .sort((a, b) => creationTime(b.createdAt) - creationTime(a.createdAt) || compareIdsDescending(a.id, b.id))
+    .filter((job) => {
+      if (!cursor) return true;
+      const jobTime = creationTime(job.createdAt);
+      return jobTime < cursorTime || (jobTime === cursorTime && job.id < cursor.id);
+    });
+  const page = remaining.slice(0, pageSize);
+  const last = page.at(-1);
+  return {
+    logs: page.map(jobToLogSummary),
+    nextCursor:
+      remaining.length > pageSize && last
+        ? encodeGenerationLogCursor({ createdAt: new Date(creationTime(last.createdAt)).toISOString(), id: last.id })
+        : null,
+    complete,
+  };
+}
+
+function creationTime(value: string) {
+  const time = Date.parse(value);
+  // A malformed legacy timestamp sorts as the oldest entry, consistently for sort and cursor.
+  return Number.isFinite(time) ? time : 0;
+}
+
+function compareIdsDescending(a: string, b: string) {
+  if (a === b) return 0;
+  return a < b ? 1 : -1;
+}
+
+function invalidGenerationLogCursorError() {
+  return new ApiError(
+    "生成ログの続きを読み込めませんでした。",
+    400,
+    "生成ログの「更新」を押してから、もう一度お試しください。",
+  );
 }
 
 export async function syncGenerationJobDraft(draft: ArticleDraft) {

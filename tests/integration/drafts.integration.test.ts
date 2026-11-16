@@ -189,11 +189,11 @@ describe("draft persistence route handlers", () => {
   });
 
   test("generation logs summarize persisted jobs without Supabase", async () => {
-    const { saveGenerationJob, listGenerationLogs } = await import("@/lib/server/generation-jobs");
+    const { saveGenerationJob, listGenerationLogsPage } = await import("@/lib/server/generation-jobs");
     const job = createCompletedGenerationJob();
 
     await saveGenerationJob(job);
-    const logs = await listGenerationLogs(10);
+    const { logs } = await listGenerationLogsPage({ limit: 10 });
     const store = JSON.parse(await readFile(path.join(tempDir, "generation-jobs.json"), "utf8"));
 
     expect(store[job.id].status).toBe("completed");
@@ -208,9 +208,10 @@ describe("draft persistence route handlers", () => {
   });
 
   test("save and approve routes keep generation logs and reopened output in sync", async () => {
-    const { saveGenerationJob, getGenerationJob, listGenerationLogs } = await import(
+    const { saveGenerationJob, getGenerationJob, listGenerationLogsPage } = await import(
       "@/lib/server/generation-jobs"
     );
+    const listGenerationLogs = async (limit: number) => (await listGenerationLogsPage({ limit })).logs;
     const { POST: savePost } = await import("@/app/api/save-draft/route");
     const { POST: approvePost } = await import("@/app/api/approve-draft/route");
     const job = createCompletedGenerationJob();
