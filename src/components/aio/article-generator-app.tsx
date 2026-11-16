@@ -4557,11 +4557,11 @@ type ApiRequestOptions = { timeoutMs?: number };
  * of the application. Callers must not report such an outcome as a success or a failure.
  */
 class ApiOutcomeUnknownError extends Error {
-  constructor(reason: "timeout" | "network" | "gateway") {
+  constructor(reason: "timeout" | "network" | "incomplete") {
     super(
       reason === "timeout"
         ? "サーバーから応答がありませんでした"
-        : reason === "gateway"
+        : reason === "incomplete"
           ? "サーバーの応答が途中で途切れました"
           : "通信が切断されました",
     );
@@ -4597,10 +4597,15 @@ async function requestApi<T>(url: string, init: RequestInit, { timeoutMs }: ApiR
     } catch {
       throw new ApiOutcomeUnknownError(timedOut ? "timeout" : "network");
     }
-    const json = (await response.json().catch(() => {
+    let json: ApiResult<T>;
+    try {
+      json = (await response.json()) as ApiResult<T>;
+    } catch {
       if (timedOut) throw new ApiOutcomeUnknownError("timeout");
-      return {};
-    })) as ApiResult<T>;
+      // A success status whose body did not arrive intact cannot confirm the outcome either.
+      if (response.ok) throw new ApiOutcomeUnknownError("incomplete");
+      json = {} as ApiResult<T>;
+    }
     if (response.status === 413) {
       throw new Error(
         "送信データが大きすぎます。生成画像やアップロード画像の保存先を確認してください。",
@@ -4609,7 +4614,7 @@ async function requestApi<T>(url: string, init: RequestInit, { timeoutMs }: ApiR
     // Application errors always carry ok:false; a bare 502-504 comes from the platform, which
     // may have cut off a request that the application had already committed.
     if (!response.ok && json.ok === undefined && [502, 503, 504].includes(response.status)) {
-      throw new ApiOutcomeUnknownError("gateway");
+      throw new ApiOutcomeUnknownError("incomplete");
     }
     if (!response.ok || json.ok === false) {
       throw new Error([json.error, json.detail].filter(Boolean).join(" / ") || response.statusText);

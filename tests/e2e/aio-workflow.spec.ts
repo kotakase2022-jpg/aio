@@ -3865,12 +3865,15 @@ test("an unposted article older than the first 20 logs can be reopened, edited, 
     await page.getByTestId("wordpress-username").fill("editor");
     await page.getByTestId("wordpress-application-password").fill("test-only-password");
     await page.getByTestId("wordpress-connect-button").click();
+    const refreshAfterPost = waitForGenerationLogRefresh(page, 41);
     await page.getByTestId("wordpress-post-button").click();
     await expect(page.getByTestId("wordpress-post-message")).toContainText("WordPressへ下書き投稿しました。");
     expect(wordpressRequest).toMatchObject({ status: "draft", draft: { id: "draft-e2e-log-00", editedTitle: "保存済み記事 00（編集後）" } });
     expect((await readStoredDrafts())["draft-e2e-log-00"].status).toBe("approved");
     // The automatic refresh after posting keeps the older range the editor was working in.
+    expect(((await (await refreshAfterPost).json()) as { logs: unknown[] }).logs).toHaveLength(41);
     await expect(rows).toHaveCount(41);
+    await expect(page.getByTestId("generation-log-open-e2e-log-00")).toBeVisible();
     expect(errors()).toEqual([]);
   } finally {
     await clearLocalStore();
@@ -3946,8 +3949,11 @@ for (const count of [0, 20, 21]) {
         await page.getByTestId("generation-log-open-e2e-log-00").click();
         await expect(page.getByRole("article").getByRole("heading", { name: "保存済み記事 00", exact: true })).toBeVisible();
         await expect(rows).toHaveCount(21);
+        const refreshed = waitForGenerationLogRefresh(page, 21);
         await page.getByTestId("generation-logs-panel").getByRole("button", { name: "更新" }).click();
+        expect(((await (await refreshed).json()) as { logs: unknown[] }).logs).toHaveLength(21);
         await expect(rows).toHaveCount(21);
+        await expect(page.getByTestId("generation-log-open-e2e-log-00")).toBeVisible();
       } else {
         await expect(page.getByTestId("generation-logs-end")).toHaveCount(0);
       }
@@ -4017,7 +4023,7 @@ test("an unanswered save is reported as unconfirmed, keeps edits, and a retry sa
   expect(errors()).toEqual([]);
 });
 
-for (const failure of ["dropped connection", "gateway error page"] as const) {
+for (const failure of ["dropped connection", "gateway error page", "truncated success body"] as const) {
   test(`a save cut off by a ${failure} is unconfirmed, keeps edits, and retries on the same article`, async ({ page }) => {
     const errors = collectUnexpectedBrowserErrors(page, {
       allowedFailedRequests: [/\/api\/save-draft$/],
@@ -4032,7 +4038,8 @@ for (const failure of ["dropped connection", "gateway error page"] as const) {
       submitted.push(draft);
       if (submitted.length === 1) {
         if (failure === "dropped connection") await route.abort("connectionreset");
-        else await route.fulfill({ status: 504, contentType: "text/html", body: "<html><body>Gateway Timeout</body></html>" });
+        else if (failure === "gateway error page") await route.fulfill({ status: 504, contentType: "text/html", body: "<html><body>Gateway Timeout</body></html>" });
+        else await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true,"draft":{"id":' });
         return;
       }
       await route.fulfill({ json: { ok: true, draft, warnings: [] } });
@@ -4255,6 +4262,14 @@ function buildSeededJob(
     wordpressPostStatus: posted ? "draft" : undefined,
     wordpressPostUrl,
   };
+}
+
+// Registered before the action, so an assertion cannot pass on the list shown before the refresh.
+function waitForGenerationLogRefresh(page: Page, limit: number) {
+  return page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/generation-logs" && url.searchParams.get("limit") === String(limit) && response.ok();
+  });
 }
 
 function e2eLocalStoreDir() {
