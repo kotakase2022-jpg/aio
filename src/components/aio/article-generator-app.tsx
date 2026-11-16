@@ -272,6 +272,9 @@ export function ArticleGeneratorApp() {
   const generationLogsRequestRef = useRef(0);
   const loadedGenerationLogCountRef = useRef(0);
   const draftSubmissionInFlightRef = useRef(false);
+  // Set while the primary button re-checks a previous job whose outcome was unconfirmed.
+  const unconfirmedJobRecheckRef = useRef(false);
+  const logsLoadingMoreRef = useRef(false);
   const formRestoreVersionRef = useRef(0);
   const competitorResearchRequestRef = useRef(0);
   const themeCandidateRequestRef = useRef(0);
@@ -505,6 +508,7 @@ export function ArticleGeneratorApp() {
 
   async function generateArticle(regenerationInstruction = "") {
     if (draftMutationPending) return;
+    if (recheckUnconfirmedGenerationJob()) return;
     if (!canGenerate) {
       setActiveError(
         formatGenerationRequirementMessage(missingGenerationRequirements) ||
@@ -592,11 +596,27 @@ export function ArticleGeneratorApp() {
     markRunningAsError("ユーザー操作により停止しました。");
   }
 
+  /**
+   * The previous job's outcome is still unconfirmed and it may still be running on the server,
+   * so check it again instead of starting a second, paid generation.
+   */
+  function recheckUnconfirmedGenerationJob() {
+    const unconfirmedJobId = window.localStorage.getItem(activeGenerationJobStorageKey);
+    if (!unconfirmedJobId || generationPollingRef.current) return false;
+    setActiveError(
+      "前回の記事作成の状況をまだ確認できていないため、新しい記事作成は始めずに状況を確認しています。完了・失敗・停止を確認できたら、もう一度実行できます。",
+    );
+    unconfirmedJobRecheckRef.current = true;
+    void pollGenerationJob(unconfirmedJobId);
+    return true;
+  }
+
   function handlePrimaryArticleButton() {
     if (isGenerating) {
       stopGeneration();
       return;
     }
+    if (recheckUnconfirmedGenerationJob()) return;
 
     if (draft) {
       setArticleRegenerationInstruction("");
@@ -658,6 +678,10 @@ export function ArticleGeneratorApp() {
 
         if (result.job.status === "completed") {
           finishGenerationPolling(jobId);
+          if (unconfirmedJobRecheckRef.current) {
+            unconfirmedJobRecheckRef.current = false;
+            setActiveError("前回の記事作成は完了していました。作成された記事を表示しています。新しく作成する場合は、もう一度実行してください。");
+          }
           if (result.job.draft) {
             setDraft(result.job.draft);
             setTab("preview");
@@ -668,6 +692,7 @@ export function ArticleGeneratorApp() {
 
         if (result.job.status === "failed" || result.job.status === "canceled") {
           finishGenerationPolling(jobId);
+          unconfirmedJobRecheckRef.current = false;
           setActiveError(result.job.error || "記事生成に失敗しました。");
           void loadGenerationLogs();
           return;
@@ -686,12 +711,13 @@ export function ArticleGeneratorApp() {
       if (shouldRestoreInputs) {
         setGenerationResumeChecked(true);
       }
+      unconfirmedJobRecheckRef.current = false;
       if (error instanceof ApiOutcomeUnknownError) {
         // Neither success nor failure is known. Keep the stored job ID so a reload resumes the
         // status check, and replace the running spinners with an explicit unconfirmed state.
         finishGenerationPolling(jobId, { keepResumeKey: true });
         setActiveError(
-          `記事作成の状況を確認できませんでした（${error.message}）。記事作成はサーバー側で続いている可能性があります。ページを再読み込みすると状況の確認を再開します。完了した記事は生成ログからも開けます。`,
+          `記事作成の状況を確認できませんでした（${error.message}）。記事作成はサーバー側で続いている可能性があります。記事作成のボタンを押すか、ページを再読み込みすると、新しい記事作成は始めずに状況の確認を再開します。完了した記事は生成ログからも開けます。`,
         );
         markRunningAsError("通信が途切れたため状況を確認できません。再読み込みで確認を再開できます。");
         void loadGenerationLogs();
@@ -802,7 +828,11 @@ export function ArticleGeneratorApp() {
     // Refresh the range already shown, so an older log opened from a later page stays listed
     // with its new save/WordPress state instead of falling back to the first page. Each request
     // stays within the API page cap; a longer range is read page by page before replacing it.
-    const targetCount = Math.max(loadedGenerationLogCountRef.current, generationLogPageSize);
+    // A refresh supersedes an older page still loading; include that page in the range so the
+    // rows the editor asked for are not dropped.
+    const pendingOlderPage = logsLoadingMoreRef.current ? generationLogPageSize : 0;
+    logsLoadingMoreRef.current = false;
+    const targetCount = Math.max(loadedGenerationLogCountRef.current + pendingOlderPage, generationLogPageSize);
     setLogsLoading(true);
     setLogsLoadingMore(false);
     setLogsError("");
@@ -849,6 +879,7 @@ export function ArticleGeneratorApp() {
     if (!cursor || logsLoading || logsLoadingMore) return;
     const requestId = generationLogsRequestRef.current + 1;
     generationLogsRequestRef.current = requestId;
+    logsLoadingMoreRef.current = true;
     setLogsLoadingMore(true);
     setLogsMoreError("");
     try {
@@ -867,6 +898,7 @@ export function ArticleGeneratorApp() {
       setLogsMoreError(readError(error));
     } finally {
       if (generationLogsRequestRef.current === requestId) {
+        logsLoadingMoreRef.current = false;
         setLogsLoadingMore(false);
       }
     }

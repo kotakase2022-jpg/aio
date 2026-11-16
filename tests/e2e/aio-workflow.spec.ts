@@ -4192,6 +4192,95 @@ test("a failed older-log request keeps the listed logs and can be retried", asyn
   expect(errors()).toEqual([]);
 });
 
+test("a refresh while an older page is still loading keeps that page in the list", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const jobs = Array.from({ length: 41 }, (_, index) => buildSeededJob(index));
+  await seedLocalStore(jobs);
+  try {
+    let releaseOlderPage: () => void = () => {};
+    const olderPageHeld = new Promise<void>((resolve) => {
+      releaseOlderPage = resolve;
+    });
+    let holdNextOlderPage = true;
+    await page.route((url) => url.pathname === "/api/generation-logs" && url.searchParams.has("cursor"), async (route) => {
+      if (holdNextOlderPage) {
+        holdNextOlderPage = false;
+        await olderPageHeld;
+      }
+      await route.fallback();
+    });
+    await login(page, { preparePrimaryInfo: false });
+    await page.getByTestId("generation-logs-toggle").click();
+    const rows = page.getByTestId("generation-logs-content").locator("tbody tr");
+    await expect(rows).toHaveCount(20);
+
+    await page.getByTestId("generation-logs-load-more").click();
+    await expect(page.getByTestId("generation-logs-load-more").locator(".animate-spin")).toHaveCount(1);
+    const refreshed = waitForGenerationLogRefresh(page, 40);
+    await page.getByTestId("generation-logs-panel").getByRole("button", { name: "更新", exact: true }).click();
+    await refreshed;
+    releaseOlderPage();
+
+    // The superseded older-page response is ignored, but the refresh already covers its rows.
+    await expect(rows).toHaveCount(40);
+    await expect(page.getByTestId("generation-log-open-e2e-log-01")).toBeVisible();
+    await expect(page.getByTestId("generation-logs-load-more")).toBeEnabled();
+    await expect(page.getByTestId("generation-logs-load-more").locator(".animate-spin")).toHaveCount(0);
+    await page.getByTestId("generation-logs-load-more").click();
+    await expect(rows).toHaveCount(41);
+    expect(errors()).toEqual([]);
+  } finally {
+    await clearLocalStore();
+  }
+});
+
+test("an unconfirmed generation is checked again instead of starting a second one", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedRequests: [/\/api\/generation-jobs\/job-completed-1$/],
+  });
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  const runningJob = {
+    ...job,
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    steps: job.steps.map((step) => (step.id === "save" ? { ...step, status: "running" as const, detail: undefined } : step)),
+  };
+  let startRequests = 0;
+  await page.route((url) => url.pathname === "/api/generation-jobs", async (route) => {
+    startRequests += 1;
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+  let dropStatusChecks = Number.POSITIVE_INFINITY;
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    if (dropStatusChecks > 0) {
+      dropStatusChecks -= 1;
+      await route.abort("connectionreset");
+      return;
+    }
+    await route.fallback();
+  });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for an unconfirmed generation.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（通信が切断されました）", { timeout: 20_000 });
+  await expect(page.getByTestId("active-error")).toContainText("新しい記事作成は始めずに状況の確認を再開します");
+  expect(startRequests).toBe(1);
+
+  // The button re-checks the stored job; no second (paid) generation is requested.
+  dropStatusChecks = 0;
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" })).toBeVisible();
+  await expect(page.getByTestId("generation-step-save")).toContainText("Saved");
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成は完了していました。");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBeNull();
+  expect(startRequests).toBe(1);
+  expect(errors()).toEqual([]);
+});
+
 test("generation status checks survive a brief disconnect and report repeated loss as unconfirmed", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedRequests: [/\/api\/generation-jobs\/job-completed-1$/],

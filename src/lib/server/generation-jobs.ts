@@ -384,8 +384,10 @@ export async function listGenerationLogsPage({
   }
 
   if (isSupabaseGatewayConfigured()) {
-    // The deployed gateway has no cursor action, so page within its widest window and say so
-    // when that window is full instead of silently hiding older jobs.
+    const keysetPage = await listGatewayJobPage(pageSize, cursor);
+    if (keysetPage) return keysetPage;
+    // A gateway deployed before list_job_page has no cursor action, so page within its widest
+    // window and say so when that window is full instead of silently hiding older jobs.
     const result = await callSupabaseGateway<{ jobs: GenerationJob[] }>("list_jobs", {
       limit: LEGACY_GATEWAY_JOB_WINDOW,
     });
@@ -395,6 +397,38 @@ export async function listGenerationLogsPage({
 
   const store = await readLocalJobs();
   return paginateJobsByCreation(Object.values(store), pageSize, cursor, true);
+}
+
+// Until this time, the gateway is known to predate list_job_page; skip the extra round trip.
+let gatewayJobPageUnsupportedUntil = 0;
+const GATEWAY_JOB_PAGE_RECHECK_MS = 5 * 60 * 1000;
+
+async function listGatewayJobPage(
+  pageSize: number,
+  cursor: GenerationLogCursor | null,
+): Promise<GenerationLogPage | null> {
+  // article_inputs ids are UUIDs; any other cursor id was issued by the window fallback.
+  if (Date.now() < gatewayJobPageUnsupportedUntil || (cursor && !UUID_PATTERN.test(cursor.id))) return null;
+  try {
+    const result = await callSupabaseGateway<{
+      jobs: GenerationJob[];
+      nextCursor: GenerationLogCursor | null;
+    }>("list_job_page", { limit: pageSize, cursor });
+    return {
+      logs: (result.jobs ?? []).map(jobToLogSummary),
+      nextCursor: result.nextCursor ? encodeGenerationLogCursor(result.nextCursor) : null,
+      complete: true,
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 400 && error.message === "Unsupported gateway action.") {
+      gatewayJobPageUnsupportedUntil = Date.now() + GATEWAY_JOB_PAGE_RECHECK_MS;
+      return null;
+    }
+    if (error instanceof ApiError && error.status === 400 && error.message === "Invalid cursor.") {
+      throw invalidGenerationLogCursorError();
+    }
+    throw error;
+  }
 }
 
 function paginateJobsByCreation(

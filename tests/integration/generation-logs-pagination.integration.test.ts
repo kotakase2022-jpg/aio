@@ -176,9 +176,12 @@ describe("generation log pages (local durable store)", () => {
 });
 
 describe("generation log pages (Supabase gateway)", () => {
-  test("pages the existing list_jobs window by creation time and flags a possibly truncated window", async () => {
+  test("a gateway without list_job_page still pages the list_jobs window and flags a possibly truncated window", async () => {
     const gatewayJobs = Array.from({ length: 30 }, (_, index) => buildJob(index));
+    const { ApiError } = await import("@/lib/server/http");
     const callSupabaseGateway = mockGateway(async (action, payload) => {
+      // As deployed before November 16: unknown actions are rejected with this exact message.
+      if (action === "list_job_page") throw new ApiError("Unsupported gateway action.", 400);
       expect(action).toBe("list_jobs");
       expect(payload).toEqual({ limit: 100 });
       return { jobs: [...gatewayJobs].reverse() };
@@ -188,7 +191,8 @@ describe("generation log pages (Supabase gateway)", () => {
     const first = await listGenerationLogsPage({});
     const second = await listGenerationLogsPage({ cursor: decodeGenerationLogCursor(first.nextCursor!) });
 
-    expect(callSupabaseGateway).toHaveBeenCalledTimes(2);
+    // The unsupported action is asked once, then skipped for a while instead of on every page.
+    expect(callSupabaseGateway.mock.calls.map(([action]) => action)).toEqual(["list_job_page", "list_jobs", "list_jobs"]);
     expect(first.logs.map((log) => log.id)).toEqual(newestCreatedFirst(gatewayJobs).slice(0, 20).map((job) => job.id));
     expect(second.logs.map((log) => log.id)).toEqual(newestCreatedFirst(gatewayJobs).slice(20).map((job) => job.id));
     expect(second.nextCursor).toBeNull();
@@ -198,7 +202,80 @@ describe("generation log pages (Supabase gateway)", () => {
     const full = await listGenerationLogsPage({});
     expect(full.complete).toBe(false);
   });
+
+  test("list_job_page reaches all of 150 jobs one page at a time, beyond the old 100-job window", async () => {
+    const gatewayJobs = Array.from({ length: 150 }, (_, index) => buildJob(index, uuidFor(index)));
+    const callSupabaseGateway = mockGateway(async (action, payload) => {
+      expect(action).toBe("list_job_page");
+      return keysetGatewayPage(gatewayJobs, payload as { limit: number; cursor: { createdAt: string; id: string } | null });
+    });
+    const { listGenerationLogsPage, decodeGenerationLogCursor } = await import("@/lib/server/generation-jobs");
+
+    const pages: GenerationLogPage[] = [];
+    let cursor: string | null = null;
+    do {
+      const page = await listGenerationLogsPage({ cursor: cursor ? decodeGenerationLogCursor(cursor) : null });
+      pages.push(page);
+      cursor = page.nextCursor;
+    } while (cursor && pages.length < 20);
+
+    expect(pages.map((page) => page.logs.length)).toEqual([20, 20, 20, 20, 20, 20, 20, 10]);
+    expect(pages.every((page) => page.complete)).toBe(true);
+    const listed = pages.flatMap((page) => page.logs.map((log) => log.id));
+    expect(listed).toEqual(newestCreatedFirst(gatewayJobs).map((job) => job.id));
+    // Only one page of rows is asked for each time, never the whole window.
+    expect(callSupabaseGateway.mock.calls.every(([, payload]) => (payload as { limit: number }).limit === 20)).toBe(true);
+    // The created_at value of the row (database format) travels through the opaque cursor unchanged.
+    expect(callSupabaseGateway.mock.calls[1][1]).toMatchObject({
+      cursor: { createdAt: expect.stringMatching(/\+00:00$/), id: gatewayJobs[130].id },
+    });
+  });
+
+  test("a cursor the gateway rejects is reported as an invalid continuation", async () => {
+    const { ApiError } = await import("@/lib/server/http");
+    mockGateway(async () => {
+      throw new ApiError("Invalid cursor.", 400);
+    });
+    const { listGenerationLogsPage } = await import("@/lib/server/generation-jobs");
+
+    await expect(
+      listGenerationLogsPage({ cursor: { createdAt: "2026-10-01T00:00:00.000Z", id: uuidFor(1) } }),
+    ).rejects.toMatchObject({ status: 400, message: "生成ログの続きを読み込めませんでした。" });
+  });
+
+  test("other gateway failures are not mistaken for an old gateway", async () => {
+    const { ApiError } = await import("@/lib/server/http");
+    const callSupabaseGateway = mockGateway(async () => {
+      throw new ApiError("Supabase gateway request failed.", 500);
+    });
+    const { listGenerationLogsPage } = await import("@/lib/server/generation-jobs");
+
+    await expect(listGenerationLogsPage({})).rejects.toMatchObject({ status: 500 });
+    expect(callSupabaseGateway.mock.calls.map(([action]) => action)).toEqual(["list_job_page"]);
+  });
 });
+
+function uuidFor(index: number) {
+  return `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+}
+
+// In-memory model of aio-store list_job_page: created_at desc, id desc, limit + 1 lookahead.
+function keysetGatewayPage(jobs: GenerationJob[], { limit, cursor }: { limit: number; cursor: { createdAt: string; id: string } | null }) {
+  const rows = [...jobs]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || (a.id < b.id ? 1 : -1))
+    .filter((job) =>
+      !cursor ||
+      Date.parse(job.createdAt) < Date.parse(cursor.createdAt) ||
+      (Date.parse(job.createdAt) === Date.parse(cursor.createdAt) && job.id < cursor.id),
+    )
+    .slice(0, limit + 1);
+  const page = rows.slice(0, limit);
+  const last = page.at(-1);
+  return {
+    jobs: page,
+    nextCursor: rows.length > limit && last ? { createdAt: last.createdAt.replace("Z", "+00:00"), id: last.id } : null,
+  };
+}
 
 describe("generation log pages (Supabase service role)", () => {
   test("requests one extra row with a stable keyset filter", async () => {
