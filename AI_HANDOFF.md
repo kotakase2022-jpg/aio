@@ -77,6 +77,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - The overlapping-refresh E2E tests now wait until the held answers are delivered and handled.
   - The older-draft check also blocks a save whose stored body the save route would rewrite when sanitizing.
   - Docs: the SSO-protected stage step (inspect + `vercel curl` 401 + recorded decision), and a direct post-deploy check that `list_job_page` serves the list (function version + 200s, no 400 `Unsupported gateway action.`).
+  - Also awaiting the owner, as part of the same residual-risk decision: a forward jump of the browser clock during a 5xx outage could end the 7 min hold early (CodeRabbit). A full guarantee needs server-side control of the save (migration).
   - Not changed, left for the owner: remove the default demo access code from `src/app/api/demo-auth/route.ts` and reject login when `DEMO_ACCESS_CODE` is unset. A valid security finding, but if production relies on the default it would lock everyone out. The owner asked to set the access-code topic aside.
 - Codex GitHub review: not performed on #50 or #51 (usage limit); no credits added.
 

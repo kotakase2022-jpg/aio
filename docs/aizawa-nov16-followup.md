@@ -214,7 +214,8 @@ CodeRabbit（PR #51）の指摘への対応（8件、全て妥当と判断して
      - `npx supabase functions list --project-ref npdyfhqugniuxfxpgngh` で `aio-store` の版が上がったことを確認する。
      - デプロイから5分以上待つ（アプリは「旧 gateway」と判定した結果を最大5分間使い続けるため）。
      - アプリで生成ログを1回開く（読み取りのみ）。
-     - Supabase ダッシュボードで、`aio-store` の呼び出しログを確認する（認証済みで読み取りのみ）。その時刻の要求がすべて200で、旧 gateway が未対応の要求に返す 400（`Unsupported gateway action.`）が出ていなければ、新しい処理で取得できている。ロールバックは、元の `index.ts` を再デプロイする（旧アプリ・新アプリのどちらとも互換）。
+     - Supabase ダッシュボードで、`aio-store` の呼び出しログを確認する（認証済みで読み取りのみ）。その時刻の要求がすべて200で、旧 gateway が未対応の要求に返す 400（`Unsupported gateway action.`）が出ていなければ、新しい処理で取得できている。
+     - 新しい処理を直接確かめる場合は、Supabase ダッシュボードの Edge Function テスト実行（認証済み）で、`aio-store` に `{"action":"list_job_page","payload":{"limit":1}}` を送る（`x-aio-store-token` ヘッダーが必要）。HTTP 200 と `ok: true` を確認し、応答の中身（記事データ）やトークンは記録しない。この要求は1件を読むだけで、書き込みはしない。ロールバックは、元の `index.ts` を再デプロイする（旧アプリ・新アプリのどちらとも互換）。
 
 ## 未確認事項・残課題
 
