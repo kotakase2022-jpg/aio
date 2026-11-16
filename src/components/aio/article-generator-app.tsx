@@ -99,6 +99,11 @@ import type {
 } from "@/types/aio";
 
 const activeGenerationJobStorageKey = "aio-active-generation-job-id";
+// When this browser started (or first lost track of) the stored job.
+const activeGenerationJobStartedAtStorageKey = "aio-active-generation-job-started-at";
+// The generation worker stops after 300 s and the server fails a stuck job after 6 minutes, so
+// beyond this a stored job can no longer be generating, even if its status cannot be read.
+const generationJobMaxRuntimeMs = 7 * 60 * 1000;
 const generationLogPageSize = 20;
 const generationLogRefreshLimit = 100;
 // Saves normally finish within seconds; after this the result is reported as unconfirmed.
@@ -557,6 +562,7 @@ export function ArticleGeneratorApp() {
       setActiveGenerationJobId(started.job.id);
       generationPollingRef.current = started.job.id;
       window.localStorage.setItem(activeGenerationJobStorageKey, started.job.id);
+      window.localStorage.setItem(activeGenerationJobStartedAtStorageKey, String(Date.now()));
       applyGenerationJob(started.job);
       await pollGenerationJob(started.job.id);
     } catch (error) {
@@ -590,6 +596,7 @@ export function ArticleGeneratorApp() {
       generationPollingRef.current = null;
       setActiveGenerationJobId(null);
       window.localStorage.removeItem(activeGenerationJobStorageKey);
+      window.localStorage.removeItem(activeGenerationJobStartedAtStorageKey);
       setActiveError("記事作成を停止しました。");
       markRunningAsError("ユーザー操作により停止しました。");
       void loadGenerationLogs();
@@ -718,8 +725,18 @@ export function ArticleGeneratorApp() {
       const wasManualRecheck = unconfirmedJobRecheckRef.current;
       unconfirmedJobRecheckRef.current = false;
       if (wasManualRecheck && error instanceof ApiHttpError && error.status >= 500) {
-        // The server keeps failing to read this job even on the editor's re-check. Release the
-        // stored ID so the editor is not locked out, and say how to avoid a duplicate article.
+        // The server keeps failing to read this job even on the editor's re-check. While the job
+        // could still be generating, keep it: releasing it would allow a concurrent second run.
+        if (!generationJobPastMaxRuntime()) {
+          finishGenerationPolling(jobId, { keepResumeKey: true });
+          const message = `前回の記事作成の状況をサーバーから読み込めませんでした（${readError(error)}）。前回の記事作成がまだ続いている可能性があるため、新しい記事作成は始めていません。数分待ってから、もう一度ボタンを押して確認してください。`;
+          setActiveError(message);
+          markRunningAsError(message);
+          void loadGenerationLogs();
+          return;
+        }
+        // Past the maximum run time the job can no longer be generating. Release the stored ID
+        // so the editor is not locked out, and say how to avoid a second article.
         finishGenerationPolling(jobId);
         const message = `前回の記事作成の状況をサーバーから読み込めませんでした（${readError(error)}）。前回の記事がすでに作成されていないか、生成ログの「更新」で確認してから、必要な場合だけもう一度実行してください。`;
         setActiveError(message);
@@ -745,6 +762,17 @@ export function ArticleGeneratorApp() {
     }
   }
 
+  /** Whether the stored job started long enough ago that it can no longer be generating. */
+  function generationJobPastMaxRuntime() {
+    const startedAt = Number(window.localStorage.getItem(activeGenerationJobStartedAtStorageKey));
+    if (!Number.isFinite(startedAt) || startedAt <= 0) {
+      // Unknown (stored before this record existed): start counting from now, conservatively.
+      window.localStorage.setItem(activeGenerationJobStartedAtStorageKey, String(Date.now()));
+      return false;
+    }
+    return Date.now() - startedAt >= generationJobMaxRuntimeMs;
+  }
+
   function finishGenerationPolling(jobId: string, { keepResumeKey = false } = {}) {
     if (generationPollingRef.current === jobId) {
       generationPollingRef.current = null;
@@ -753,6 +781,7 @@ export function ArticleGeneratorApp() {
     setActiveGenerationJobId((current) => (current === jobId ? null : current));
     if (!keepResumeKey && window.localStorage.getItem(activeGenerationJobStorageKey) === jobId) {
       window.localStorage.removeItem(activeGenerationJobStorageKey);
+      window.localStorage.removeItem(activeGenerationJobStartedAtStorageKey);
     }
   }
 

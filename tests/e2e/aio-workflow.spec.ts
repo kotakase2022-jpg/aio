@@ -4362,11 +4362,23 @@ test("a status read that fails on the server keeps the job, and a failing re-che
   await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（生成ジョブの読み込みに失敗しました。）", { timeout: 20_000 });
   expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBe("job-completed-1");
 
-  // The re-check also fails on the server: the ID is released so the editor is not locked out.
+  // The re-check also fails on the server while the job could still be generating: keep it, so a
+  // second generation cannot run at the same time.
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成がまだ続いている可能性があるため、新しい記事作成は始めていません", { timeout: 20_000 });
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBe("job-completed-1");
+  expect(startRequests).toBe(1);
+
+  // Past the maximum run time the job can no longer be generating: the ID is released so the
+  // editor is not locked out, with guidance to check the logs first.
+  await page.evaluate(() => {
+    window.localStorage.setItem("aio-active-generation-job-started-at", String(Date.now() - 8 * 60 * 1000));
+  });
   await page.getByTestId("article-primary-button").click();
   await expect(page.getByTestId("active-error")).toContainText("前回の記事作成の状況をサーバーから読み込めませんでした", { timeout: 20_000 });
   await expect(page.getByTestId("active-error")).toContainText("生成ログの「更新」で確認してから");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-started-at"))).toBeNull();
   expect(startRequests).toBe(1);
 
   // Only now does the button start a new job; one transient failure on the way is retried silently.
