@@ -3421,12 +3421,15 @@ test("user can stop an in-progress generation job from the primary CTA", async (
   await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
   await page.getByTestId("article-primary-button").click();
 
-  expect(cancelCalls).toBe(1);
+  // The click resolves before the routed cancel request is counted; wait for it, then require
+  // that exactly one cancel was sent once the UI has settled.
+  await expect.poll(() => cancelCalls).toBe(1);
   await expect(page.getByText("記事作成を停止しました。")).toBeVisible();
   await expect(page.getByTestId("article-primary-button")).toContainText("AIによる記事作成");
   await expect(
     page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
   ).resolves.toBeNull();
+  expect(cancelCalls).toBe(1);
   expect(errors()).toEqual([]);
 });
 
