@@ -258,6 +258,13 @@ Run it only with approved API credentials and cost authorization, like the text 
 E2E tests use Playwright Chromium at a PC viewport. They build and start the app with
 `next build` / `next start` through Playwright `webServer` and set safe test environment variables.
 
+The E2E server keeps its local durable store in an isolated directory (`AIO_E2E_LOCAL_DATA_DIR`,
+set by `playwright.config.ts` under the OS temp directory), never in the project's `.data/`.
+Tests that exercise the real generation-log, job and save routes seed that directory with
+synthetic jobs/drafts and remove it in `finally`; OpenAI and WordPress stay mocked. Keep these
+tests in `tests/e2e/aio-workflow.spec.ts`, whose tests run serially, so seeded data cannot leak
+into a concurrently running spec file.
+
 Install browsers when needed:
 
 ```bash

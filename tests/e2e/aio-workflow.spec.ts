@@ -1,9 +1,17 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import extractFileSuccess from "../fixtures/api/extract-file-success.json";
 import themeCandidates from "../fixtures/api/theme-candidates.json";
-import { createCompletedGenerationJob } from "../fixtures/article";
-import type { ArticleDraft, ArticleImage } from "../../src/types/aio";
+import { createCompletedGenerationJob, createSampleDraft } from "../fixtures/article";
+import type {
+  ArticleDraft,
+  ArticleElementMode,
+  ArticleImage,
+  FaqItem,
+  GenerationJob,
+  GenerationLogSummary,
+} from "../../src/types/aio";
 
 const competitorResearchFixture = {
   summary: "Generic automation LPs emphasize fast publishing and broad efficiency.",
@@ -3757,6 +3765,508 @@ test("previous closing text and author inputs can be reused from local storage",
   expect(errors()).toEqual([]);
 });
 
+// ---- November 16: older logs and save completion, through the real routes and local store ----
+
+const seededStructureArticles = {
+  comparison: {
+    title: "比較型：資金調達手段の比較ポイント",
+    body: "<h2>結論：入金時期と負担で比べる</h2><p>銀行融資と売掛金の早期資金化は、入金までの期間が異なります。</p><table><tr><th>比較軸</th><th>銀行融資</th><th>早期資金化</th></tr><tr><td>入金時期</td><td>審査後</td><td>売掛金の確認後</td></tr></table><h2>判断のポイント</h2><p>必要時期と手数料を確認します。</p>",
+    tableMode: "on",
+    supplementalFaqMode: "on",
+    faq: [{ question: "比較の前に何を準備しますか？", answer: "売掛金の資料と必要時期を整理します。" }],
+  },
+  problem_solution: {
+    title: "課題解決型：入金前の資金不足への対処",
+    body: "<h2>問題：支払日に入金が間に合わない</h2><p>売上は確定していても入金が後になります。</p><h2>原因</h2><p>支払サイトが長いことが原因です。</p><h2>対処</h2><p>売掛金の早期資金化を検討します。</p><h2>判断</h2><p>手数料と入金時期を比べます。</p><h2>行動</h2><p>必要書類を揃えて相談します。</p>",
+    tableMode: "none",
+    supplementalFaqMode: "auto",
+    faq: [{ question: "相談前に必要な書類は？", answer: "請求書と取引先との契約書を確認します。" }],
+  },
+  faq: {
+    title: "FAQ型：資金化相談のよくある質問",
+    body: "<h2>相談はいつまでに必要ですか？</h2><p>希望日の5営業日前までに相談してください。</p><h2>必要書類は何ですか？</h2><p>請求書と通帳の写しを確認します。</p>",
+    tableMode: "auto",
+    supplementalFaqMode: "none",
+    faq: [{ question: "相談はいつまでに必要ですか？", answer: "希望日の5営業日前までに相談してください。" }],
+  },
+  case: {
+    title: "ケース型：架空の製造業A社の資金繰り改善",
+    body: "<h2>想定ケース：架空の製造業A社</h2><p>以下は説明のための架空の事例です。A社は大口受注で仕入れが先行しました。</p><h2>A社が取った対応</h2><p>売掛金を早期に資金化しました。</p>",
+    tableMode: "auto",
+    supplementalFaqMode: "on",
+    faq: [{ question: "A社のケースで注意する点は？", answer: "手数料と入金時期を事前に確認する点です。" }],
+  },
+} satisfies Record<string, { title: string; body: string; tableMode: ArticleElementMode; supplementalFaqMode: ArticleElementMode; faq: FaqItem[] }>;
+
+type SeededStructure = keyof typeof seededStructureArticles;
+
+test("an unposted article older than the first 20 logs can be reopened, edited, saved and sent to WordPress", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  // 41 generated articles; every third one was already posted to WordPress.
+  const jobs = Array.from({ length: 41 }, (_, index) => buildSeededJob(index, { posted: index % 3 === 1 }));
+  await seedLocalStore(jobs);
+  try {
+    let wordpressRequest: { draft?: ArticleDraft; status?: string } | null = null;
+    await page.route("**/api/wordpress/connect", async (route) => {
+      await route.fulfill({ json: { ok: true, connection: { id: "wp-connection-old-article", siteUrl: "https://wordpress.example.com", username: "editor", createdAt: "2026-11-16T00:00:00.000Z", updatedAt: "2026-11-16T00:00:00.000Z" } } });
+    });
+    await page.route("**/api/wordpress/post", async (route) => {
+      wordpressRequest = route.request().postDataJSON() as { draft?: ArticleDraft; status?: string };
+      await route.fulfill({ json: { ok: true, postUrl: "https://wordpress.example.com/?p=4100", draft: { ...wordpressRequest.draft, status: "posted", wordpressPostUrl: "https://wordpress.example.com/?p=4100" }, warnings: [] } });
+    });
+    await login(page, { preparePrimaryInfo: false });
+    const logs = page.getByTestId("generation-logs-content");
+    const rows = logs.locator("tbody tr");
+    await expect(page.getByTestId("generation-logs-count")).toHaveText("20件表示（続きあり）");
+    await page.getByTestId("generation-logs-toggle").click();
+    await expect(rows).toHaveCount(20);
+    await expect(page.getByTestId("generation-log-open-e2e-log-00")).toHaveCount(0);
+
+    await page.getByTestId("generation-logs-load-more").click();
+    await expect(rows).toHaveCount(40);
+    await page.getByTestId("generation-logs-load-more").click();
+    await expect(rows).toHaveCount(41);
+    await expect(page.getByTestId("generation-logs-load-more")).toHaveCount(0);
+    await expect(page.getByTestId("generation-logs-end")).toHaveText("最も古い生成ログまで表示しています。");
+    const listed = await logs.locator('[data-testid^="generation-log-open-"]').evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("data-testid")),
+    );
+    expect(listed).toEqual([...jobs].reverse().map((job) => `generation-log-open-${job.id}`));
+    await expect(rows.filter({ has: page.getByTestId("generation-log-open-e2e-log-00") })).toContainText("未投稿");
+
+    await page.getByTestId("generation-log-open-e2e-log-00").click();
+    await expect(page.getByRole("article").getByRole("heading", { name: "保存済み記事 00", exact: true })).toBeVisible();
+    await expect(rows).toHaveCount(41);
+    await page.getByTestId("draft-edit-tab").click();
+    await page.getByTestId("draft-title-input").fill("保存済み記事 00（編集後）");
+    const body = page.getByTestId("draft-body-html-textarea");
+    await body.fill(`${await body.inputValue()}<p>過去記事を開いて追記しました。</p>`);
+    await page.getByTestId("save-draft-button").click();
+    await expect(page.getByTestId("draft-action-message")).toContainText("編集内容を保存しました。");
+    await expect(page.getByTestId("save-draft-button")).toBeEnabled();
+    await expect(page.getByTestId("save-draft-button").locator(".animate-spin")).toHaveCount(0);
+
+    const stored = await readStoredDrafts();
+    expect(Object.keys(stored)).toHaveLength(41);
+    expect(stored["draft-e2e-log-00"]).toMatchObject({ id: "draft-e2e-log-00", editedTitle: "保存済み記事 00（編集後）", status: "draft" });
+    expect(stored["draft-e2e-log-00"].editedBodyHtml).toContain("過去記事を開いて追記しました。");
+
+    await page.reload();
+    await page.getByTestId("generation-logs-toggle").click();
+    await page.getByTestId("generation-logs-load-more").click();
+    await page.getByTestId("generation-logs-load-more").click();
+    await page.getByTestId("generation-log-open-e2e-log-00").click();
+    await expect(page.getByRole("article").getByRole("heading", { name: "保存済み記事 00（編集後）", exact: true })).toBeVisible();
+    await expect(page.getByRole("article")).toContainText("過去記事を開いて追記しました。");
+
+    await page.getByTestId("approve-draft-button").click();
+    await expect(page.getByTestId("draft-status-badge")).toHaveText("承認済み");
+    await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+    await page.getByTestId("wordpress-username").fill("editor");
+    await page.getByTestId("wordpress-application-password").fill("test-only-password");
+    await page.getByTestId("wordpress-connect-button").click();
+    await page.getByTestId("wordpress-post-button").click();
+    await expect(page.getByTestId("wordpress-post-message")).toContainText("WordPressへ下書き投稿しました。");
+    expect(wordpressRequest).toMatchObject({ status: "draft", draft: { id: "draft-e2e-log-00", editedTitle: "保存済み記事 00（編集後）" } });
+    expect((await readStoredDrafts())["draft-e2e-log-00"].status).toBe("approved");
+    // The automatic refresh after posting keeps the older range the editor was working in.
+    await expect(rows).toHaveCount(41);
+    expect(errors()).toEqual([]);
+  } finally {
+    await clearLocalStore();
+  }
+});
+
+for (const structure of Object.keys(seededStructureArticles) as SeededStructure[]) {
+  test(`${structure} article reopened from an older log page keeps edits and its table/FAQ settings after saving`, async ({ page }) => {
+    const errors = collectUnexpectedBrowserErrors(page);
+    const article = seededStructureArticles[structure];
+    const jobs = Array.from({ length: 22 }, (_, index) => buildSeededJob(index, index === 1 ? { structure } : {}));
+    await seedLocalStore(jobs);
+    try {
+      await login(page, { preparePrimaryInfo: false });
+      await page.getByTestId("generation-logs-toggle").click();
+      await page.getByTestId("generation-logs-load-more").click();
+      await page.getByTestId("generation-log-open-e2e-log-01").click();
+      await expect(page.getByRole("article").getByRole("heading", { name: article.title, exact: true })).toBeVisible();
+      await expectRestoredStructure(page, structure, article.tableMode, article.supplementalFaqMode);
+
+      await page.getByTestId("draft-edit-tab").click();
+      await page.getByTestId("draft-title-input").fill(`${article.title}（編集済み）`);
+      const body = page.getByTestId("draft-body-html-textarea");
+      await body.fill(`${await body.inputValue()}<p>${structure}の手編集内容です。</p>`);
+      await page.getByTestId("save-draft-button").click();
+      await expect(page.getByTestId("draft-action-message")).toContainText("編集内容を保存しました。");
+
+      await page.reload();
+      await page.getByTestId("generation-logs-toggle").click();
+      await page.getByTestId("generation-logs-load-more").click();
+      await page.getByTestId("generation-log-open-e2e-log-01").click();
+      const preview = page.getByRole("article");
+      await expect(preview.getByRole("heading", { name: `${article.title}（編集済み）`, exact: true })).toBeVisible();
+      await expect(preview).toContainText(`${structure}の手編集内容です。`);
+      await expect(preview.locator("table")).toHaveCount(article.body.includes("<table") && article.tableMode !== "none" ? 1 : 0);
+      await expect(preview.locator(".aio-faq-block")).toHaveCount(article.supplementalFaqMode === "none" ? 0 : 1);
+      await expectRestoredStructure(page, structure, article.tableMode, article.supplementalFaqMode);
+      const stored = await readStoredDrafts();
+      expect(Object.keys(stored)).toHaveLength(22);
+      expect(stored["draft-e2e-log-01"]).toMatchObject({
+        editedTitle: `${article.title}（編集済み）`,
+        faqItems: article.faq,
+        inputPayload: { articleStructure: structure, tableMode: article.tableMode, supplementalFaqMode: article.supplementalFaqMode },
+        aiResult: { resolved_article_structure: structure, content_policy_version: 2 },
+      });
+      expect(errors()).toEqual([]);
+    } finally {
+      await clearLocalStore();
+    }
+  });
+}
+
+for (const count of [0, 20, 21]) {
+  test(`generation logs handle the ${count}-entry boundary without a false next page`, async ({ page }) => {
+    const errors = collectUnexpectedBrowserErrors(page);
+    await seedLocalStore(Array.from({ length: count }, (_, index) => buildSeededJob(index)));
+    try {
+      await login(page, { preparePrimaryInfo: false });
+      await page.getByTestId("generation-logs-toggle").click();
+      const rows = page.getByTestId("generation-logs-content").locator("tbody tr");
+      if (count === 0) {
+        await expect(page.getByTestId("generation-logs-content")).toContainText("まだ生成ログはありません。");
+        await expect(page.getByTestId("generation-logs-count")).toHaveText("0件");
+      } else {
+        await expect(rows).toHaveCount(20);
+        await expect(page.getByTestId("generation-logs-count")).toHaveText(count === 20 ? "20件" : "20件表示（続きあり）");
+      }
+      if (count === 21) {
+        await page.getByTestId("generation-logs-load-more").click();
+        await expect(rows).toHaveCount(21);
+        await expect(page.getByTestId("generation-logs-count")).toHaveText("21件");
+        await expect(page.getByTestId("generation-logs-end")).toBeVisible();
+        await page.getByTestId("generation-log-open-e2e-log-00").click();
+        await expect(page.getByRole("article").getByRole("heading", { name: "保存済み記事 00", exact: true })).toBeVisible();
+        await expect(rows).toHaveCount(21);
+        await page.getByTestId("generation-logs-panel").getByRole("button", { name: "更新" }).click();
+        await expect(rows).toHaveCount(21);
+      } else {
+        await expect(page.getByTestId("generation-logs-end")).toHaveCount(0);
+      }
+      await expect(page.getByTestId("generation-logs-load-more")).toHaveCount(0);
+      expect(errors()).toEqual([]);
+    } finally {
+      await clearLocalStore();
+    }
+  });
+}
+
+test("a completed log whose draft-save step was stored as running opens as saved, not processing", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  await seedLocalStore([buildSeededJob(0, { saveStepRunning: true })]);
+  try {
+    await login(page, { preparePrimaryInfo: false });
+    await page.getByTestId("generation-logs-toggle").click();
+    await page.getByTestId("generation-log-open-e2e-log-00").click();
+    await expect(page.getByRole("article").getByRole("heading", { name: "保存済み記事 00", exact: true })).toBeVisible();
+    const saveStep = page.getByTestId("generation-step-save");
+    await expect(saveStep).toContainText("ドラフトを保存しました");
+    await expect(saveStep).not.toContainText("処理中");
+    await expect(saveStep.locator(".animate-spin")).toHaveCount(0);
+    expect(errors()).toEqual([]);
+  } finally {
+    await clearLocalStore();
+  }
+});
+
+test("an unanswered save is reported as unconfirmed, keeps edits, and a retry saves the same article", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, { allowedFailedRequests: [/\/api\/save-draft$/] });
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  const submittedIds: string[] = [];
+  let answer = false;
+  await page.route("**/api/save-draft", async (route) => {
+    const { draft } = route.request().postDataJSON() as { draft: ArticleDraft };
+    submittedIds.push(draft.id);
+    if (!answer) return; // The server never answers this attempt.
+    await route.fulfill({ json: { ok: true, draft: { ...draft, updatedAt: "2026-11-16T01:00:00.000Z" }, warnings: [] } });
+  });
+  await page.clock.install();
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for an unanswered save.");
+  await page.getByTestId("article-primary-button").click();
+  await page.getByTestId("draft-edit-tab").click();
+  await page.getByTestId("draft-title-input").fill("Edit kept after an unanswered save");
+  await page.getByTestId("save-draft-button").click();
+  await expect.poll(() => submittedIds.length).toBe(1);
+  await expect(page.getByTestId("save-draft-button")).toBeDisabled();
+
+  await page.clock.fastForward(61_000);
+  await expect(page.getByTestId("draft-action-error")).toContainText(
+    "保存できたかどうかを確認できませんでした（サーバーから応答がありませんでした）",
+  );
+  await expect(page.getByTestId("draft-action-message")).toBeHidden();
+  await expect(page.getByTestId("draft-title-input")).toHaveValue("Edit kept after an unanswered save");
+  await expect(page.getByTestId("save-draft-button")).toBeEnabled();
+  await expect(page.getByTestId("save-draft-button").locator(".animate-spin")).toHaveCount(0);
+
+  answer = true;
+  await page.getByTestId("save-draft-button").click();
+  await expect(page.getByTestId("draft-action-message")).toContainText("編集内容を保存しました。");
+  await expect(page.getByTestId("draft-action-error")).toBeHidden();
+  expect(submittedIds).toEqual([job.draft!.id, job.draft!.id]);
+  expect(errors()).toEqual([]);
+});
+
+for (const failure of ["dropped connection", "gateway error page"] as const) {
+  test(`a save cut off by a ${failure} is unconfirmed, keeps edits, and retries on the same article`, async ({ page }) => {
+    const errors = collectUnexpectedBrowserErrors(page, {
+      allowedFailedRequests: [/\/api\/save-draft$/],
+      allowedFailedResponses: [/\/api\/save-draft$/],
+    });
+    const job = createCompletedGenerationJob();
+    job.draft!.images = [];
+    await mockCommonApiRoutes(page, job);
+    const submitted: ArticleDraft[] = [];
+    await page.route("**/api/save-draft", async (route) => {
+      const { draft } = route.request().postDataJSON() as { draft: ArticleDraft };
+      submitted.push(draft);
+      if (submitted.length === 1) {
+        if (failure === "dropped connection") await route.abort("connectionreset");
+        else await route.fulfill({ status: 504, contentType: "text/html", body: "<html><body>Gateway Timeout</body></html>" });
+        return;
+      }
+      await route.fulfill({ json: { ok: true, draft, warnings: [] } });
+    });
+    await login(page);
+    await page.getByTestId("reference-text-0").fill(`Reference for a ${failure}.`);
+    await page.getByTestId("article-primary-button").click();
+    await page.getByTestId("draft-edit-tab").click();
+    await page.getByTestId("draft-title-input").fill(`Edit kept after a ${failure}`);
+    await page.getByTestId("save-draft-button").click();
+    await expect(page.getByTestId("draft-action-error")).toContainText(
+      failure === "dropped connection"
+        ? "保存できたかどうかを確認できませんでした（通信が切断されました）"
+        : "保存できたかどうかを確認できませんでした（サーバーの応答が途中で途切れました）",
+    );
+    await expect(page.getByTestId("draft-action-error")).toContainText("記事が増えることはありません");
+    await expect(page.getByTestId("draft-title-input")).toHaveValue(`Edit kept after a ${failure}`);
+    await expect(page.getByTestId("active-error")).toHaveCount(0);
+
+    await page.getByTestId("save-draft-button").click();
+    await expect(page.getByTestId("draft-action-message")).toContainText("編集内容を保存しました。");
+    expect(submitted.map((draft) => draft.id)).toEqual([job.draft!.id, job.draft!.id]);
+    expect(submitted[1].editedTitle).toBe(`Edit kept after a ${failure}`);
+    expect(errors()).toEqual([]);
+  });
+}
+
+test("double-clicking save sends one request for the article", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  let requests = 0;
+  await page.route("**/api/save-draft", async (route) => {
+    requests += 1;
+    const { draft } = route.request().postDataJSON() as { draft: ArticleDraft };
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.fulfill({ json: { ok: true, draft, warnings: [] } });
+  });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for a double click.");
+  await page.getByTestId("article-primary-button").click();
+  await page.getByTestId("draft-edit-tab").click();
+  await page.getByTestId("draft-title-input").fill("Double-clicked save");
+  await page.getByTestId("save-draft-button").dblclick();
+  await expect(page.getByTestId("draft-action-message")).toContainText("編集内容を保存しました。");
+  expect(requests).toBe(1);
+  expect(errors()).toEqual([]);
+});
+
+test("a failed older-log request keeps the listed logs and can be retried", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, { allowedFailedResponses: [/\/api\/generation-logs\?cursor=/] });
+  const summaries: GenerationLogSummary[] = Array.from({ length: 25 }, (_, index) => ({
+    id: `mock-log-${String(24 - index).padStart(2, "0")}`,
+    status: "completed",
+    createdAt: new Date(Date.UTC(2026, 9, 1) + (24 - index) * 60_000).toISOString(),
+    updatedAt: "2026-11-16T00:00:00.000Z",
+    inputSummary: `古い記事 ${24 - index}`,
+    outputTitle: `古い記事 ${24 - index}`,
+    draftStatus: "draft",
+  }));
+  let failNextPage = true;
+  await page.route((url) => url.pathname === "/api/generation-logs", async (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    if (!cursor) {
+      await route.fulfill({ json: { ok: true, logs: summaries.slice(0, 20), nextCursor: "next-page-cursor", complete: true } });
+    } else if (failNextPage) {
+      failNextPage = false;
+      await route.fulfill({ status: 500, json: { ok: false, error: "生成ログの読み込みに失敗しました。" } });
+    } else {
+      // A legacy gateway window may be full: the end of the list says so instead of implying completeness.
+      await route.fulfill({ json: { ok: true, logs: summaries.slice(20), nextCursor: null, complete: false } });
+    }
+  });
+  await login(page, { preparePrimaryInfo: false });
+  await page.getByTestId("generation-logs-toggle").click();
+  const rows = page.getByTestId("generation-logs-content").locator("tbody tr");
+  await page.getByTestId("generation-logs-load-more").click();
+  await expect(page.getByTestId("generation-logs-more-error")).toContainText("続きを読み込めませんでした。表示中の一覧はそのまま使えます。");
+  await expect(rows).toHaveCount(20);
+  await page.getByTestId("generation-logs-load-more").click();
+  await expect(rows).toHaveCount(25);
+  await expect(page.getByTestId("generation-logs-more-error")).toHaveCount(0);
+  await expect(page.getByTestId("generation-logs-end")).toHaveText("表示できる生成ログはここまでです。");
+  await expect(page.getByTestId("generation-logs-incomplete")).toContainText("一部の古い生成ログを一覧に表示できない可能性があります");
+  expect(errors()).toEqual([]);
+});
+
+test("generation status checks survive a brief disconnect and report repeated loss as unconfirmed", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedRequests: [/\/api\/generation-jobs\/job-completed-1$/],
+  });
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  const runningJob = {
+    ...job,
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    steps: job.steps.map((step) => (step.id === "save" ? { ...step, status: "running" as const, detail: undefined } : step)),
+  };
+  await page.route((url) => url.pathname === "/api/generation-jobs", async (route) => {
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+  let dropStatusChecks = 2;
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    if (dropStatusChecks > 0) {
+      dropStatusChecks -= 1;
+      await route.abort("connectionreset");
+      return;
+    }
+    await route.fallback();
+  });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for a brief disconnect.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" })).toBeVisible();
+  await expect(page.getByTestId("generation-step-save")).toContainText("Saved");
+  await expect(page.getByTestId("active-error")).toHaveCount(0);
+
+  dropStatusChecks = Number.POSITIVE_INFINITY;
+  await page.getByTestId("article-primary-button").click();
+  await page.getByTestId("article-regeneration-instruction").fill("通信断の確認用に再作成");
+  await page.getByTestId("article-regeneration-start").click();
+  await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（通信が切断されました）", { timeout: 20_000 });
+  await expect(page.getByTestId("generation-step-save")).toContainText("通信が途切れたため状況を確認できません");
+  await expect(page.getByTestId("generation-step-save").locator(".animate-spin")).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBe("job-completed-1");
+
+  dropStatusChecks = 0;
+  await page.reload();
+  await expect(page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" })).toBeVisible();
+  await expect(page.getByTestId("generation-step-save")).toContainText("Saved");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBeNull();
+  expect(errors()).toEqual([]);
+});
+
+function buildSeededJob(
+  index: number,
+  { structure, posted = false, saveStepRunning = false }: { structure?: SeededStructure; posted?: boolean; saveStepRunning?: boolean } = {},
+): GenerationJob {
+  const template = createCompletedGenerationJob();
+  const id = `e2e-log-${String(index).padStart(2, "0")}`;
+  const createdAt = new Date(Date.UTC(2026, 9, 1) + index * 60_000).toISOString();
+  // Older jobs were updated most recently, so update-time ordering would reshuffle the pages.
+  const updatedAt = new Date(Date.UTC(2026, 9, 1) + (1000 - index) * 60_000).toISOString();
+  const article = structure ? seededStructureArticles[structure] : null;
+  const inputPayload = {
+    ...template.inputPayload,
+    theme: article?.title ?? `保存済み記事 ${String(index).padStart(2, "0")}`,
+    articleStructure: structure ?? ("auto" as const),
+    tableMode: article?.tableMode ?? ("auto" as const),
+    supplementalFaqMode: article?.supplementalFaqMode ?? ("auto" as const),
+    imageCount: 0 as const,
+  };
+  const wordpressPostUrl = posted ? `https://wordpress.example.com/?p=${index}` : undefined;
+  const draft = createSampleDraft({
+    id: `draft-${id}`,
+    inputPayload,
+    // Saved without competitor research: the stored null must reload and save cleanly.
+    competitorResearch: null as unknown as undefined,
+    aiResult: { ...template.draft!.aiResult, image_prompts: [], resolved_article_structure: structure ?? "textbook", content_policy_version: 2 },
+    editedTitle: article?.title ?? `保存済み記事 ${String(index).padStart(2, "0")}`,
+    editedBodyHtml: article?.body ?? template.draft!.editedBodyHtml,
+    faqItems: article?.faq ?? template.draft!.faqItems,
+    images: [],
+    status: posted ? "posted" : "draft",
+    wordpressPostUrl,
+    createdAt,
+    updatedAt,
+  });
+  const steps = [
+    { id: "fetch_refs", label: "参照URL本文抽出", status: "done" as const, detail: "1件を記事根拠として取得" },
+    { id: "images", label: "画像生成または反映", status: "done" as const, detail: "0枚を反映" },
+    saveStepRunning
+      ? { id: "save", label: "ドラフト保存", status: "running" as const }
+      : { id: "save", label: "ドラフト保存", status: "done" as const, detail: "ドラフトを保存しました" },
+  ];
+  return {
+    ...template,
+    id,
+    inputPayload,
+    competitorResearch: null,
+    steps,
+    draft,
+    draftId: draft.id,
+    createdAt,
+    updatedAt,
+    completedAt: updatedAt,
+    wordpressPostStatus: posted ? "draft" : undefined,
+    wordpressPostUrl,
+  };
+}
+
+function e2eLocalStoreDir() {
+  const directory = process.env.AIO_E2E_LOCAL_DATA_DIR;
+  if (!directory) throw new Error("AIO_E2E_LOCAL_DATA_DIR must be set by playwright.config.ts.");
+  return directory;
+}
+
+async function seedLocalStore(jobs: GenerationJob[]) {
+  const directory = e2eLocalStoreDir();
+  await rm(directory, { recursive: true, force: true });
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, "generation-jobs.json"), JSON.stringify(Object.fromEntries(jobs.map((job) => [job.id, job]))), "utf8");
+  await writeFile(
+    path.join(directory, "drafts.json"),
+    JSON.stringify(Object.fromEntries(jobs.flatMap((job) => (job.draft ? [[job.draft.id, job.draft]] : [])))),
+    "utf8",
+  );
+}
+
+async function clearLocalStore() {
+  await rm(e2eLocalStoreDir(), { recursive: true, force: true });
+}
+
+async function readStoredDrafts() {
+  return JSON.parse(await readFile(path.join(e2eLocalStoreDir(), "drafts.json"), "utf8")) as Record<string, ArticleDraft>;
+}
+
+async function expectRestoredStructure(
+  page: Page,
+  structure: SeededStructure,
+  tableMode: ArticleElementMode,
+  supplementalFaqMode: ArticleElementMode,
+) {
+  await openInputStep(page, "theme");
+  await expect(page.getByTestId("article-structure-select")).toHaveValue(structure);
+  await expect(page.getByTestId("table-mode-select")).toHaveValue(tableMode);
+  await expect(page.getByTestId("supplemental-faq-mode-select")).toHaveValue(supplementalFaqMode);
+}
+
 async function openInputStep(
   page: Page,
   step:
@@ -4217,7 +4727,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function collectUnexpectedBrowserErrors(
   page: Page,
-  options: { allowedFailedResponses?: RegExp[] } = {},
+  options: { allowedFailedResponses?: RegExp[]; allowedFailedRequests?: RegExp[] } = {},
 ) {
   const errors: string[] = [];
 
@@ -4233,6 +4743,13 @@ function collectUnexpectedBrowserErrors(
       if (/^Failed to load resource: the server responded with a status of \d+/.test(text)) {
         return;
       }
+      // A deliberately cut-off request is mirrored the same way; its URL is the message location.
+      if (
+        /^Failed to load resource: net::ERR_/.test(text) &&
+        options.allowedFailedRequests?.some((pattern) => pattern.test(message.location().url))
+      ) {
+        return;
+      }
       errors.push(`console.error: ${text}`);
     }
   });
@@ -4246,6 +4763,8 @@ function collectUnexpectedBrowserErrors(
   });
 
   page.on("requestfailed", (request) => {
+    // Only requests a test deliberately cuts off may fail; every other failure is reported.
+    if (options.allowedFailedRequests?.some((pattern) => pattern.test(request.url()))) return;
     errors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText ?? ""}`.trim());
   });
 
