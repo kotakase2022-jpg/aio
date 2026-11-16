@@ -4222,7 +4222,12 @@ test("a refresh while an older page is still loading keeps that page in the list
     const refreshed = waitForGenerationLogRefresh(page, 40);
     await page.getByTestId("generation-logs-panel").getByRole("button", { name: "更新", exact: true }).click();
     await refreshed;
+    await expect(rows).toHaveCount(40);
+    const olderPageAnswered = page.waitForResponse((response) => new URL(response.url()).searchParams.has("cursor"));
     releaseOlderPage();
+    // Only check once the superseded answer has arrived and the page had a chance to apply it.
+    await (await olderPageAnswered).finished();
+    await settleAnimationFrames(page);
 
     // The superseded older-page response is ignored, but the refresh already covers its rows.
     await expect(rows).toHaveCount(40);
@@ -4414,19 +4419,20 @@ test("a refresh started while another refresh still owes an older page keeps tha
     releaseFirstRefresh = resolve;
   });
   const refreshLimits: number[] = [];
+  let heldAnswersDelivered = 0;
   await page.route((url) => url.pathname === "/api/generation-logs", async (route) => {
     const params = new URL(route.request().url()).searchParams;
     if (params.has("cursor")) {
       await olderPageHeld;
       await route.fulfill({ json: { ok: true, logs: summaries.slice(20, 40), nextCursor: "after-40", complete: true } });
+      heldAnswersDelivered += 1;
       return;
     }
     const limit = Number(params.get("limit") ?? 20);
-    if (params.has("limit")) {
-      refreshLimits.push(limit);
-      if (refreshLimits.length === 1) await firstRefreshHeld;
-    }
+    const held = params.has("limit") && refreshLimits.push(limit) === 1;
+    if (held) await firstRefreshHeld;
     await route.fulfill({ json: { ok: true, logs: summaries.slice(0, limit), nextCursor: limit < summaries.length ? `after-${limit}` : null, complete: true } });
+    if (held) heldAnswersDelivered += 1;
   });
   await login(page);
   await page.getByTestId("generation-logs-toggle").click();
@@ -4441,8 +4447,12 @@ test("a refresh started while another refresh still owes an older page keeps tha
   await page.getByTestId("article-primary-button").click();
   await expect(page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" })).toBeVisible();
   await expect.poll(() => refreshLimits).toEqual([40, 40]);
+  await expect(rows).toHaveCount(40);
   releaseFirstRefresh();
   releaseOlderPage();
+  // Only check once both superseded answers were delivered and the page had a chance to apply them.
+  await expect.poll(() => heldAnswersDelivered).toBe(2);
+  await settleAnimationFrames(page);
 
   await expect(rows).toHaveCount(40);
   await expect(page.getByTestId("generation-log-open-overlap-log-01")).toBeVisible();
@@ -4556,6 +4566,13 @@ function buildSeededJob(
     wordpressPostStatus: posted ? "draft" : undefined,
     wordpressPostUrl,
   };
+}
+
+// Lets the page process what it has already received (resolved fetches, then React renders).
+async function settleAnimationFrames(page: Page) {
+  await page.evaluate(
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+  );
 }
 
 // Registered before the action, so an assertion cannot pass on the list shown before the refresh.

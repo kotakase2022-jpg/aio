@@ -72,6 +72,12 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - The older-draft check bounds page loads by the listed pages and takes no screenshot.
   - Doc fixes: page to the end; the rollback target of the follow-up release is `dpl_3TyMQRKm6Z63o55mPRoysRvKnSKu`.
   - CodeRabbit was rate-limited after `32409be`; a re-review of the final head is requested when the limit resets.
+- PR #51, CodeRabbit review of `a61adaf` (after the rate limit reset): 4 inline and 2 outside-diff findings.
+  - The worker deadline now counts from job creation (the browser hold starts later), so a late worker start gets no extra time.
+  - The overlapping-refresh E2E tests now wait until the held answers are delivered and handled.
+  - The older-draft check also blocks a save whose stored body the save route would rewrite when sanitizing.
+  - Docs: the SSO-protected stage step (inspect + `vercel curl` 401 + recorded decision), and a direct post-deploy check that `list_job_page` serves the list (function version + 200s, no 400 `Unsupported gateway action.`).
+  - Not changed, left for the owner: remove the default demo access code from `src/app/api/demo-auth/route.ts` and reject login when `DEMO_ACCESS_CODE` is unset. A valid security finding, but if production relies on the default it would lock everyone out. The owner asked to set the access-code topic aside.
 - Codex GitHub review: not performed on #50 or #51 (usage limit); no credits added.
 
 ## 8. Optional Bugbot Findings

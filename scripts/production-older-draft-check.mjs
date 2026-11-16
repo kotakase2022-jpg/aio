@@ -4,6 +4,7 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import nextEnv from "@next/env";
 import { chromium, expect as baseExpect } from "@playwright/test";
+import { sanitizeArticleHtml } from "../src/lib/article-html.ts";
 
 // November 16 release check, run once with explicit approval.
 // 1. Read-only: an unposted customer article older than the first 20 logs opens from page 2 and the
@@ -98,11 +99,16 @@ try {
     if (sameOrigin && request.method() === "POST" && url.pathname === "/api/save-draft" && saveGate) {
       const sent = request.postDataJSON()?.draft;
       const differs = changedFields(sent, saveGate.draft);
-      if (differs.length === 0 && sent?.status === "draft" && savesSent === 0) {
+      // The save route sanitizes the body before writing; a stored body that would not survive
+      // that unchanged must not be written by an "unchanged" save.
+      const bodyStable = sanitizeArticleHtml(saveGate.draft.editedBodyHtml) === saveGate.draft.editedBodyHtml;
+      if (differs.length === 0 && bodyStable && sent?.status === "draft" && savesSent === 0) {
         allowed = true;
         savesSent += 1;
       } else {
-        saveBlocked = `Blocked save before sending: payload differs from the stored article in [${differs.join(", ")}]`;
+        saveBlocked = bodyStable
+          ? `Blocked save before sending: payload differs from the stored article in [${differs.join(", ")}]`
+          : "Blocked save before sending: the save route would rewrite the stored body when sanitizing it";
         errors.push(saveBlocked);
       }
       saveGate = null;

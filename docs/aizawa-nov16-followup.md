@@ -134,6 +134,10 @@
   2. 通常merge する。
   3. mainを `vercel --prod --skip-domain` でステージする。
   4. `AIO_SMOKE_BASE_URL=<ステージURL> node scripts/production-smoke.mjs` を実行する。今回、smoke に読み取りだけの確認を追加した。ページ送り版APIが配信されていること、全ページを重複なく取得できること、「さらに古いログを表示」で件数が増えることを確認し、件数（総数・未投稿の完了記事数）を出力する。
+     - ステージURLが Vercel Deployment Protection（SSO）で保護されている場合、このスクリプトは保護を通過できず、実行できない（11/16 の PR #50 反映時もこの状態だった）。保護を回避する認証方法は承認されていないため、次の代替手順で確認する。
+       - `npx vercel inspect <ステージURL> --scope sl2026` で Ready を確認する。
+       - `npx vercel curl <ステージURL>/api/generation-logs -i` で、未認証の要求にアプリ自身が 401 を返すことを確認する（Vercel CLI のログインで保護を通過する）。
+       - 代替手順で進めたことを、反映担当者（リポジトリ所有者）の判断として記録する。11/16 はユーザー自身が実行し、記録した。
   5. promote する。
   6. canonical URL で再度 smoke を実行する。
 - DBマイグレーション・Edge Function のデプロイ・環境変数の変更は不要。
@@ -205,7 +209,12 @@ CodeRabbit（PR #51）の指摘への対応（8件、全て妥当と判断して
 反映順:
 
 1. アプリ（Vercel）を、承認済みの手順で反映する。gateway は旧版のままでも、従来どおり動作する。
-2. `aio-store` Edge Function のデプロイ（Supabase）。これは Vercel とは別の操作のため、**実行前に承認を得る**。既存の操作は変更せず、追加だけ行う。11/09 と同じ設定で反映する（独自トークン認証、`verify_jwt=false`）。デプロイ後、生成ログの「さらに古いログを表示」を最後のページまで押し、重複がないこと、最後に「最も古い生成ログまで表示しています。」と表示されることを確認する。読み取り専用の `scripts/production-smoke.mjs` でも、全ページを重複なく取得できることと `complete: true` を確認できる。ロールバックは、元の `index.ts` を再デプロイする（旧アプリ・新アプリのどちらとも互換）。
+2. `aio-store` Edge Function のデプロイ（Supabase）。これは Vercel とは別の操作のため、**実行前に承認を得る**。既存の操作は変更せず、追加だけ行う。11/09 と同じ設定で反映する（独自トークン認証、`verify_jwt=false`）。デプロイ後、生成ログの「さらに古いログを表示」を最後のページまで押し、重複がないこと、最後に「最も古い生成ログまで表示しています。」と表示されることを確認する。読み取り専用の `scripts/production-smoke.mjs` でも、全ページを重複なく取得できることと `complete: true` を確認できる。
+   - ただし、ログが100件未満の間は、旧 gateway への切り替え（従来方式）でも同じ結果になる。新しい処理（`list_job_page`）が動いていることは、次の手順で直接確かめる。
+     - `npx supabase functions list --project-ref npdyfhqugniuxfxpgngh` で `aio-store` の版が上がったことを確認する。
+     - デプロイから5分以上待つ（アプリは「旧 gateway」と判定した結果を最大5分間使い続けるため）。
+     - アプリで生成ログを1回開く（読み取りのみ）。
+     - Supabase ダッシュボードで、`aio-store` の呼び出しログを確認する（認証済みで読み取りのみ）。その時刻の要求がすべて200で、旧 gateway が未対応の要求に返す 400（`Unsupported gateway action.`）が出ていなければ、新しい処理で取得できている。ロールバックは、元の `index.ts` を再デプロイする（旧アプリ・新アプリのどちらとも互換）。
 
 ## 未確認事項・残課題
 

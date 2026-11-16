@@ -273,7 +273,13 @@ export async function assertGenerationJobActive(id: string) {
  * Synchronous, so it can run immediately before the write it guards.
  */
 export function assertGenerationJobWithinDeadline(job: GenerationJob, now = Date.now()) {
-  if (isGenerationJobExpired(job, now)) {
+  // Measured from creation, the same moment the browser starts its own hold from (it records the
+  // start response, which can only come later), so a worker that began late gets no extra time.
+  const createdAt = Date.parse(job.createdAt);
+  const pastDeadline = Number.isFinite(createdAt)
+    ? now - createdAt >= GENERATION_JOB_EXPIRY_MS
+    : isGenerationJobExpired(job, now);
+  if (pastDeadline) {
     throw new ApiError(
       "記事生成が制限時間を超えたため停止しました。入力内容を確認し、もう一度「AIによる記事作成」を実行してください。",
       409,
