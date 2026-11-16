@@ -51,14 +51,14 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 ## 7. CodeRabbit Review
 - PR kotakase2022-jpg/aio#50, review of `8344f5e`: 5 actionable comments.
   - Fixed: inherited `VERCEL` could split the E2E seed/read store (`VERCEL: ""` in webServer env); a 2xx response with an unreadable body is now an unconfirmed outcome; refresh assertions now wait for the `limit=` refresh response before counting rows.
-  - Intentionally not adopted in this PR (recorded on the threads): (a) a stale request delayed *before* the server reads the revision can still win; (b) concurrent *first* saves of a draft that has no stored row are not create-only. Both need client base-revision tracking plus a request ID and/or an RPC change (migration); both are narrow (requires >60 s processing delay after full receipt / legacy drafts without a canonical row). Follow-up recommended.
+  - Intentionally not adopted in this PR (recorded on the threads): (a) a stale request delayed *before* the server reads the revision can still win: not only after the 60 s timeout but also on a quick retry after an early connection drop if the old request starts processing late (an earlier "only >60 s delay" statement was wrong and was corrected after CodeRabbit's reply); concurrent editing from several screens stays last-writer-wins as before this PR; (b) concurrent *first* saves of a draft that has no stored row are not create-only (legacy drafts without a canonical row only). Both need client base-revision tracking plus a request ID and/or an RPC change (migration). Follow-up recommended.
 - Codex GitHub review: not performed (usage limit); no credits added.
 
 ## 8. Optional Bugbot Findings
 - Status: Not run.
 
 ## 9. Verification Results
-- 2026-11-16, this session only: baseline before changes 55 files / 598 tests, E2E 59/59. Final tree: typecheck/lint/integrity (64 files) PASS; 58 files / 622 tests PASS; contract 15 PASS; coverage S/B/F/L 87.98/79.80/93.10/88.64%; Chromium PC E2E 76/76 PASS (59 existing + 17 new); build PASS (19 routes).
+- 2026-11-16, this session only: baseline before changes 55 files / 598 tests, E2E 59/59. Final tree: typecheck/lint/integrity (64 files) PASS; 58 files / 622 tests PASS; contract 15 PASS; coverage S/B/F/L 87.95/79.76/92.98/88.61% on the last run (about ±0.1 pt run-to-run on identical code); Chromium PC E2E 76/76 PASS (59 existing + 17 new); build PASS (19 routes).
 - Intermittent pre-existing E2E failures seen in two earlier full runs (tests unchanged): `legacy fixed authentication cookie cannot bypass the login screen` (favicon `net::ERR_ABORTED` during redirect; reproduced 2/20 on untouched main `1077edc`) and `user can stop an in-progress generation job from the primary CTA` (asserts the cancel counter right after click; 20/20 in isolation on both main and branch). CI uses `retries: 1`. Worth a separate test-robustness fix.
 - Details and the list of new E2E flows: `docs/aizawa-nov16-followup.md` §検証.
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import extractFileSuccess from "../fixtures/api/extract-file-success.json";
@@ -3865,6 +3865,11 @@ test("an unposted article older than the first 20 logs can be reopened, edited, 
     await page.getByTestId("wordpress-username").fill("editor");
     await page.getByTestId("wordpress-application-password").fill("test-only-password");
     await page.getByTestId("wordpress-connect-button").click();
+    const oldestRow = rows.filter({ has: page.getByTestId("generation-log-open-e2e-log-00") });
+    await expect(oldestRow).toContainText("未投稿");
+    // The posting API is mocked, so record the post on the job as the real route does; only the
+    // refreshed list can show it, which proves the refresh result reached the screen.
+    await updateSeededJob("e2e-log-00", (job) => ({ ...job, wordpressPostStatus: "draft", wordpressPostUrl: "https://wordpress.example.com/?p=4100" }));
     const refreshAfterPost = waitForGenerationLogRefresh(page, 41);
     await page.getByTestId("wordpress-post-button").click();
     await expect(page.getByTestId("wordpress-post-message")).toContainText("WordPressへ下書き投稿しました。");
@@ -3872,8 +3877,8 @@ test("an unposted article older than the first 20 logs can be reopened, edited, 
     expect((await readStoredDrafts())["draft-e2e-log-00"].status).toBe("approved");
     // The automatic refresh after posting keeps the older range the editor was working in.
     expect(((await (await refreshAfterPost).json()) as { logs: unknown[] }).logs).toHaveLength(41);
+    await expect(oldestRow).toContainText("下書き投稿");
     await expect(rows).toHaveCount(41);
-    await expect(page.getByTestId("generation-log-open-e2e-log-00")).toBeVisible();
     expect(errors()).toEqual([]);
   } finally {
     await clearLocalStore();
@@ -3949,11 +3954,13 @@ for (const count of [0, 20, 21]) {
         await page.getByTestId("generation-log-open-e2e-log-00").click();
         await expect(page.getByRole("article").getByRole("heading", { name: "保存済み記事 00", exact: true })).toBeVisible();
         await expect(rows).toHaveCount(21);
+        // A title only the refreshed response carries proves the refresh result reached the screen.
+        await updateSeededJob("e2e-log-00", (job) => ({ ...job, draft: { ...job.draft!, editedTitle: "更新後にだけ表示される題名" } }));
         const refreshed = waitForGenerationLogRefresh(page, 21);
         await page.getByTestId("generation-logs-panel").getByRole("button", { name: "更新" }).click();
         expect(((await (await refreshed).json()) as { logs: unknown[] }).logs).toHaveLength(21);
+        await expect(rows.filter({ has: page.getByTestId("generation-log-open-e2e-log-00") })).toContainText("更新後にだけ表示される題名");
         await expect(rows).toHaveCount(21);
-        await expect(page.getByTestId("generation-log-open-e2e-log-00")).toBeVisible();
       } else {
         await expect(page.getByTestId("generation-logs-end")).toHaveCount(0);
       }
@@ -4288,6 +4295,15 @@ async function seedLocalStore(jobs: GenerationJob[]) {
     JSON.stringify(Object.fromEntries(jobs.flatMap((job) => (job.draft ? [[job.draft.id, job.draft]] : [])))),
     "utf8",
   );
+}
+
+async function updateSeededJob(id: string, update: (job: GenerationJob) => GenerationJob) {
+  const file = path.join(e2eLocalStoreDir(), "generation-jobs.json");
+  const jobs = JSON.parse(await readFile(file, "utf8")) as Record<string, GenerationJob>;
+  jobs[id] = update(jobs[id]);
+  // Write-then-rename, like the app's own store, so the server never reads a partial file.
+  await writeFile(`${file}.seed.tmp`, JSON.stringify(jobs), "utf8");
+  await rename(`${file}.seed.tmp`, file);
 }
 
 async function clearLocalStore() {
