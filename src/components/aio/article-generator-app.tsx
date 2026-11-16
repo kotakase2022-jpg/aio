@@ -275,6 +275,8 @@ export function ArticleGeneratorApp() {
   // Set while the primary button re-checks a previous job whose outcome was unconfirmed.
   const unconfirmedJobRecheckRef = useRef(false);
   const logsLoadingMoreRef = useRef(false);
+  // The range a refresh still owes the editor (a superseded older page included) until one completes.
+  const requestedLogRangeRef = useRef(0);
   const formRestoreVersionRef = useRef(0);
   const competitorResearchRequestRef = useRef(0);
   const themeCandidateRequestRef = useRef(0);
@@ -653,12 +655,12 @@ export function ArticleGeneratorApp() {
           });
           unconfirmedPolls = 0;
         } catch (error) {
-          // The job keeps running on the server; a dropped status read is retried, not a failure.
+          // The job keeps running on the server; a dropped or failed status read is retried, not a
+          // failure. A temporary storage error (5xx) says nothing about the job either.
           unconfirmedPolls += 1;
-          if (
-            !(error instanceof ApiOutcomeUnknownError) ||
-            unconfirmedPolls >= generationPollUnconfirmedAttempts
-          ) {
+          const transient =
+            error instanceof ApiOutcomeUnknownError || (error instanceof ApiHttpError && error.status >= 500);
+          if (!transient || unconfirmedPolls >= generationPollUnconfirmedAttempts) {
             throw error;
           }
           await delay(1800);
@@ -711,13 +713,24 @@ export function ArticleGeneratorApp() {
       if (shouldRestoreInputs) {
         setGenerationResumeChecked(true);
       }
+      const wasManualRecheck = unconfirmedJobRecheckRef.current;
       unconfirmedJobRecheckRef.current = false;
-      if (error instanceof ApiOutcomeUnknownError) {
+      if (wasManualRecheck && error instanceof ApiHttpError && error.status >= 500) {
+        // The server keeps failing to read this job even on the editor's re-check. Release the
+        // stored ID so the editor is not locked out, and say how to avoid a duplicate article.
+        finishGenerationPolling(jobId);
+        const message = `前回の記事作成の状況をサーバーから読み込めませんでした（${readError(error)}）。前回の記事がすでに作成されていないか、生成ログの「更新」で確認してから、必要な場合だけもう一度実行してください。`;
+        setActiveError(message);
+        markRunningAsError(message);
+        void loadGenerationLogs();
+        return;
+      }
+      if (isUnresolvedJobStatusError(error)) {
         // Neither success nor failure is known. Keep the stored job ID so a reload resumes the
         // status check, and replace the running spinners with an explicit unconfirmed state.
         finishGenerationPolling(jobId, { keepResumeKey: true });
         setActiveError(
-          `記事作成の状況を確認できませんでした（${error.message}）。記事作成はサーバー側で続いている可能性があります。記事作成のボタンを押すか、ページを再読み込みすると、新しい記事作成は始めずに状況の確認を再開します。完了した記事は生成ログからも開けます。`,
+          `記事作成の状況を確認できませんでした（${readError(error)}）。記事作成はサーバー側で続いている可能性があります。記事作成のボタンを押すか、ページを再読み込みすると、新しい記事作成は始めずに状況の確認を再開します。完了した記事は生成ログからも開けます。`,
         );
         markRunningAsError("通信が途切れたため状況を確認できません。再読み込みで確認を再開できます。");
         void loadGenerationLogs();
@@ -832,7 +845,13 @@ export function ArticleGeneratorApp() {
     // rows the editor asked for are not dropped.
     const pendingOlderPage = logsLoadingMoreRef.current ? generationLogPageSize : 0;
     logsLoadingMoreRef.current = false;
-    const targetCount = Math.max(loadedGenerationLogCountRef.current + pendingOlderPage, generationLogPageSize);
+    // A refresh started before an earlier one finished inherits the range that one still owed.
+    const targetCount = Math.max(
+      loadedGenerationLogCountRef.current + pendingOlderPage,
+      requestedLogRangeRef.current,
+      generationLogPageSize,
+    );
+    requestedLogRangeRef.current = targetCount;
     setLogsLoading(true);
     setLogsLoadingMore(false);
     setLogsError("");
@@ -861,6 +880,7 @@ export function ArticleGeneratorApp() {
         complete = complete && result.complete !== false;
         if (!cursor || logs.length >= targetCount || result.logs.length === 0) break;
       }
+      requestedLogRangeRef.current = 0;
       setGenerationLogs(logs);
       setLogsNextCursor(cursor);
       setLogsComplete(complete);
@@ -4616,6 +4636,25 @@ class ApiOutcomeUnknownError extends Error {
   }
 }
 
+/** The application answered with an error; `status` tells "not found" apart from a failed read. */
+class ApiHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiHttpError";
+  }
+}
+
+/**
+ * A job status read that says nothing about the job itself: the request was lost, or the server
+ * failed to read the job (5xx) or the session. Only "not found" (404) shows the job is gone.
+ */
+function isUnresolvedJobStatusError(error: unknown) {
+  return error instanceof ApiOutcomeUnknownError || (error instanceof ApiHttpError && error.status !== 404);
+}
+
 async function apiPost<T>(url: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
   return requestApi<T>(
     url,
@@ -4654,8 +4693,9 @@ async function requestApi<T>(url: string, init: RequestInit, { timeoutMs }: ApiR
       json = {} as ApiResult<T>;
     }
     if (response.status === 413) {
-      throw new Error(
+      throw new ApiHttpError(
         "送信データが大きすぎます。生成画像やアップロード画像の保存先を確認してください。",
+        413,
       );
     }
     // Application errors always carry ok:false; a bare 502-504 comes from the platform, which
@@ -4664,7 +4704,10 @@ async function requestApi<T>(url: string, init: RequestInit, { timeoutMs }: ApiR
       throw new ApiOutcomeUnknownError("incomplete");
     }
     if (!response.ok || json.ok === false) {
-      throw new Error([json.error, json.detail].filter(Boolean).join(" / ") || response.statusText);
+      throw new ApiHttpError(
+        [json.error, json.detail].filter(Boolean).join(" / ") || response.statusText,
+        response.status,
+      );
     }
     return json as T;
   } finally {

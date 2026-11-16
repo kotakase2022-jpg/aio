@@ -10,6 +10,9 @@ import { deltaNov11Form } from "../tests/fixtures/delta-nov11.ts";
 // Deliberately separate from the default read-only production smoke.
 nextEnv.loadEnvConfig(process.cwd());
 assert.equal(process.env.AIO_SMOKE_WRITE_CONFIRM, "create-one-disposable-article");
+// The operator sets the production code; a value committed in this public repository is no gate.
+const accessCode = process.env.DEMO_ACCESS_CODE?.trim();
+assert.ok(accessCode, "Set DEMO_ACCESS_CODE to the production access code; this smoke has no fallback. Nothing was changed.");
 const baseURL = "https://aio-article-generator.vercel.app";
 const marker = `AIO-RELEASE-SMOKE-${randomUUID()}`;
 const directory = path.resolve(".verification-files", marker);
@@ -48,7 +51,7 @@ try {
     await route.continue();
   });
   await page.goto("/");
-  await page.getByTestId("demo-access-code").fill(process.env.DEMO_ACCESS_CODE || "202607");
+  await page.getByTestId("demo-access-code").fill(accessCode);
   const loginAnswer = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/demo-auth");
   await page.getByTestId("demo-login-submit").click();
   // A rejected code stops here at once; nothing has been sent except the login attempt.

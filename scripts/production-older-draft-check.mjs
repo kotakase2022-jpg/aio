@@ -184,7 +184,8 @@ try {
   const openFromList = async (jobId) => {
     const button = page.getByTestId(`generation-log-open-${jobId}`);
     for (let attempt = 0; (await button.count()) === 0; attempt += 1) {
-      assert.ok(attempt < 10, "the log did not appear after loading older pages");
+      // Never more clicks than the pages listed through the API before this check.
+      assert.ok(attempt < before.pages, "the log did not appear after loading every listed page");
       const shown = await rows.count();
       await page.getByTestId("generation-logs-load-more").click();
       await expect.poll(() => rows.count(), { timeout: 30_000 }).toBeGreaterThan(shown);
@@ -267,7 +268,6 @@ try {
     assert.deepEqual(changedFields(reloaded.draft, draft), [], "the unchanged save altered stored fields");
     assert.ok(Date.parse(reloaded.draft.updatedAt) > Date.parse(draft.updatedAt), "the save did not reach the stored article");
     await verifyEditorShows(reloaded);
-    await page.screenshot({ path: path.join(directory, "own-article-reopened.png"), fullPage: true });
 
     const after = await readAllLogs();
     const knownBefore = new Set(before.listed.map((log) => log.id));
