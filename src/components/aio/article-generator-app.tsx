@@ -105,7 +105,8 @@ const activeGenerationJobStartedAtStorageKey = "aio-active-generation-job-starte
 const activeGenerationJobCreatedAtStorageKey = "aio-active-generation-job-created-at";
 // The generation worker stops after 300 s, and the database refuses a job's completion 6 minutes
 // after the job was created, so beyond this a stored job can no longer produce an article, even
-// if its status cannot be read.
+// if its status cannot be read. Only a database commit that stalls for over a minute after the
+// last deadline check could still land later.
 const generationJobMaxRuntimeMs = 7 * 60 * 1000;
 const generationLogPageSize = 20;
 const generationLogRefreshLimit = 100;

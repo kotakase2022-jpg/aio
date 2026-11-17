@@ -307,6 +307,8 @@ type CompletionCommit = "committed" | "conflict" | "guard-unavailable";
  * the database late (after the deadline, or after a cancel) therefore writes nothing: no article
  * appears in the generation log once the browser may have stopped holding the job.
  * Throws a 409 in that case; the caller ends the job as failed.
+ * The deadline is checked inside the transaction, not at its commit: a commit that stalls for
+ * longer than the 1-minute margin after the last check can still land after the hold ends.
  */
 export async function completeGenerationJob(
   jobId: string,
