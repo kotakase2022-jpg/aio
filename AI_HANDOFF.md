@@ -191,7 +191,8 @@ Access-code task (separate; CodeRabbit finding on PR #51):
 - PR kotakase2022-jpg/aio#55 (access-code task): reviewed at `1a83b4c` after two rate-limited attempts (review requested again at 07:38 UTC). 3 actionable findings. All three were reproduced by new tests before fixing, and are fixed in the next commit:
   - (Major, security) Open redirect after login: `next=/.//return-path.invalid//evil.example` became `//return-path.invalid//evil.example` on the page and `//evil.example` in the form, so the browser left the site. `safeReturnPath` now also rejects a resolved path that starts with `//`, so a second check changes nothing. Unit tests (both checks, idempotence, same origin) and an E2E login with that `next`. The thread stays open for the owner, as a security finding.
   - (Minor) A JSON `null` body made the login route throw (500). Any non-object JSON now gets the usual 400. Integration test with `null`, a number, a string and an array.
-  - (Minor) The length limit counted raw input at login but normalized input at creation, so a password the script accepted could be refused (`"Å"` × 150). Login now counts after NFKC too, and the route no longer checks raw length. Unit and integration tests with that password.
+  - (Minor) The length limit counted raw input at login but normalized input at creation, so a password the script accepted could be refused (`"A\u030A"` × 150, A followed by a combining ring). Login now counts after NFKC too, and the route no longer checks raw length. Unit and integration tests with that password.
+  - (Minor, follow-up on the same thread) The login form still capped the password field at 256 code units (`maxLength`), so that password could not be typed in full. The field no longer has `maxLength`; the server applies the normalized limit. E2E logs in from the form with a second test-only account (`composedOnNormalizationAccount`).
 - Codex GitHub review: not performed on #50, #51, #53 or #55 (usage limit); no credits added.
 
 ## 8. Optional Bugbot Findings
@@ -217,7 +218,7 @@ Access-code task (separate; CodeRabbit finding on PR #51):
     - Four pre-existing E2E races and the favicon abort (section 3d).
   - After the CodeRabbit fixes: typecheck, lint, integrity (68 files) PASS; 62 files / 670 tests PASS; contract 15 PASS; build PASS.
     - Full E2E runs hit, one per run, the theme-candidate race, the favicon abort and the competitor-research race. Each was fixed at its root (section 3d).
-    - Final full E2E: 86/86 PASS (85 + the new open-redirect test).
+    - Full E2E: 86/86 PASS (85 + the new open-redirect test). After the form follow-up: 670 tests PASS and E2E 87/87 PASS (+ the form test).
   - Manual check in a local production build: login screen, wrong-password message, header with email and ログアウト, logout back to `/login`.
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 

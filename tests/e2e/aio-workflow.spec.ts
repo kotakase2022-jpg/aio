@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import extractFileSuccess from "../fixtures/api/extract-file-success.json";
 import themeCandidates from "../fixtures/api/theme-candidates.json";
 import { createCompletedGenerationJob, createSampleDraft } from "../fixtures/article";
-import { testLoginAccount } from "../helpers/login-accounts";
+import { composedOnNormalizationAccount, testLoginAccount } from "../helpers/login-accounts";
 import type {
   ArticleDraft,
   ArticleElementMode,
@@ -3089,6 +3089,29 @@ test("a return path that a second check would turn into another site stays on th
 
   await page.waitForURL((url) => url.origin === origin && url.pathname === "/");
   await expect(page.getByTestId("article-primary-button")).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
+test("a password within the limit after normalization can be typed into the form and logs in", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const account = composedOnNormalizationAccount;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+
+  await page.goto("/login");
+  const origin = new URL(page.url()).origin;
+  await page.getByTestId("login-email").fill(account.email);
+  await page.getByTestId("login-password").fill(account.password);
+  // 300 code units as typed: the field must keep all of them (the server counts after NFKC).
+  await expect(page.getByTestId("login-password")).toHaveValue(account.password);
+  await page.getByTestId("login-submit").click();
+
+  await page.waitForURL((url) => url.origin === origin && url.pathname === "/");
+  await expect(page.getByTestId("account-email")).toHaveText(account.email);
   expect(errors()).toEqual([]);
 });
 

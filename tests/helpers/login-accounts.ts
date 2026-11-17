@@ -12,6 +12,15 @@ export const testLoginAccount = {
   password: "test-only-password-for-local-servers",
 } as const;
 
+/**
+ * A second test-only login whose password is 300 code units as typed and 150 after NFKC (A + combining
+ * ring, composed into one character). The limit counts the normalized form, so it must log in.
+ */
+export const composedOnNormalizationAccount = {
+  email: "combining@example.test",
+  password: "A\u030A".repeat(150),
+} as const;
+
 export type TestAccount = { email: string; password: string };
 
 /** An AIO_AUTH_USERS value for the given accounts (fresh salts on every call). */

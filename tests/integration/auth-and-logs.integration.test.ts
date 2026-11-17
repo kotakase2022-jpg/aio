@@ -2,7 +2,11 @@ import { createHmac, randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
-import { authUsersValue, testLoginAccount } from "../helpers/login-accounts";
+import {
+  authUsersValue,
+  composedOnNormalizationAccount,
+  testLoginAccount,
+} from "../helpers/login-accounts";
 import type { GenerationLogSummary } from "@/types/aio";
 
 vi.mock("@/lib/server/generation-jobs", async (importOriginal) => ({
@@ -145,7 +149,7 @@ describe("email and password login", () => {
 
   test("a password the account script accepts also logs in, counted after normalization", async () => {
     // 300 code units as typed, 150 after NFKC: within the limit both when created and when typed again.
-    const account = { email: "combining@example.test", password: "Å".repeat(150) };
+    const account = composedOnNormalizationAccount;
     process.env.AIO_AUTH_USERS = authUsersValue([account]);
     const { POST } = await import("@/app/api/auth/session/route");
 

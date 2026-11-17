@@ -100,7 +100,7 @@ describe("login credentials", () => {
 
   test("the length limit counts the normalized password, at creation and at login alike", async () => {
     // 300 code units as typed, 150 after NFKC composes each A + ring into one character.
-    const decomposed = "Å".repeat(150);
+    const decomposed = "A\u030A".repeat(150);
     expect(decomposed.length).toBe(300);
     expect(passwordProblem(decomposed)).toBeNull();
     const encoded = hashPasswordSync(decomposed, TEST_SCRYPT_PARAMS);
@@ -110,7 +110,7 @@ describe("login credentials", () => {
     // Over the limit after normalization is refused, however it was typed.
     const overlong = hashPasswordSync("x".repeat(256), TEST_SCRYPT_PARAMS);
     await expect(verifyPassword("x".repeat(256), overlong)).resolves.toBe(true);
-    await expect(verifyPassword("Å".repeat(257), encoded)).resolves.toBe(false);
+    await expect(verifyPassword("A\u030A".repeat(257), encoded)).resolves.toBe(false);
   });
 
   test("generated passwords are long, unambiguous and distinct", () => {

@@ -72,7 +72,8 @@ export function LoginForm({ nextPath }: LoginFormProps) {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
-          maxLength={256}
+          // No maxLength: the browser counts code units as typed, while the limit applies after NFKC
+          // (A + combining ring counts as one), checked on the server like at account creation.
           required
         />
       </label>
