@@ -4004,6 +4004,49 @@ test("a refresh keeps more than 100 listed logs by reading the range page by pag
   }
 });
 
+test("saving the oldest of 120 articles updates its own log row, beyond the 100 most recently updated jobs", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  // Updated in creation order: the oldest article is also the least recently updated job, outside
+  // the 100 most recently updated jobs that the log sync used to search.
+  const jobs = Array.from({ length: 120 }, (_, index) => {
+    const job = buildSeededJob(index);
+    const updatedAt = new Date(Date.UTC(2026, 9, 1) + index * 60_000 + 30_000).toISOString();
+    return { ...job, updatedAt, completedAt: updatedAt, draft: { ...job.draft!, updatedAt } };
+  });
+  await seedLocalStore(jobs);
+  try {
+    await login(page, { preparePrimaryInfo: false });
+    await page.getByTestId("generation-logs-toggle").click();
+    const rows = page.getByTestId("generation-logs-content").locator("tbody tr");
+    for (const expected of [40, 60, 80, 100, 120]) {
+      await page.getByTestId("generation-logs-load-more").click();
+      await expect(rows).toHaveCount(expected);
+    }
+    const oldestRow = rows.filter({ has: page.getByTestId("generation-log-open-e2e-log-00") });
+    await expect(oldestRow).toContainText("保存済み記事 00");
+
+    await page.getByTestId("generation-log-open-e2e-log-00").click();
+    await expect(page.getByRole("article").getByRole("heading", { name: "保存済み記事 00", exact: true })).toBeVisible();
+    await page.getByTestId("draft-edit-tab").click();
+    await page.getByTestId("draft-title-input").fill("保存済み記事 00（120件中で最も古い記事を編集）");
+    await page.getByTestId("save-draft-button").click();
+    await expect(page.getByTestId("draft-action-message")).toContainText("編集内容を保存しました。");
+
+    const storedJobs = JSON.parse(await readFile(path.join(e2eLocalStoreDir(), "generation-jobs.json"), "utf8")) as Record<string, GenerationJob>;
+    expect(storedJobs["e2e-log-00"].draft?.editedTitle).toBe("保存済み記事 00（120件中で最も古い記事を編集）");
+    const firstPage = waitForGenerationLogRefresh(page, 100);
+    const secondPage = waitForGenerationLogRefresh(page, 20);
+    await page.getByTestId("generation-logs-panel").getByRole("button", { name: "更新" }).click();
+    await firstPage;
+    await secondPage;
+    await expect(oldestRow).toContainText("保存済み記事 00（120件中で最も古い記事を編集）");
+    await expect(rows).toHaveCount(120);
+    expect(errors()).toEqual([]);
+  } finally {
+    await clearLocalStore();
+  }
+});
+
 test("a completed log whose draft-save step was stored as running opens as saved, not processing", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   await seedLocalStore([buildSeededJob(0, { saveStepRunning: true })]);

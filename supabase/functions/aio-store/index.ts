@@ -51,6 +51,8 @@ Deno.serve(async (request) => {
         return ok(await listJobs(payload));
       case "list_job_page":
         return ok(await listJobPage(payload));
+      case "get_job_by_draft":
+        return ok(await getJobByDraft(payload));
       case "complete_job":
         return ok(await completeJob(payload));
       case "upsert_draft":
@@ -164,6 +166,23 @@ async function listJobPage(payload: Payload) {
     jobs: pageRows.map(rowToJob).filter(Boolean),
     nextCursor: rows.length > limit && last ? { createdAt: String(last.created_at), id: String(last.id) } : null,
   };
+}
+
+// The job whose log shows a draft, looked up by the draft ID so it is found however many jobs
+// exist (list_jobs only covers the most recently updated rows). Reads at most one row.
+async function getJobByDraft(payload: Payload) {
+  const draftId = requireString(payload.draftId, "draftId");
+  if (!UUID_PATTERN.test(draftId)) throw new HttpError("Invalid draft id.", 400);
+  const { data, error } = await supabase
+    .from("article_inputs")
+    .select("id,input_payload,created_at,updated_at")
+    .eq("input_payload->>kind", "article_generation_job")
+    .or(`input_payload->>draftId.eq.${draftId},input_payload->draft->>id.eq.${draftId}`)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  if (error) throw new HttpError(error.message, 500);
+  const row = ((data ?? []) as Payload[])[0];
+  return { job: row ? rowToJob(row) : null };
 }
 
 async function upsertDraft(payload: Payload) {
