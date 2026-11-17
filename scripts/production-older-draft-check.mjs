@@ -19,8 +19,12 @@ assert.equal(
   "save-own-test-draft-unchanged",
   "Set AIO_SMOKE_WRITE_CONFIRM=save-own-test-draft-unchanged to run this check.",
 );
-const accessCode = process.env.DEMO_ACCESS_CODE?.trim();
-assert.ok(accessCode, "Set DEMO_ACCESS_CODE to the production access code; this check has no fallback.");
+const loginEmail = process.env.AIO_SMOKE_LOGIN_EMAIL?.trim();
+const loginPassword = process.env.AIO_SMOKE_LOGIN_PASSWORD;
+assert.ok(
+  loginEmail && loginPassword,
+  "Set AIO_SMOKE_LOGIN_EMAIL and AIO_SMOKE_LOGIN_PASSWORD to a production login; this check has no fallback.",
+);
 const baseURL = "https://aio-article-generator.vercel.app";
 // Production reads (job + canonical draft) and the save round trip can take several seconds.
 const expect = baseExpect.configure({ timeout: 30_000 });
@@ -46,8 +50,6 @@ const record = {
   baseURL,
   startedAt: new Date().toISOString(),
   result: "RUNNING",
-  // Whether the production code equals the value committed in this public repository's test config.
-  accessCodeIsRepositoryTestValue: accessCode === "202607",
 };
 const persist = () => writeFile(path.join(directory, "manifest.json"), JSON.stringify(record, null, 2));
 await persist();
@@ -95,7 +97,7 @@ try {
     const url = new URL(request.url());
     const sameOrigin = url.origin === baseURL;
     let allowed = sameOrigin && request.method() === "GET";
-    if (sameOrigin && request.method() === "POST" && url.pathname === "/api/demo-auth") allowed = true;
+    if (sameOrigin && request.method() === "POST" && url.pathname === "/api/auth/session") allowed = true;
     if (sameOrigin && request.method() === "POST" && url.pathname === "/api/save-draft" && saveGate) {
       const sent = request.postDataJSON()?.draft;
       const differs = changedFields(sent, saveGate.draft);
@@ -160,12 +162,13 @@ try {
   const draftStatusLabels = { draft: "下書き", approved: "承認済み", posted: "投稿済み", failed: "失敗" };
 
   await page.goto("/");
-  await page.getByTestId("demo-access-code").fill(accessCode);
-  const loginAnswer = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/demo-auth");
-  await page.getByTestId("demo-login-submit").click();
-  // A rejected code stops here at once; nothing has been sent except the login attempt.
+  await page.getByTestId("login-email").fill(loginEmail);
+  await page.getByTestId("login-password").fill(loginPassword);
+  const loginAnswer = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/auth/session");
+  await page.getByTestId("login-submit").click();
+  // A rejected login stops here at once; nothing has been sent except the login attempt.
   const loginStatus = (await loginAnswer).status();
-  if (loginStatus === 401) throw new Error("Production rejected DEMO_ACCESS_CODE (アクセスコードが違います). Nothing was changed. Set the production access code and run again.");
+  if (loginStatus === 401) throw new Error("Production rejected the login (メールアドレスまたはパスワードが違います). Nothing was changed. Check AIO_SMOKE_LOGIN_EMAIL and AIO_SMOKE_LOGIN_PASSWORD and run again.");
   assert.equal(loginStatus, 200, `login returned HTTP ${loginStatus}`);
   await page.waitForURL(`${baseURL}/`);
   await expect(page.getByTestId("input-wizard-step-references")).toBeVisible();

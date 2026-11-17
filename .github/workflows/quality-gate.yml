@@ -16,7 +16,6 @@ jobs:
 
     env:
       CI: true
-      DEMO_ACCESS_CODE: "202607"
       NEXT_PUBLIC_SUPABASE_URL: ""
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
       SUPABASE_SERVICE_ROLE_KEY: ""

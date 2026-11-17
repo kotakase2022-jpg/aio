@@ -1,4 +1,4 @@
-import { DemoLoginForm } from "@/components/aio/demo-login-form";
+import { LoginForm } from "@/components/aio/login-form";
 import {
   Card,
   CardContent,
@@ -6,14 +6,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { safeReturnPath } from "@/lib/login-redirect";
 
-type DemoLoginPageProps = {
-  searchParams: Promise<{ next?: string }>;
+type LoginPageProps = {
+  searchParams: Promise<{ next?: string | string[] }>;
 };
 
-export default async function DemoLoginPage({ searchParams }: DemoLoginPageProps) {
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const { next } = await searchParams;
-  const nextPath = normalizeNextPath(next);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 py-10 text-slate-950">
@@ -22,23 +22,15 @@ export default async function DemoLoginPage({ searchParams }: DemoLoginPageProps
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
             AIO Article Studio
           </div>
-          <CardTitle className="text-2xl">デモアクセス</CardTitle>
+          <CardTitle className="text-2xl">ログイン</CardTitle>
           <CardDescription>
-            社外デモ用のアクセスコードを入力してください。
+            登録済みのメールアドレスとパスワードを入力してください。
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <DemoLoginForm nextPath={nextPath} />
+          <LoginForm nextPath={safeReturnPath(next)} />
         </CardContent>
       </Card>
     </main>
   );
-}
-
-function normalizeNextPath(value?: string) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-
-  return value;
 }

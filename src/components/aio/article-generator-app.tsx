@@ -14,6 +14,7 @@ import {
   Download,
   FileText,
   Loader2,
+  LogOut,
   Maximize2,
   Plus,
   RefreshCcw,
@@ -187,7 +188,13 @@ type ApiResult<T> = T & { ok: boolean; error?: string; detail?: string };
 
 const blankInput = (): KeyValueInput => ({ id: crypto.randomUUID(), url: "", text: "" });
 
-export function ArticleGeneratorApp() {
+type ArticleGeneratorAppProps = {
+  /** The signed-in account, shown next to the logout button. */
+  userEmail?: string | null;
+};
+
+export function ArticleGeneratorApp({ userEmail = null }: ArticleGeneratorAppProps = {}) {
+  const [logoutPending, setLogoutPending] = useState(false);
   const [references, setReferences] = useState<KeyValueInput[]>([blankInput()]);
   const [competitors, setCompetitors] = useState<KeyValueInput[]>([blankInput()]);
   const [referenceFiles, setReferenceFiles] = useState<AttachedFileInput[]>([]);
@@ -1642,6 +1649,24 @@ export function ArticleGeneratorApp() {
     setInputWizardMessage("");
   }
 
+  async function handleLogout() {
+    setLogoutPending(true);
+    try {
+      const response = await fetch("/api/auth/session", { method: "DELETE" });
+      // Read the answer before leaving the page, so the request completes instead of being cut off.
+      const json = (await response.json().catch(() => ({}))) as { ok?: boolean };
+      if (!response.ok || json.ok !== true) {
+        throw new Error(`Logout returned HTTP ${response.status}.`);
+      }
+      // A full load drops all in-memory editor state; replace() also keeps "Back" on a shared PC from
+      // restoring the signed-in page from the browser's back/forward cache.
+      window.location.replace("/login");
+    } catch {
+      setLogoutPending(false);
+      setActiveError("ログアウトできませんでした。通信状況を確認して、もう一度お試しください。");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-900 text-slate-950">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
@@ -1654,6 +1679,7 @@ export function ArticleGeneratorApp() {
               AIO記事 半自動生成ツール
             </h1>
           </div>
+          <div className="flex items-start gap-4">
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-2">
             <Badge variant={draft?.status === "approved" ? "success" : "default"}>
@@ -1686,6 +1712,32 @@ export function ArticleGeneratorApp() {
                 {generateRequirementMessage}
               </div>
             ) : null}
+          </div>
+          {/* Beside the column above, so the requirement message stays under the button it explains. */}
+          <div
+            data-testid="account-menu"
+            className="flex h-10 items-center gap-2 border-l border-slate-200 pl-4"
+          >
+            {userEmail ? (
+              <span
+                data-testid="account-email"
+                className="max-w-[220px] truncate text-xs text-slate-500"
+                title={userEmail}
+              >
+                {userEmail}
+              </span>
+            ) : null}
+            <Button
+              data-testid="logout-button"
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              disabled={logoutPending}
+            >
+              {logoutPending ? <Loader2 className="animate-spin" /> : <LogOut />}
+              ログアウト
+            </Button>
+          </div>
           </div>
         </div>
       </header>

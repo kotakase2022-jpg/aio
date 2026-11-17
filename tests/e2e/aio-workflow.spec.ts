@@ -4,6 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import extractFileSuccess from "../fixtures/api/extract-file-success.json";
 import themeCandidates from "../fixtures/api/theme-candidates.json";
 import { createCompletedGenerationJob, createSampleDraft } from "../fixtures/article";
+import { testLoginAccount } from "../helpers/login-accounts";
 import type {
   ArticleDraft,
   ArticleElementMode,
@@ -3042,30 +3043,47 @@ test("HTML export click failure cleans up the temporary download link", async ({
   expect(errors()).toEqual([]);
 });
 
-test("demo login rejects a wrong code and then preserves the requested return path", async ({
+test("login rejects the retired access code and a wrong password, then preserves the requested return path", async ({
   page,
 }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
-    allowedFailedResponses: [/\/api\/demo-auth$/],
+    allowedFailedResponses: [/\/api\/auth\/session$/],
   });
 
   await page.route("**/api/generation-logs", async (route) => {
     await route.fulfill({ json: { ok: true, logs: [] } });
   });
 
-  await page.goto("/demo-login?next=%2F%3Ftab%3Dpreview");
-  await page.getByTestId("demo-access-code").fill("wrong");
-  await page.getByTestId("demo-login-submit").click();
+  await page.goto("/login?next=%2F%3Ftab%3Dpreview");
+  for (const wrongPassword of ["202607", "wrong-password-for-this-account"]) {
+    await submitLogin(page, wrongPassword);
 
-  await expect(page).toHaveURL(/\/demo-login\?next=%2F%3Ftab%3Dpreview/);
-  await expect(page.getByTestId("demo-login-error")).toBeVisible();
-  await expect(page.getByTestId("demo-login-submit")).toBeEnabled();
+    await expect(page).toHaveURL(/\/login\?next=%2F%3Ftab%3Dpreview/);
+    await expect(page.getByTestId("login-error")).toHaveText("メールアドレスまたはパスワードが違います。");
+    await expect(page.getByTestId("login-submit")).toBeEnabled();
+  }
 
-  await page.getByTestId("demo-access-code").fill("202607");
-  await page.getByTestId("demo-login-submit").click();
+  await submitLogin(page);
 
   await page.waitForURL("**/?tab=preview");
   await expect(page.getByTestId("article-primary-button")).toBeVisible();
+  await expect(page.getByTestId("account-email")).toHaveText(testLoginAccount.email);
+  expect(errors()).toEqual([]);
+});
+
+test("the retired access-code screen leads to the login screen and its API admits nobody", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+
+  await page.goto("/demo-login?next=%2F%3Ftab%3Dpreview");
+
+  await expect(page).toHaveURL(/\/login\?next=%2F%3Ftab%3Dpreview$/);
+  await expect(page.getByTestId("login-email")).toBeVisible();
+  await expect(page.getByTestId("demo-access-code")).toHaveCount(0);
+  const retiredLogin = await page.request.post("/api/demo-auth", { data: { code: "202607" } });
+  expect(retiredLogin.status()).toBe(401);
+  expect((await page.request.get("/api/generation-logs")).status()).toBe(401);
   expect(errors()).toEqual([]);
 });
 
@@ -3074,7 +3092,7 @@ test("legacy fixed authentication cookie cannot bypass the login screen", async 
   context,
 }) => {
   const errors = collectUnexpectedBrowserErrors(page);
-  await page.goto("/demo-login");
+  await page.goto("/login");
   const origin = new URL(page.url()).origin;
   await context.clearCookies();
   await context.addCookies([
@@ -3083,12 +3101,39 @@ test("legacy fixed authentication cookie cannot bypass the login screen", async 
       value: "demo-access-granted",
       url: origin,
     },
+    {
+      name: "aio_session",
+      value: "demo-access-granted",
+      url: origin,
+    },
   ]);
 
   await page.goto("/");
 
-  await expect(page).toHaveURL(/\/demo-login\?next=/);
-  await expect(page.getByTestId("demo-access-code")).toBeVisible();
+  await expect(page).toHaveURL(/\/login\?next=/);
+  await expect(page.getByTestId("login-email")).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
+test("logout ends the session and returns to the login screen", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+
+  await page.goto("/login");
+  await submitLogin(page);
+  await page.waitForURL("**/");
+  await expect(page.getByTestId("account-email")).toHaveText(testLoginAccount.email);
+
+  await page.getByTestId("logout-button").click();
+
+  await page.waitForURL(/\/login$/);
+  await expect(page.getByTestId("login-email")).toBeVisible();
+  expect((await page.request.get("/api/generation-logs")).status()).toBe(401);
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/login\?next=%2F$/);
   expect(errors()).toEqual([]);
 });
 
@@ -3107,12 +3152,11 @@ test("stale generation job state is cleared with a Japanese recovery message", a
     });
   });
 
-  await page.goto("/demo-login");
+  await page.goto("/login");
   await page.evaluate(() => {
     window.localStorage.setItem("aio-active-generation-job-id", "stale-job");
   });
-  await page.getByTestId("demo-access-code").fill("202607");
-  await page.getByTestId("demo-login-submit").click();
+  await submitLogin(page);
   await page.waitForURL("**/");
 
   await expect(page.getByText("生成ジョブが見つかりません。")).toBeVisible();
@@ -3608,6 +3652,8 @@ test("uploaded visual tone image is sent to generation as upload mode", async ({
 
   await page.getByTestId("article-primary-button").click();
 
+  // The routed request is handled in the test process after click() returns; wait for it first.
+  await expect.poll(() => generationVisualTone).toBeDefined();
   expect(uploadCalls).toBe(1);
   expect(generationVisualTone).toMatchObject({
     mode: "upload",
@@ -3727,7 +3773,7 @@ test("previous closing text and author inputs can be reused from local storage",
     await route.fulfill({ json: { ok: true, logs: [] } });
   });
 
-  await page.goto("/demo-login");
+  await page.goto("/login");
   await page.evaluate((imageUrl) => {
     window.localStorage.setItem(
       "aio-last-closing-text",
@@ -3743,8 +3789,7 @@ test("previous closing text and author inputs can be reused from local storage",
       }),
     );
   }, previousAuthorImageUrl);
-  await page.getByTestId("demo-access-code").fill("202607");
-  await page.getByTestId("demo-login-submit").click();
+  await submitLogin(page);
   await page.waitForURL("**/");
 
   await openInputStep(page, "theme");
@@ -4310,12 +4355,11 @@ test("after a reload whose status checks are lost, the button re-checks the job 
     }
     await route.fallback();
   });
-  await page.goto("/demo-login");
+  await page.goto("/login");
   await page.evaluate(() => {
     window.localStorage.setItem("aio-active-generation-job-id", "job-completed-1");
   });
-  await page.getByTestId("demo-access-code").fill("202607");
-  await page.getByTestId("demo-login-submit").click();
+  await submitLogin(page);
   await page.waitForURL("**/");
   await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（通信が切断されました）", { timeout: 20_000 });
   // No status read succeeded, so the form was never restored and a new start would lack input.
@@ -4644,13 +4688,19 @@ async function openInputStep(
   await expect(page.getByTestId(`input-wizard-step-${step}`)).toBeVisible();
 }
 
+/** Fills the login form with the test-only account (tests/helpers/login-accounts.ts) and submits. */
+async function submitLogin(page: Page, password: string = testLoginAccount.password) {
+  await page.getByTestId("login-email").fill(testLoginAccount.email);
+  await page.getByTestId("login-password").fill(password);
+  await page.getByTestId("login-submit").click();
+}
+
 async function login(
   page: Page,
   { preparePrimaryInfo = true }: { preparePrimaryInfo?: boolean } = {},
 ) {
-  await page.goto("/demo-login");
-  await page.getByTestId("demo-access-code").fill("202607");
-  await page.getByTestId("demo-login-submit").click();
+  await page.goto("/login");
+  await submitLogin(page);
   await page.waitForURL("**/");
 
   if (preparePrimaryInfo) {

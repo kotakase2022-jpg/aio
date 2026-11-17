@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { defineConfig } from "@playwright/test";
+import { authUsersValue } from "./tests/helpers/login-accounts";
 
 const port = Number(process.env.E2E_PORT ?? 4310);
 // Isolated local durable store for this suite's server. Tests that exercise the real log/save
@@ -41,7 +42,8 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120_000,
     env: {
-      DEMO_ACCESS_CODE: "202607",
+      // The test-only account (tests/helpers/login-accounts.ts); this local server has no other login.
+      AIO_AUTH_USERS: authUsersValue(),
       DEMO_AUTH_SECRET: "test-only-e2e-demo-session-secret-32-characters",
       // An inherited VERCEL value would move the store to the OS temp dir and ignore the seed dir.
       VERCEL: "",

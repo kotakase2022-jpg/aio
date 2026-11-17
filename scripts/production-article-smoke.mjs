@@ -10,9 +10,13 @@ import { deltaNov11Form } from "../tests/fixtures/delta-nov11.ts";
 // Deliberately separate from the default read-only production smoke.
 nextEnv.loadEnvConfig(process.cwd());
 assert.equal(process.env.AIO_SMOKE_WRITE_CONFIRM, "create-one-disposable-article");
-// The operator sets the production code; a value committed in this public repository is no gate.
-const accessCode = process.env.DEMO_ACCESS_CODE?.trim();
-assert.ok(accessCode, "Set DEMO_ACCESS_CODE to the production access code; this smoke has no fallback. Nothing was changed.");
+// The operator sets a production login; values committed in this public repository are no gate.
+const loginEmail = process.env.AIO_SMOKE_LOGIN_EMAIL?.trim();
+const loginPassword = process.env.AIO_SMOKE_LOGIN_PASSWORD;
+assert.ok(
+  loginEmail && loginPassword,
+  "Set AIO_SMOKE_LOGIN_EMAIL and AIO_SMOKE_LOGIN_PASSWORD to a production login; this smoke has no fallback. Nothing was changed.",
+);
 const baseURL = "https://aio-article-generator.vercel.app";
 const marker = `AIO-RELEASE-SMOKE-${randomUUID()}`;
 const directory = path.resolve(".verification-files", marker);
@@ -36,7 +40,7 @@ try {
     let allowed = url.origin === baseURL && request.method() === "GET";
     if (url.origin === baseURL && request.method() === "POST") {
       const body = request.postDataJSON();
-      if (url.pathname === "/api/demo-auth") allowed = true;
+      if (url.pathname === "/api/auth/session") allowed = true;
       if (url.pathname === "/api/generation-jobs" && generationRequests === 0 && body.form?.theme?.startsWith(marker) && body.form.imageCount === 0) {
         generationRequests += 1;
         allowed = true;
@@ -51,12 +55,13 @@ try {
     await route.continue();
   });
   await page.goto("/");
-  await page.getByTestId("demo-access-code").fill(accessCode);
-  const loginAnswer = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/demo-auth");
-  await page.getByTestId("demo-login-submit").click();
-  // A rejected code stops here at once; nothing has been sent except the login attempt.
+  await page.getByTestId("login-email").fill(loginEmail);
+  await page.getByTestId("login-password").fill(loginPassword);
+  const loginAnswer = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/auth/session");
+  await page.getByTestId("login-submit").click();
+  // A rejected login stops here at once; nothing has been sent except the login attempt.
   const loginStatus = (await loginAnswer).status();
-  if (loginStatus === 401) throw new Error("Production rejected DEMO_ACCESS_CODE (アクセスコードが違います). Nothing was changed. Set the production access code and run again.");
+  if (loginStatus === 401) throw new Error("Production rejected the login (メールアドレスまたはパスワードが違います). Nothing was changed. Check AIO_SMOKE_LOGIN_EMAIL and AIO_SMOKE_LOGIN_PASSWORD and run again.");
   assert.equal(loginStatus, 200, `login returned HTTP ${loginStatus}`);
   await page.waitForURL(`${baseURL}/`);
   await page.getByTestId("reference-text-0").fill(deltaNov11Form.references[0].text);
