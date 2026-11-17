@@ -13,7 +13,8 @@ It is a working document for Codex, Claude Code, and CodeRabbit review. It does 
 
 Primary user-facing areas:
 
-- Demo authentication: access-code login and return-path preservation.
+- Authentication: email/password login (accounts in `AIO_AUTH_USERS`, fail closed when unset),
+  return-path preservation, and logout. The shared access-code login was retired on 2026-11-17.
 - Article creation form: reference URLs, reference text, reference files, competitor URLs,
   competitor text, competitor files, theme/keywords, primary information, closing CTA, author
   fields, author image, visual tone, uploaded visual-tone image, image count, and target length.

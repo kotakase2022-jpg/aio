@@ -2,17 +2,29 @@
 
 ## 0. Current Loop Phase
 - Current owner: Claude Code
-- Next owner: User / Codex (remaining: the access-code security task; customer report send by the user; cleanup of own test records with approval)
+- Next owner: User / Codex. Remaining:
+  - The access-code task: PR #55, which needs `AIO_AUTH_USERS` set before its release (section 10).
+  - The customer report, sent by the user.
+  - Cleanup of own test records, with approval.
 - Loop: 10
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
 - Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) released: `aio-store` v7 (14:29 JST) and the app `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (16:03 JST), verified on production (section 2).
-- Last updated: 2026-11-17 (UTC session; Claude Code cloud container)
+- Access-code task (a second Claude Code session on 11/17, section 3d): PR #55 replaces the shared access code with email + password login. It is open with CI PASS, CodeRabbit is rate-limited, and it is not deployed. **Do not deploy it before `AIO_AUTH_USERS` exists in Vercel Production** (otherwise nobody can log in).
+- Last updated: 2026-11-17 (UTC; two Claude Code cloud sessions)
 
 ## 1. Current Goal
 Aizawa 11/16 re-verification: the four article structures were confirmed fine. Remaining items:
 - ③ (priority) generation logs listed only the newest 20, so older unposted articles could not be reopened, edited, saved, or posted.
 - ② after draft save the "処理中" indicator sometimes stayed (observed on comparison and FAQ structures).
 Customer was told results/operation guidance around 2026-11-18〜19 (external estimate, not a measured plan).
+
+Access-code task (separate; CodeRabbit finding on PR #51):
+- The problem: `src/app/api/demo-auth/route.ts` accepted the default code `202607`, committed in this public repository, whenever `DEMO_ACCESS_CODE` was unset or empty.
+- Owner decisions on 11/17, in the second session:
+  1. Discard the demo access-code feature.
+  2. Told that it was the app's only login (deleting it without a replacement would open paid generation, customer drafts and WordPress posting to anyone with the URL), the owner chose to migrate to email + password authentication.
+  3. Accounts live in a Vercel environment variable, not in Supabase Auth.
+  4. Add a logout button.
 
 ## 2. Current Branch / Commit / PR
 - PR kotakase2022-jpg/aio#50 (`claude/aizawa-nov16-logs-and-save-status`) merged to main as `ed81c15`; production deployment `dpl_3TyMQRKm6Z63o55mPRoysRvKnSKu` promoted by the user on the Windows workstation (11/16 20:42 JST build). Read-only smoke on the canonical URL PASS (logs pages 2 / listed 36 / unpostedCompleted 32 / complete true). Rollback = promote `dpl_9aoGSRfatAYc1MqScMyPTgPecVAU` (previous production).
@@ -31,6 +43,11 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - Before: v6 source matched `efebb89` (copy in the ignored `.verification-files/aio-store-backup-v6/`).
   - After: v7 = `028e84b`, ACTIVE, `verify_jwt` false, OPTIONS 200, invalid token → the function's own 401. The current app (`efebb89`) does not call the new action; the read-only smoke after the deploy PASS.
   - Rollback = redeploy the v6 source (`efebb89`).
+- PR kotakase2022-jpg/aio#55 (`claude/zen-mendel-fuml66`, access-code task): open.
+  - Branched from `4a3d69b`. Main was merged into it three times: `028e84b` (PR #53), `b28d093` (PR #56) and `485ee65` (PR #57, the release record of #53).
+  - CI PASS on `1a83b4c`. The two pushes after it ran no CI until the merge of `485ee65`, because the PR then had a conflict with main.
+  - Not deployed. That session made no production change: no deploy, no environment change, no request to the production app.
+  - Rollback after its release = promote the deployment before it (today `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m`). That restores the access-code login, including the committed-default exposure.
 - App release of `b28d093` (= `028e84b` plus docs), 2026-11-17 16:03 JST, from this cloud session: production `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (canonical alias confirmed).
   - The first three Vercel tokens belonged to another account, which is not authorized for scope `sl2026`. The owner then saved a token of `kotakase2022-jpg` scoped to `sl2026` (network secret on environment `aio`).
   - That token cannot read the user (`/v2/user` 404), so the Vercel CLI stopped at start. The same steps were therefore run through the REST API:
@@ -77,6 +94,38 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - New tests: 7 integration + 1 WordPress-path integration + 1 E2E, all failing on the previous code.
 - Code check: the screen's 5 timers only clear transient messages, focus, abort requests (reported as unconfirmed) or pace polling; none hides a processing state.
 
+## 3d. Access-code retirement: email + password login (PR #55, second session, 11/17)
+- Login: `POST /api/auth/session` checks an email and password against `AIO_AUTH_USERS`, a JSON array of `{ "email", "passwordHash" }`.
+  - Hash: scrypt N=2^15, r=8, p=3 (an OWASP equivalent minimum, 32 MiB), 16-byte salt, constant-time compare, NFKC normalization (full-width IME input matches).
+  - An unknown email costs the same hash work as a wrong password.
+  - Missing, blank or invalid `AIO_AUTH_USERS` refuses every login with 500 「認証設定に不備があります。管理者に連絡してください。」 (fail closed). The server log gives the reason without account data.
+  - A wrong password or an unknown email gets 401 「メールアドレスまたはパスワードが違います。」; missing fields get 400. The old code `202607` never logs in.
+- Sessions:
+  - `aio_session` cookie (HttpOnly, SameSite=Lax, Secure in production, 14 days as before).
+  - v2 token: HMAC with the existing `DEMO_AUTH_SECRET` over version, expiry, email, nonce and the account's current password hash. Removing an account or re-issuing its password ends its sessions at once.
+  - v1 tokens of the retired login are rejected even with the same secret. The old `aio_demo_auth` cookie is never read and is expired on login and logout.
+- Retired: `/api/demo-auth` (the proxy now answers 401), `/demo-login` (redirects to `/login`, keeping `next`), `src/lib/demo-session.ts`, and the `DEMO_ACCESS_CODE` variable (read nowhere now).
+- UI:
+  - `/login`: email and password, same card style.
+  - Header: the signed-in email and a ログアウト button (DELETE, then `location.replace("/login")`, so Back cannot show the signed-in page). It sits beside the primary button column, so the requirement message stays under the button it explains.
+  - API 401 text is now 「認証が必要です。ログインしてください。」.
+  - The return path after login is checked by URL resolution. This also rejects `/\host` and tab/newline forms that the old `startsWith("//")` check let through (an open redirect). A resolved path that starts with `//` is rejected too. Otherwise dot segments (`/.//host/x`) produced one that a second check, in the login form, turned into another host (CodeRabbit, section 7).
+- Operator tooling: `npm run auth:create-user -- <email>` (`scripts/create-login-user.mjs`). It prints a generated password (about 116 bits) once, plus the entry; `--password-stdin` hashes a chosen password (15+ characters). Japanese guide with the release order: `docs/login-accounts.md`.
+- Production scripts:
+  - All three require `AIO_SMOKE_LOGIN_EMAIL` and `AIO_SMOKE_LOGIN_PASSWORD`, with no fallback.
+  - `production-smoke.mjs` additionally checks that the retired access-code login is gone and that logout ends the session.
+  - `accessCodeIsRepositoryTestValue` was removed from the older-draft check record.
+- Test configuration: CI and Vitest no longer set `DEMO_ACCESS_CODE`; Vitest clears `AIO_AUTH_USERS` before each test; the E2E server gets only the test-only account from `tests/helpers/login-accounts.ts`.
+- Test robustness (pre-existing races, same pattern as the loop-10 fix of `user can stop an in-progress generation job`): two E2E tests asserted, right after `click()`, on a value that the Playwright route callback sets only later in the test process. Each now waits for that value; the assertions are unchanged.
+  - `uploaded visual tone image is sent to generation as upload mode` failed once in a full run (15/15 alone).
+  - `generation cancel failure keeps the job active and recoverable` failed once on the tree merged with `028e84b` (15/15 alone after the fix).
+  - `theme candidate failure can be retried and then applied` failed once in the run after the CodeRabbit fixes (10/10 alone after the fix).
+  - `competitor research failure resets progress and remains recoverable` failed once in a later run (10/10 alone after the fix).
+  - `legacy fixed authentication cookie cannot bypass the login screen` hit the favicon abort known since loop 10 (2/20 on untouched main).
+    - Root cause: the test opened `/login` only to read the origin, so the next navigation could cut off that favicon request.
+    - It now sets the cookies from `baseURL` before its only navigation (20/20).
+- Account setup started: at the owner's request, that session generated the owner's own account entry. It went to the owner as a private file, not into this repository. The customer's account is still to be created before the release.
+
 ## 4. Files Changed
 - `src/lib/server/generation-jobs.ts`, `src/lib/server/article-generation-job-runner.ts`, `src/lib/server/drafts.ts`, `src/types/aio.ts`
 - `src/app/api/generation-logs/route.ts`, `src/app/api/generation-jobs/[id]/route.ts`, `src/app/api/save-draft/route.ts`, `src/app/api/approve-draft/route.ts`
@@ -85,6 +134,14 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - `scripts/production-smoke.mjs`: adds read-only paged-log checks (paged API deployed, all pages without duplicates, load-more grows the list) and prints counts only; mutation blocking unchanged. Verified against a local production build with a git-ignored copy (host/browser lines only); not run on production.
 - Docs: `docs/aizawa-nov16-followup.md`, `docs/testing.md`, this file. AGENTS.md / CLAUDE.md unchanged.
 - PR #53: `src/lib/server/generation-jobs.ts`, `supabase/functions/aio-store/index.ts`, `scripts/production-older-draft-check.mjs`, `tests/integration/generation-logs-pagination.integration.test.ts`, `tests/integration/wordpress.integration.test.ts`, `tests/e2e/aio-workflow.spec.ts`.
+- PR #55 (access-code task):
+  - New: `src/app/api/auth/session/route.ts`, `src/app/login/page.tsx` (from the old `demo-login` page), `src/components/aio/login-form.tsx`, `src/lib/login-redirect.ts`, `src/lib/server/auth-session.ts`, `src/lib/server/auth-users.ts`, `src/lib/server/login-credentials.ts`, `scripts/create-login-user.mjs`, `docs/login-accounts.md`, `tests/helpers/login-accounts.ts`.
+  - Removed: `src/app/api/demo-auth/route.ts`, `src/components/aio/demo-login-form.tsx`, `src/lib/demo-session.ts`.
+  - Changed: `src/proxy.ts`, `src/app/page.tsx` (reads the session for the email, so `/` now renders per request instead of being static), `src/components/aio/article-generator-app.tsx` (header account menu, logout), the three production scripts, `playwright.config.ts`, `.github/workflows/quality-gate.yml`, `tests/setup/vitest.setup.ts`, `.env.example`, `package.json` (`auth:create-user`), `README.md`, `docs/testing.md`, `docs/quality-audit.md`, this file.
+  - Tests:
+    - New: `tests/unit/login-credentials|auth-users|login-redirect|create-login-user-script.test.ts`.
+    - `tests/unit/demo-session.test.ts` became `tests/unit/auth-session.test.ts`; every old rejection case is kept.
+    - Rewritten: `tests/integration/auth-and-logs.integration.test.ts`; updated: `tests/integration/generation-logs-pagination.integration.test.ts`, `tests/e2e/aio-workflow.spec.ts` (2 auth tests rewritten, 2 added, all logins through one helper, 2 race fixes).
 
 ## 5. Current Status
 - Local quality gate: see section 9 (all steps run in this session on 2026-11-16).
@@ -93,18 +150,28 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - `aio-store` v7 deployed and boot-checked; `list_job_page` is confirmed in use (section 3c).
 - The approved write checks PASSED on 11/17 before the release (section 3c). After the release of PR #53, the older-draft check passed again and the `get_job_by_draft` path was confirmed on production (section 2).
 - Production changes made from this session: `aio-store` v6 → v7; the app release `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m`; one unchanged save of the team's own 11/13 article; one synthetic article (one paid generation) with its own edit save, later saved once more unchanged by the post-release check. No WordPress post. No customer article changed. No message to Aizawa (draft only).
+- PR #55: local gate PASS on the tree merged with main (section 9), CI PASS; not merged, not deployed. Its session changed nothing in production.
 
 ## 6. Known Issues
 - Gateway window: resolved by `aio-store` v6 (`list_job_page`), confirmed in use on 11/17.
 - Accepted by the owner as known limitations (11/17): the late-write duplicate window and the browser clock jump (sections 3b and 7). A full guard needs a save-RPC migration; a follow-up task was suggested.
-- Security, separate task (owner, 11/17): `src/app/api/demo-auth/route.ts` accepts a default code committed in this public repository when `DEMO_ACCESS_CODE` is unset. The owner confirms the production `DEMO_ACCESS_CODE` holds a strong, non-default value (sets it and redeploys if not), then the fallback is removed. Production specifics are reported to the owner directly, not in this public repository.
+- Security, access code: `src/app/api/demo-auth/route.ts` accepts a default code committed in this public repository when `DEMO_ACCESS_CODE` is unset. The owner decided on 11/17 to retire the access code entirely (section 1), and PR #55 does that. The exposure ends with its release; until then production behaves as before. Production specifics are reported to the owner directly, not in this public repository.
+- PR #55, known limits:
+  - Release order: deploying it before `AIO_AUTH_USERS` is set in Production locks everyone out (fail closed, by design). Section 10.
+  - No login rate limit: serverless instances share no store. Mitigation: generated ~116-bit passwords or 15+ characters, scrypt cost per attempt, the same answer and cost for unknown emails.
+  - Account changes need a redeploy (environment variable). There is no self-service password change or reset; the operator re-issues.
+  - `scripts/check-test-integrity.mjs` matches braces without understanding comments: an apostrophe in a comment inside a test body hides that test's assertions ("does not appear to contain an assertion"). Avoid apostrophes in such comments, or fix the guard in a separate task.
+  - About 30 more E2E assertions read a route-callback value right after `click()` without waiting, the race fixed four times in section 3d (four different ones fired across five full runs in this container). Find them by a synchronous `expect(...)` on the line after a `.click();`, mostly `expect(calls.<name>).toBe(n)`.
+    - CI retries once, so each one shows up only as an occasional flake.
+    - `expect(submittedImageCount).toBe(0)` cannot fail that way (an early read also gives 0), so it may pass without proving anything.
+    - Fixing them all, with `await expect.poll(...)`, is a separate test-robustness task.
 - Log sync on save/post beyond the 100 most recently updated jobs: fixed in PR #53 and released on 11/17 (v7 + app); the new path is confirmed on production.
 - Dev-only dependencies: `npm audit` reports 7 moderate advisories (typescript-eslint chain, minimatch); production dependencies 0.
 - The other Vercel account used first has no two-factor authentication (CLI warning). Its three tokens created for this release are unused now and can be revoked; the `kotakase2022-jpg` token saved on environment `aio` should be revoked when no longer needed.
 - WordPress post requests have no client timeout (existing reservation prevents duplicates).
 - Compare-and-set protects against delays after the server reads the revision, not before.
 - Unverified in this session: Codex history, the Windows working tree, production version and data counts, the customer Google Doc.
-- Earlier items still open: shared demo auth (no per-user isolation), human source review, 11/13 pending own records cleanup (below).
+- Earlier items still open: one shared workspace for every login (no per-user isolation; unchanged by PR #55), human source review, 11/13 pending own records cleanup (below).
 
 ## 7. CodeRabbit Review
 - PR kotakase2022-jpg/aio#50, review of `8344f5e`: 5 actionable comments.
@@ -134,7 +201,12 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - Also awaiting the owner, as part of the same residual-risk decision: a forward jump of the browser clock during a 5xx outage could end the 7 min hold early (CodeRabbit). A full guarantee needs server-side control of the save (migration).
   - Not changed, left for the owner: remove the default demo access code from `src/app/api/demo-auth/route.ts` and reject login when `DEMO_ACCESS_CODE` is unset. A valid security finding, but if production relies on the default it would lock everyone out. The owner asked to set the access-code topic aside.
 - PR kotakase2022-jpg/aio#53: CodeRabbit review of `2aa463d` after the rate limit reset: no actionable comments, merge risk minimal.
-- Codex GitHub review: not performed on #50, #51 or #53 (usage limit); no credits added.
+- PR kotakase2022-jpg/aio#55 (access-code task): reviewed at `1a83b4c` after two rate-limited attempts (review requested again at 07:38 UTC). 3 actionable findings. All three were reproduced by new tests before fixing, and are fixed in the next commit:
+  - (Major, security) Open redirect after login: `next=/.//return-path.invalid//evil.example` became `//return-path.invalid//evil.example` on the page and `//evil.example` in the form, so the browser left the site. `safeReturnPath` now also rejects a resolved path that starts with `//`, so a second check changes nothing. Unit tests (both checks, idempotence, same origin) and an E2E login with that `next`. The thread stays open for the owner, as a security finding.
+  - (Minor) A JSON `null` body made the login route throw (500). Any non-object JSON now gets the usual 400. Integration test with `null`, a number, a string and an array.
+  - (Minor) The length limit counted raw input at login but normalized input at creation, so a password the script accepted could be refused (`"A\u030A"` × 150, A followed by a combining ring). Login now counts after NFKC too, and the route no longer checks raw length. Unit and integration tests with that password.
+  - (Minor, follow-up on the same thread) The login form still capped the password field at 256 code units (`maxLength`), so that password could not be typed in full. The field no longer has `maxLength`; the server applies the normalized limit. E2E logs in from the form with a second test-only account (`composedOnNormalizationAccount`).
+- Codex GitHub review: not performed on #50, #51, #53 or #55 (usage limit); no credits added.
 
 ## 8. Optional Bugbot Findings
 - Status: Not run.
@@ -146,19 +218,45 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Follow-up branch (self-verification fixes), 2026-11-16, this session: typecheck/lint/integrity (64 files) PASS; 58 files / 625 tests PASS (+3 net: 4 new gateway tests, 1 test now models the old gateway); contract 15 PASS; coverage S/B/F/L 88.04/79.91/93.11/88.69%; Chromium PC E2E 79/79 PASS (77 + 2 new); build PASS. The new tests fail on the previous code. One full run hit the known `user can stop an in-progress generation job` race (30/30 in isolation): the test asserted the cancel counter before the routed request was counted. It now waits for the count and still requires exactly one cancel at the end (not weakened).
 - 11/17 (PR #53), this session: typecheck / lint / integrity (64 files) PASS; 58 files / 636 tests PASS; contract 15 PASS; coverage S/B/F/L 88.35/80.23/93.05/88.97%; build PASS; E2E first full run 82 passed / 1 failed (the known favicon-abort flake), second full run 83/83 PASS. CI PASS on both PR heads.
 - Details and the list of new E2E flows: `docs/aizawa-nov16-followup.md` §検証 and §「11/17 厳密な自己検証」.
+- PR #55 (second session, 11/17):
+  - Baseline on untouched main `4a3d69b`: typecheck, lint, integrity (64 files) PASS; 58 files / 628 tests PASS; E2E 82/82 PASS.
+  - Own tree before merging main: typecheck, lint (0 warnings), integrity (68 files) PASS; 62 files / 658 tests PASS; contract 15 PASS.
+    - Coverage S/B/F/L 88.67 / 80.70 / 93.47 / 89.30 %. New auth code: route 100 % statements, `auth-users.ts` 100 %, `login-credentials.ts` 100 % statements, `auth-session.ts` 96.6 %.
+    - E2E 84/84 (82 + 2 new); build PASS (19 routes; `/login` and `/api/auth/session` replace the two retired routes).
+  - Merged with `028e84b`: typecheck, lint, integrity PASS; 62 files / 666 tests PASS; contract 15 PASS; build PASS; E2E 85/85 PASS after the cancel race fix. CI PASS on `b68316a`.
+  - After merging `b28d093` (docs only): this file's merge conflict was resolved by hand, keeping both sessions' records.
+  - Not first-time green:
+    - The integrity guard failed once on an apostrophe in a test comment; the comment was reworded.
+    - The new logout test caught a real defect: logout navigated before reading the response, so Chrome reported the request as aborted. Fixed.
+    - Four pre-existing E2E races and the favicon abort (section 3d).
+  - After the CodeRabbit fixes: typecheck, lint, integrity (68 files) PASS; 62 files / 670 tests PASS; contract 15 PASS; build PASS.
+    - Full E2E runs hit, one per run, the theme-candidate race, the favicon abort and the competitor-research race. Each was fixed at its root (section 3d).
+    - Full E2E: 86/86 PASS (85 + the new open-redirect test). After the form follow-up: 670 tests PASS and E2E 87/87 PASS (+ the form test).
+  - Manual check in a local production build: login screen, wrong-password message, header with email and ログアウト, logout back to `/login`.
+  - After merging `485ee65` (PR #57, docs only; this file resolved by hand again): typecheck, lint, integrity (68 files) PASS; 62 files / 670 tests PASS; contract 15 PASS.
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
 ## 10. Next Recommended Action
-1. Access-code task (security, owner first): confirm the production `DEMO_ACCESS_CODE` is a strong, non-default value; if not, set it for Production, redeploy, and tell Aizawa the new code. Then remove the fallback in `src/app/api/demo-auth/route.ts`.
-2. Send Aizawa the report. The draft is in `docs/aizawa-nov16-followup.md`, filled with verified facts only; the owner sends it.
+1. Access-code task (PR #55; owner decision 11/17: retire the access code). Steps in Japanese: `docs/login-accounts.md`.
+   1. Create the accounts: `npm run auth:create-user -- <email>` (Windows: `npm.cmd`). The owner's own entry already exists (section 3d); the customer's does not.
+   2. Vercel Production: add `AIO_AUTH_USERS` (Sensitive) with every entry in one JSON array. Keep `DEMO_AUTH_SECRET`.
+   3. After CI and CodeRabbit, merge PR #55. Release it with the approved steps of section 2 (stage, check, promote, canonical smoke).
+   4. Read-only smoke with a team login (`AIO_SMOKE_LOGIN_EMAIL`, `AIO_SMOKE_LOGIN_PASSWORD`). Then tell the customer their login privately, and remove `DEMO_ACCESS_CODE` from Vercel.
+   5. The production scripts follow the deployed login. While the access-code app is still live (production runs `b28d093` today), run them from a checkout without PR #55. After the release, run them with `AIO_SMOKE_LOGIN_*`.
+2. Send Aizawa the report. The draft is in `docs/aizawa-nov16-followup.md`, filled with verified facts only; the owner sends it. If PR #55 ships first, the customer also needs the new login (sent separately and privately by the owner).
 3. Cleanup, with approval: the three own test articles in section 12. Revoke the Vercel tokens no longer needed (see section 6) and the Supabase token if unneeded.
 4. Optional: delete the Windows release clone `aio-release-20261116`; it holds a Vercel OIDC token in `.env.local`.
-5. Optional follow-ups suggested earlier: a save-RPC guard for the late-write window, and a test-robustness fix for the favicon-abort E2E flake.
+5. Optional follow-ups suggested earlier: a save-RPC guard for the late-write window, and a test-robustness pass over the remaining E2E click-then-assert races (section 6). The favicon-abort flake is fixed in PR #55.
 
 ## 11. Suggested Review Scope for Codex
 - `listGenerationLogsPage` (three storage paths) and `decodeGenerationLogCursor` input validation.
 - `presentCompletedSaveStep` read-time presentation only for completed + running.
 - `saveDraftAgainstStoredRevision` conflict mapping and the UI split between definite errors (top banner) and unconfirmed outcomes (near the buttons).
+- PR #55:
+  - `src/lib/server/login-credentials.ts`: hash format, parameter bounds, canonical base64url, unknown-account hash.
+  - `src/lib/server/auth-session.ts`: signature bound to the current password hash; v1 rejection.
+  - `src/app/api/auth/session/route.ts`: fail-closed order (configuration before input) and response codes.
+  - `src/proxy.ts`: retired-path redirect, exact public paths.
 
 ## 12. Risk Notes
 - Pending own records from 11/13, Supabase `npdyfhqugniuxfxpgngh` (unchanged, not touched in this session):
@@ -172,9 +270,11 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 
 ## 13. Do Not Touch
 - Secrets/env/token values; user-owned `output/`; existing production articles; WP publication; customer messaging.
+- Never commit or paste real `AIO_AUTH_USERS` entries, passwords or hashes. The only account in this repository is the test-only one in `tests/helpers/login-accounts.ts`.
 - No force push, protection bypass, weakened tests, silent evidence deletion, cleanup-confirmation bypass, bulk data rewrite.
 
 ## 14. Notes for the Next Owner
 - Windows uses npm.cmd/npx.cmd. In this Linux container Node 24 lives at `/opt/node24/bin`.
 - `.verification-files/` is ignored and deploy-excluded. It holds the local Playwright override, run manifests (IDs and booleans only), the `aio-store` v5/v6 backups, and `*.local.mjs` copies of the production scripts that change only the browser launch (container Chromium + session proxy) or, for local runs, the target host.
+- Scripts that import `.ts` files print `MODULE_TYPELESS_PACKAGE_JSON` under plain `node`; `npm run auth:create-user` silences only that warning.
 - Previous release evidence: `docs/aizawa-nov11-followup.md`, `docs/adversarial-verification-2026-11-09.md`.

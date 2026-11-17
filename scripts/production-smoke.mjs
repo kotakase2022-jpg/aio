@@ -5,6 +5,13 @@ import nextEnv from "@next/env";
 import { chromium, expect } from "@playwright/test";
 
 nextEnv.loadEnvConfig(process.cwd());
+// The operator sets a production login; values committed in this public repository are no gate.
+const loginEmail = process.env.AIO_SMOKE_LOGIN_EMAIL?.trim();
+const loginPassword = process.env.AIO_SMOKE_LOGIN_PASSWORD;
+assert.ok(
+  loginEmail && loginPassword,
+  "Set AIO_SMOKE_LOGIN_EMAIL and AIO_SMOKE_LOGIN_PASSWORD to a production login; this smoke has no fallback. Nothing was changed.",
+);
 const baseURL = process.env.AIO_SMOKE_BASE_URL || "https://aio-article-generator.vercel.app";
 const target = new URL(baseURL);
 assert.equal(target.protocol, "https:");
@@ -25,7 +32,9 @@ try {
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
-    if (request.method() !== "GET" && pathname !== "/api/demo-auth") {
+    // Logging in and out only sets or clears the session cookie.
+    const sessionRequest = pathname === "/api/auth/session" && ["POST", "DELETE"].includes(request.method());
+    if (request.method() !== "GET" && !sessionRequest) {
       errors.push(`Blocked mutation: ${request.method()} ${pathname}`);
       await route.abort();
       return;
@@ -34,12 +43,24 @@ try {
   });
   const denied = await context.request.get("/api/generation-logs");
   assert.equal(denied.status(), 401);
-  await page.goto("/");
-  await expect(page.getByTestId("demo-access-code")).toBeVisible();
-  await page.getByTestId("demo-access-code").fill(process.env.DEMO_ACCESS_CODE || "202607");
-  await page.getByTestId("demo-login-submit").click();
+  // The retired access-code login is gone: its API admits nobody and its screen leads to the login.
+  const retiredLogin = await context.request.post("/api/demo-auth", { data: { code: "202607" } });
+  assert.equal(retiredLogin.status(), 401, "the retired access-code login still answers");
+  await page.goto("/demo-login");
+  await expect(page).toHaveURL(`${baseURL}/login`);
+  await expect(page.getByTestId("login-email")).toBeVisible();
+  await page.getByTestId("login-email").fill(loginEmail);
+  await page.getByTestId("login-password").fill(loginPassword);
+  const loginAnswer = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/auth/session");
+  await page.getByTestId("login-submit").click();
+  const loginStatus = (await loginAnswer).status();
+  if (loginStatus === 401) {
+    throw new Error("Production rejected the login (メールアドレスまたはパスワードが違います). Nothing was changed. Check AIO_SMOKE_LOGIN_EMAIL and AIO_SMOKE_LOGIN_PASSWORD.");
+  }
+  assert.equal(loginStatus, 200, `login returned HTTP ${loginStatus}`);
   await page.waitForURL(`${baseURL}/`);
   await expect(page.getByTestId("input-wizard-step-references")).toBeVisible();
+  await expect(page.getByTestId("account-email")).toHaveText(loginEmail.normalize("NFKC").toLowerCase());
   const logs = await context.request.get("/api/generation-logs");
   assert.equal(logs.status(), 200);
   const firstLogPage = await logs.json();
@@ -115,13 +136,19 @@ try {
   await mkdir(directory, { recursive: true });
   const screenshot = path.join(directory, "production-smoke.png");
   await page.screenshot({ path: screenshot, fullPage: true });
+  await page.getByTestId("logout-button").click();
+  await page.waitForURL(`${baseURL}/login`);
+  await expect(page.getByTestId("login-email")).toBeVisible();
+  const afterLogout = await context.request.get("/api/generation-logs");
+  assert.equal(afterLogout.status(), 401, "the session survived logout");
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ result: "PASS", baseURL, checks: [
-    "unauthenticated API denied", "login", "durable logs read", "older log pages reachable without duplicates",
+    "unauthenticated API denied", "retired access-code login gone", "email/password login",
+    "durable logs read", "older log pages reachable without duplicates",
     "load-more control", "six input steps",
     "audience/structure controls including comparison/problem-solution", "table/supplemental FAQ modes",
     "required primary information", "ready-to-generate state",
-    "no console/page/network errors", "no application mutations",
+    "logout ends the session", "no console/page/network errors", "no application mutations",
   ], logs: { pages: logPages, listed: listedLogIds.size, unpostedCompleted: unpostedCompletedLogs, complete: logsComplete },
   screenshot }));
 } finally {

@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createCompletedGenerationJob, createSampleDraft } from "../fixtures/article";
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
+import { authUsersValue, testLoginAccount } from "../helpers/login-accounts";
 import type { ArticleDraft, GenerationJob, GenerationLogPage } from "@/types/aio";
 
 let tempDir = "";
@@ -155,18 +156,20 @@ describe("generation log pages (local durable store)", () => {
     expect(json).toMatchObject({ ok: false, error: message });
   });
 
-  test("the paginated logs API stays behind the existing access-code session", async () => {
+  test("the paginated logs API stays behind the login session", async () => {
     process.env.DEMO_AUTH_SECRET = "test-only-demo-session-secret-32-characters";
+    process.env.AIO_AUTH_USERS = authUsersValue();
     const { proxy } = await import("@/proxy");
-    const { createDemoSessionToken, DEMO_AUTH_COOKIE_NAME } = await import("@/lib/demo-session");
+    const { createSessionToken, SESSION_COOKIE_NAME } = await import("@/lib/server/auth-session");
+    const { findAuthUser } = await import("@/lib/server/auth-users");
     const cursor = Buffer.from(JSON.stringify({ c: "2026-10-01T00:00:00.000Z", i: "job-page-00" })).toString("base64url");
 
     const anonymous = await proxy(new NextRequest(`http://localhost/api/generation-logs?cursor=${cursor}`));
     const forged = await proxy(new NextRequest(`http://localhost/api/generation-logs?cursor=${cursor}`, {
-      headers: { cookie: `${DEMO_AUTH_COOKIE_NAME}=demo-access-granted` },
+      headers: { cookie: `${SESSION_COOKIE_NAME}=demo-access-granted` },
     }));
     const signed = await proxy(new NextRequest(`http://localhost/api/generation-logs?cursor=${cursor}`, {
-      headers: { cookie: `${DEMO_AUTH_COOKIE_NAME}=${await createDemoSessionToken()}` },
+      headers: { cookie: `${SESSION_COOKIE_NAME}=${await createSessionToken(findAuthUser(testLoginAccount.email)!)}` },
     }));
 
     expect(anonymous.status).toBe(401);

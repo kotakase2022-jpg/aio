@@ -4,6 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import extractFileSuccess from "../fixtures/api/extract-file-success.json";
 import themeCandidates from "../fixtures/api/theme-candidates.json";
 import { createCompletedGenerationJob, createSampleDraft } from "../fixtures/article";
+import { composedOnNormalizationAccount, testLoginAccount } from "../helpers/login-accounts";
 import type {
   ArticleDraft,
   ArticleElementMode,
@@ -994,13 +995,14 @@ test("theme candidate failure can be retried and then applied", async ({ page })
   await openInputStep(page, "theme");
   await page.getByTestId("theme-candidates-button").click();
 
-  expect(calls.themeCandidates).toBe(1);
+  // Routed requests are counted in the test process after click() returns; wait for each count.
+  await expect.poll(() => calls.themeCandidates).toBe(1);
   await expect(page.getByTestId("theme-candidates-error")).toContainText("theme candidate failed");
   await expect(page.getByTestId("theme-candidates-button")).toBeEnabled();
 
   await page.getByTestId("theme-candidates-button").click();
 
-  expect(calls.themeCandidates).toBe(2);
+  await expect.poll(() => calls.themeCandidates).toBe(2);
   expect(calls.themeCandidatePrimaryInfo).toContain("Primary field observation");
   await expect(page.getByTestId("theme-candidates-error")).toHaveCount(0);
   await expect(page.getByTestId("theme-candidate-card-0")).toContainText(
@@ -1137,7 +1139,8 @@ test("competitor research failure resets progress and remains recoverable", asyn
     .fill("Competitor memo for recoverable research failure.");
   await page.getByTestId("competitor-research-button").click();
 
-  expect(calls.competitorResearch).toBe(1);
+  // The routed request is counted in the test process after click() returns; wait for it.
+  await expect.poll(() => calls.competitorResearch).toBe(1);
   await expect(page.getByText("競合情報調査に失敗しました。")).toBeVisible();
   await expect(page.getByTestId("competitor-research-button")).toBeEnabled();
   await expect(page.getByTestId("competitor-research-progress")).toBeHidden();
@@ -3042,40 +3045,102 @@ test("HTML export click failure cleans up the temporary download link", async ({
   expect(errors()).toEqual([]);
 });
 
-test("demo login rejects a wrong code and then preserves the requested return path", async ({
+test("login rejects the retired access code and a wrong password, then preserves the requested return path", async ({
   page,
 }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
-    allowedFailedResponses: [/\/api\/demo-auth$/],
+    allowedFailedResponses: [/\/api\/auth\/session$/],
   });
 
   await page.route("**/api/generation-logs", async (route) => {
     await route.fulfill({ json: { ok: true, logs: [] } });
   });
 
-  await page.goto("/demo-login?next=%2F%3Ftab%3Dpreview");
-  await page.getByTestId("demo-access-code").fill("wrong");
-  await page.getByTestId("demo-login-submit").click();
+  await page.goto("/login?next=%2F%3Ftab%3Dpreview");
+  for (const wrongPassword of ["202607", "wrong-password-for-this-account"]) {
+    await submitLogin(page, wrongPassword);
 
-  await expect(page).toHaveURL(/\/demo-login\?next=%2F%3Ftab%3Dpreview/);
-  await expect(page.getByTestId("demo-login-error")).toBeVisible();
-  await expect(page.getByTestId("demo-login-submit")).toBeEnabled();
+    await expect(page).toHaveURL(/\/login\?next=%2F%3Ftab%3Dpreview/);
+    await expect(page.getByTestId("login-error")).toHaveText("メールアドレスまたはパスワードが違います。");
+    await expect(page.getByTestId("login-submit")).toBeEnabled();
+  }
 
-  await page.getByTestId("demo-access-code").fill("202607");
-  await page.getByTestId("demo-login-submit").click();
+  await submitLogin(page);
 
   await page.waitForURL("**/?tab=preview");
   await expect(page.getByTestId("article-primary-button")).toBeVisible();
+  await expect(page.getByTestId("account-email")).toHaveText(testLoginAccount.email);
+  expect(errors()).toEqual([]);
+});
+
+test("a return path that a second check would turn into another site stays on this site", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+
+  // The page checks `next`, and the form checks the result again right before navigating.
+  await page.goto("/login?next=%2F.%2F%2Freturn-path.invalid%2F%2Fevil.example");
+  const origin = new URL(page.url()).origin;
+  await submitLogin(page);
+
+  await page.waitForURL((url) => url.origin === origin && url.pathname === "/");
+  await expect(page.getByTestId("article-primary-button")).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
+test("a password within the limit after normalization can be typed into the form and logs in", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const account = composedOnNormalizationAccount;
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+
+  await page.goto("/login");
+  const origin = new URL(page.url()).origin;
+  await page.getByTestId("login-email").fill(account.email);
+  await page.getByTestId("login-password").fill(account.password);
+  // 300 code units as typed: the field must keep all of them (the server counts after NFKC).
+  await expect(page.getByTestId("login-password")).toHaveValue(account.password);
+  await page.getByTestId("login-submit").click();
+
+  await page.waitForURL((url) => url.origin === origin && url.pathname === "/");
+  await expect(page.getByTestId("account-email")).toHaveText(account.email);
+  expect(errors()).toEqual([]);
+});
+
+test("the retired access-code screen leads to the login screen and its API admits nobody", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+
+  await page.goto("/demo-login?next=%2F%3Ftab%3Dpreview");
+
+  await expect(page).toHaveURL(/\/login\?next=%2F%3Ftab%3Dpreview$/);
+  await expect(page.getByTestId("login-email")).toBeVisible();
+  await expect(page.getByTestId("demo-access-code")).toHaveCount(0);
+  const retiredLogin = await page.request.post("/api/demo-auth", { data: { code: "202607" } });
+  expect(retiredLogin.status()).toBe(401);
+  expect((await page.request.get("/api/generation-logs")).status()).toBe(401);
   expect(errors()).toEqual([]);
 });
 
 test("legacy fixed authentication cookie cannot bypass the login screen", async ({
   page,
   context,
+  baseURL,
 }) => {
   const errors = collectUnexpectedBrowserErrors(page);
-  await page.goto("/demo-login");
-  const origin = new URL(page.url()).origin;
+  // The cookies are set before the only navigation. Opening a page first just to read the origin
+  // let the next navigation cut off the favicon request of that page (an intermittent requestfailed).
+  expect(baseURL).toBeTruthy();
+  const origin = baseURL as string;
   await context.clearCookies();
   await context.addCookies([
     {
@@ -3083,12 +3148,39 @@ test("legacy fixed authentication cookie cannot bypass the login screen", async 
       value: "demo-access-granted",
       url: origin,
     },
+    {
+      name: "aio_session",
+      value: "demo-access-granted",
+      url: origin,
+    },
   ]);
 
   await page.goto("/");
 
-  await expect(page).toHaveURL(/\/demo-login\?next=/);
-  await expect(page.getByTestId("demo-access-code")).toBeVisible();
+  await expect(page).toHaveURL(/\/login\?next=/);
+  await expect(page.getByTestId("login-email")).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
+test("logout ends the session and returns to the login screen", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+
+  await page.goto("/login");
+  await submitLogin(page);
+  await page.waitForURL("**/");
+  await expect(page.getByTestId("account-email")).toHaveText(testLoginAccount.email);
+
+  await page.getByTestId("logout-button").click();
+
+  await page.waitForURL(/\/login$/);
+  await expect(page.getByTestId("login-email")).toBeVisible();
+  expect((await page.request.get("/api/generation-logs")).status()).toBe(401);
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/login\?next=%2F$/);
   expect(errors()).toEqual([]);
 });
 
@@ -3107,12 +3199,11 @@ test("stale generation job state is cleared with a Japanese recovery message", a
     });
   });
 
-  await page.goto("/demo-login");
+  await page.goto("/login");
   await page.evaluate(() => {
     window.localStorage.setItem("aio-active-generation-job-id", "stale-job");
   });
-  await page.getByTestId("demo-access-code").fill("202607");
-  await page.getByTestId("demo-login-submit").click();
+  await submitLogin(page);
   await page.waitForURL("**/");
 
   await expect(page.getByText("生成ジョブが見つかりません。")).toBeVisible();
@@ -3478,7 +3569,8 @@ test("generation cancel failure keeps the job active and recoverable", async ({ 
   await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
   await page.getByTestId("article-primary-button").click();
 
-  expect(cancelCalls).toBe(1);
+  // The routed cancel request is counted in the test process after click() returns; wait for it.
+  await expect.poll(() => cancelCalls).toBe(1);
   await expect(page.getByText(/記事作成の停止に失敗しました。/)).toBeVisible();
   await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
   await expect(
@@ -3608,6 +3700,8 @@ test("uploaded visual tone image is sent to generation as upload mode", async ({
 
   await page.getByTestId("article-primary-button").click();
 
+  // The routed request is handled in the test process after click() returns; wait for it first.
+  await expect.poll(() => generationVisualTone).toBeDefined();
   expect(uploadCalls).toBe(1);
   expect(generationVisualTone).toMatchObject({
     mode: "upload",
@@ -3727,7 +3821,7 @@ test("previous closing text and author inputs can be reused from local storage",
     await route.fulfill({ json: { ok: true, logs: [] } });
   });
 
-  await page.goto("/demo-login");
+  await page.goto("/login");
   await page.evaluate((imageUrl) => {
     window.localStorage.setItem(
       "aio-last-closing-text",
@@ -3743,8 +3837,7 @@ test("previous closing text and author inputs can be reused from local storage",
       }),
     );
   }, previousAuthorImageUrl);
-  await page.getByTestId("demo-access-code").fill("202607");
-  await page.getByTestId("demo-login-submit").click();
+  await submitLogin(page);
   await page.waitForURL("**/");
 
   await openInputStep(page, "theme");
@@ -4353,12 +4446,11 @@ test("after a reload whose status checks are lost, the button re-checks the job 
     }
     await route.fallback();
   });
-  await page.goto("/demo-login");
+  await page.goto("/login");
   await page.evaluate(() => {
     window.localStorage.setItem("aio-active-generation-job-id", "job-completed-1");
   });
-  await page.getByTestId("demo-access-code").fill("202607");
-  await page.getByTestId("demo-login-submit").click();
+  await submitLogin(page);
   await page.waitForURL("**/");
   await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（通信が切断されました）", { timeout: 20_000 });
   // No status read succeeded, so the form was never restored and a new start would lack input.
@@ -4687,13 +4779,19 @@ async function openInputStep(
   await expect(page.getByTestId(`input-wizard-step-${step}`)).toBeVisible();
 }
 
+/** Fills the login form with the test-only account (tests/helpers/login-accounts.ts) and submits. */
+async function submitLogin(page: Page, password: string = testLoginAccount.password) {
+  await page.getByTestId("login-email").fill(testLoginAccount.email);
+  await page.getByTestId("login-password").fill(password);
+  await page.getByTestId("login-submit").click();
+}
+
 async function login(
   page: Page,
   { preparePrimaryInfo = true }: { preparePrimaryInfo?: boolean } = {},
 ) {
-  await page.goto("/demo-login");
-  await page.getByTestId("demo-access-code").fill("202607");
-  await page.getByTestId("demo-login-submit").click();
+  await page.goto("/login");
+  await submitLogin(page);
   await page.waitForURL("**/");
 
   if (preparePrimaryInfo) {

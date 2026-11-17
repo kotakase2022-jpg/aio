@@ -15,8 +15,12 @@ PCブラウザ向けのAIO記事半自動生成MVPです。参照情報、競合
 ```bash
 cp .env.example .env.local
 npm install
+npm run auth:create-user -- you@example.com
 npm run dev
 ```
+
+Put the printed value into `AIO_AUTH_USERS` in `.env.local` (single-quoted) and log in with the
+printed password. Without `AIO_AUTH_USERS` nobody can log in.
 
 Required for local article generation:
 
@@ -37,9 +41,17 @@ Required for production WordPress credential storage:
 
 - `WORDPRESS_ENCRYPTION_KEY`
 
-Required for signed demo sessions in production:
+Required for login (every environment, production included):
 
-- `DEMO_AUTH_SECRET` (32文字以上のランダム値。`DEMO_ACCESS_CODE`とは別に管理する)
+- `AIO_AUTH_USERS`: login accounts, a JSON array of `{ "email", "passwordHash" }` entries made with
+  `npm run auth:create-user -- <email>`. Missing, blank or invalid means every login is refused with
+  「認証設定に不備があります。管理者に連絡してください。」 (fail closed).
+- `DEMO_AUTH_SECRET`: session signing secret, 32 or more random characters (required in production).
+  The name is kept from the retired access-code login, so existing deployments need no new secret.
+
+`DEMO_ACCESS_CODE` is no longer read; remove it from Vercel after the release. How to add, change
+and remove accounts, and the release order that avoids locking people out:
+[docs/login-accounts.md](docs/login-accounts.md).
 
 When Supabase is not configured, drafts and WordPress connections are stored in `.data/` for local MVP verification only.
 

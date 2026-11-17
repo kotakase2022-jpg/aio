@@ -27,6 +27,7 @@
     "test:e2e": "playwright test",
     "quality": "npm run typecheck && npm run lint && npm run test:integrity && npm run test && npm run test:contract && npm run test:coverage && npm run test:e2e && npm run build",
     "quality:live": "npm run quality && npm run test:live",
+    "auth:create-user": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/create-login-user.mjs",
     "hook:pre-commit": "npm run lint && npm run test:integrity",
     "hook:pre-push": "npm run lint && npm run typecheck && npm run test:integrity && npm run test && npm run test:contract",
     "prepare": "node scripts/setup-husky.mjs"

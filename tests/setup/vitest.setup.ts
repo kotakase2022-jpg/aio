@@ -8,7 +8,8 @@ const cleanEnv = {
   SUPABASE_GATEWAY_TOKEN: "",
   OPENAI_API_KEY: "test-openai-key",
   WORDPRESS_ENCRYPTION_KEY: "test-wordpress-encryption-key-32-bytes",
-  DEMO_ACCESS_CODE: "202607",
+  // No login account unless a test configures one.
+  AIO_AUTH_USERS: "",
   VERCEL: "",
 };
 

@@ -246,20 +246,23 @@ already-running server. `PLAYWRIGHT_BASE_URL` must not point to a deployed appli
 disabled in this server. External service contracts are covered separately.
 
 After an approved release, `node scripts/production-smoke.mjs` checks the canonical production
-URL with a fresh browser session. It checks authentication, read-only logs, and all six input
-steps. The script blocks application mutations, never generates/saves/posts an article, and keeps
+URL with a fresh browser session. It needs a production login set by the operator
+(`AIO_SMOKE_LOGIN_EMAIL`, `AIO_SMOKE_LOGIN_PASSWORD`; no fallback, for example in the ignored
+`.env.local`). It checks that the retired access-code login is gone, email/password login, read-only
+logs, all six input steps, and that logout ends the session. The script blocks application
+mutations (only logging in and out is allowed), never generates/saves/posts an article, and keeps
 its screenshot under ignored `.verification-files/`. Set `AIO_SMOKE_BASE_URL` to a deployment URL
 in the same project to check it before promotion. This smoke is not a substitute for the full E2E.
 
 Two production checks write data and run only with explicit approval, a confirmation value, and
-`DEMO_ACCESS_CODE` set by the operator:
+the same operator-set production login:
 
 - `scripts/production-article-smoke.mjs` (`AIO_SMOKE_WRITE_CONFIRM=create-one-disposable-article`)
   creates one marker-tagged, image-free article. Since November 16 it also checks that the save
   step reads 「ドラフトを保存しました」 (never 処理中) and that the new log is listed on the first
   page as 完了 / 未投稿.
 - `scripts/production-older-draft-check.mjs`
-  (`AIO_SMOKE_WRITE_CONFIRM=save-own-test-draft-unchanged`; no access-code fallback) opens an
+  (`AIO_SMOKE_WRITE_CONFIRM=save-own-test-draft-unchanged`; no login fallback) opens an
   unposted customer article beyond the first 20 logs read-only and compares the editor with the
   stored title, body and structure/table/FAQ settings. It then saves the release team's own
   `AIO-RELEASE-SMOKE-` article once without changes. Before sending, it blocks the save if the
@@ -330,10 +333,13 @@ Contract tests validate the request and response shape for:
 These tests must never point at production services or production data. When a real staging project
 is added later, use dedicated non-production credentials and disposable records only.
 
+Login in tests uses a test-only account (`tests/helpers/login-accounts.ts`): unit and integration
+tests set `AIO_AUTH_USERS` per test (the Vitest setup clears it), and `playwright.config.ts` gives
+the E2E server that account only. No shared access code exists anymore.
+
 Relevant test-safe variables:
 
 ```bash
-DEMO_ACCESS_CODE=202607
 OPENAI_API_KEY=test-openai-key-not-used-in-ci
 WORDPRESS_ENCRYPTION_KEY=ci-wordpress-encryption-key-32-bytes
 NEXT_PUBLIC_SUPABASE_URL=
