@@ -55,7 +55,6 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - 14:20 the same check with the fixed script, **PASS**:
     - The page-2 customer job `39287a76-875d-4d14-a6da-26f698fe14df` was opened read-only, and its title, body, status, save step, structure, table and FAQ settings matched.
     - One unchanged save of the own 11/13 article (job `4f8e7082-…`, draft `675536f8-…`, on page 1, since no own article is on page 2): fields unchanged, revision advanced, log synced, position kept.
-    - `accessCodeIsRepositoryTestValue: true`.
   - 14:21–14:22 `production-article-smoke.mjs`, **PASS**:
     - One synthetic article (marker `AIO-RELEASE-SMOKE-ba2a0609-402e-432b-a7e5-90ccbd070399`, job `f9f6177c-d568-4a2d-bb2f-3868e2b2110f`, draft `dd20f96b-57c6-4896-a396-d753084abf53`; comparison, table none, FAQ none, image 0, 1000 chars).
     - The first completed poll already showed 「ドラフトを保存しました」.
@@ -86,7 +85,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 ## 6. Known Issues
 - Gateway window: resolved by `aio-store` v6 (`list_job_page`), confirmed in use on 11/17.
 - Accepted by the owner as known limitations (11/17): the late-write duplicate window and the browser clock jump (sections 3b and 7). A full guard needs a save-RPC migration; a follow-up task was suggested.
-- Security, separate task (owner, 11/17): `src/app/api/demo-auth/route.ts` accepts a default code committed in this public repository when `DEMO_ACCESS_CODE` is unset. **Confirmed on 11/17: production accepts that public default code**, so anyone who reads the repository can sign in, read and edit every article, and post through saved WordPress connections. Set a strong production `DEMO_ACCESS_CODE`, redeploy, tell Aizawa the new code, then remove the fallback.
+- Security, separate task (owner, 11/17): `src/app/api/demo-auth/route.ts` accepts a default code committed in this public repository when `DEMO_ACCESS_CODE` is unset. The owner confirms the production `DEMO_ACCESS_CODE` holds a strong, non-default value (sets it and redeploys if not), then the fallback is removed. Production specifics are reported to the owner directly, not in this public repository.
 - Log sync on save/post beyond the 100 most recently updated jobs: fixed in PR #53 (`028e84b`), gateway side deployed (v7); production keeps the old search until the app release (37 jobs today, so no effect yet).
 - Dev-only dependencies: `npm audit` reports 7 moderate advisories (typescript-eslint chain, minimatch); production dependencies 0.
 - The Vercel account `renjihirase-8922` has no two-factor authentication (CLI warning). The tokens saved on environment `aio` for this attempt should be revoked when no longer needed.
@@ -139,8 +138,8 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 
 ## 10. Next Recommended Action
 1. Release the app `028e84b` (PR #53) with the approved steps (stage with `vercel deploy --prod --skip-domain --scope sl2026`, `vercel inspect` Ready, `vercel curl <stage>/api/generation-logs -i` shows the app's own 401, promote, canonical smoke). It needs an account that can access scope `sl2026`: a token from the Windows Vercel CLI account saved on environment `aio`, or the Windows workstation.
-2. After the release, re-run `scripts/production-older-draft-check.mjs` (one unchanged save of the team's own article). The save must have no warning and the log `updatedAt` must advance, which proves `get_job_by_draft` on production.
-3. Access-code task (security, owner first): production accepts the public default code. Set a strong `DEMO_ACCESS_CODE` for Production, redeploy, tell Aizawa, then remove the fallback in `src/app/api/demo-auth/route.ts`.
+2. After the release, re-run `scripts/production-older-draft-check.mjs` (one unchanged save of the team's own article). The save must have no warning, and the log `updatedAt` must advance. That alone does not prove the new path, because the window fallback also finds a job while there are fewer than 100. So also read the `aio-store` stats (`functions.combined-stats`) for the save minute: `client_err_count` must be 0 (no 400 `Unsupported gateway action.`). With v7 deployed and the action called first, that shows `get_job_by_draft` served the sync.
+3. Access-code task (security, owner first): confirm the production `DEMO_ACCESS_CODE` is a strong, non-default value; if not, set it for Production, redeploy, and tell Aizawa the new code. Then remove the fallback in `src/app/api/demo-auth/route.ts`.
 4. Send Aizawa the report. The draft is in the follow-up doc, filled with verified facts; keep the bracketed sentence about PR #53 only after its release. The owner sends it.
 5. Cleanup, with approval: the three own test articles in section 12. Revoke Vercel tokens that are no longer needed, and the Supabase token if unneeded.
 6. Optional: delete the Windows release clone `aio-release-20261116`; it holds a Vercel OIDC token in `.env.local`.
