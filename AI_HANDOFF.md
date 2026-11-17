@@ -2,11 +2,11 @@
 
 ## 0. Current Loop Phase
 - Current owner: Claude Code
-- Next owner: User / Codex (release on the Windows workstation, which holds the Vercel CLI login)
+- Next owner: User / Codex (remaining: production write checks after the access-code task; customer report send by the user)
 - Loop: 10
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
-- Phase: PR #50 released to production (smoke PASS). Self-verification after release found 5 issues; fixes on branch `claude/aizawa-nov16-production-checks` (PR pending; app release then a separately approved `aio-store` deploy, see section 5)
-- Last updated: 2026-11-16 (UTC session; Claude Code cloud container)
+- Phase: PR #50 (11/16) and PR #51 (11/17) released to production; `aio-store` v6 deployed (section 2). Production write checks still pending.
+- Last updated: 2026-11-17 (UTC session; Claude Code cloud container)
 
 ## 1. Current Goal
 Aizawa 11/16 re-verification: the four article structures were confirmed fine. Remaining items:
@@ -16,7 +16,16 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 
 ## 2. Current Branch / Commit / PR
 - PR kotakase2022-jpg/aio#50 (`claude/aizawa-nov16-logs-and-save-status`) merged to main as `ed81c15`; production deployment `dpl_3TyMQRKm6Z63o55mPRoysRvKnSKu` promoted by the user on the Windows workstation (11/16 20:42 JST build). Read-only smoke on the canonical URL PASS (logs pages 2 / listed 36 / unpostedCompleted 32 / complete true). Rollback = promote `dpl_9aoGSRfatAYc1MqScMyPTgPecVAU` (previous production).
-- Follow-up branch `claude/aizawa-nov16-production-checks` from `ed81c15`: gated production check scripts + self-verification fixes (section 3b). No migration, no env change. It changes the `aio-store` Edge Function source (additive action), which needs its own approved deploy.
+- PR kotakase2022-jpg/aio#51 (`claude/aizawa-nov16-production-checks`) squash-merged as `efebb89` on 11/17 after the owner's decisions (section 7). Main CI PASS.
+- App release 2026-11-17, by the user on the Windows workstation:
+  - Staged `efebb89` as `dpl_4GpH2wKgF3rAmoYN8HSvt7h6LtVJ` (Ready; local tree clean). The stage is SSO-protected, so instead of the smoke: `vercel curl` showed the app's own 401 with its security headers.
+  - Promoted, then the read-only smoke on the canonical URL PASS (logs pages 2 / listed 36 / unpostedCompleted 32 / complete true).
+  - Rollback = promote `dpl_3TyMQRKm6Z63o55mPRoysRvKnSKu` (PR #50).
+- `aio-store` Edge Function, Supabase project `npdyfhqugniuxfxpgngh` (dashboard name `esg-chat-data-analysis`): v5 → v6 at 2026-11-17 13:10 JST. Deployed from this cloud session (owner approved) with Supabase CLI 3.2.0 `functions deploy --use-api --no-verify-jwt --yes` and an access token the owner saved as a network secret on the personal environment `aio`.
+  - Before: v5 source matched `ed81c15` except one trailing blank line.
+  - After: v6 = `efebb89` (contains `list_job_page`), ACTIVE, `verify_jwt` false. OPTIONS 200; an invalid gateway token gets the function's own 401 (so it boots and reads its token table).
+  - Not yet confirmed: that the app actually reads the list through `list_job_page`, rather than the fallback. See section 10, step 1. A `+00:00` cursor proves it only when production uses the gateway path alone.
+  - Rollback = redeploy the v5 source (`git show ed81c15:supabase/functions/aio-store/index.ts`; a downloaded copy is in the ignored `.verification-files/aio-store-backup-v5/`).
 
 ## 3. What Was Done
 - ③ cursor pagination for generation logs: `GET /api/generation-logs?cursor=&limit=` returns `{ logs, nextCursor, complete }`; first-page URL unchanged. Stable order = creation time desc + id (saving/posting no longer moves a log between pages). Supabase direct: SQL keyset; gateway (production): pages inside the existing `list_jobs` window (100 jobs / 400 newest-updated rows) and reports `complete:false` when that window is full; local: in-memory keyset. UI: 「さらに古いログを表示（20件ずつ）」, count badge, end/incomplete notices, load-more error keeps the list, automatic refresh keeps the loaded range (≤100).
@@ -40,12 +49,15 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 ## 5. Current Status
 - Local quality gate: see section 9 (all steps run in this session on 2026-11-16).
 - Repro-first: ② 3 failed / 0 passed before fix; ③ 17 failed / 1 passed before fix (the passing one is the auth-gate regression guard); stale-overwrite test fails when the save route is reverted to the old call.
-- PR #50: deployed and read-only smoke verified (section 2). The approved write checks (existing unposted draft save, one synthetic generation) have NOT been completed.
-- Follow-up fixes: local gate in section 9; PR, CI, app release and the separately approved `aio-store` deploy pending (order in `docs/aizawa-nov16-followup.md` §自己検証で見つけた不具合と修正).
-- No production data written by this session. No WordPress post. No paid AI call. No message to Aizawa (draft only).
+- PR #50 and PR #51: deployed; read-only smoke verified on both releases (section 2).
+- `aio-store` v6 deployed and boot-checked; the app-side `list_job_page` confirmation is pending (section 2).
+- The approved write checks have NOT been completed: an existing unposted draft save and one synthetic generation. The first attempt stopped at login because the entered access code was rejected; nothing was written. The checks are paused until the access-code task.
+- No application data written by this session. The Edge Function deploy is the only production change made from here. No WordPress post. No paid AI call. No message to Aizawa (draft only).
 
 ## 6. Known Issues
-- Gateway window: until `aio-store` with `list_job_page` is deployed, >100 jobs may leave older logs unlisted (the UI says so). Whether the deployed `aio-store` equals this repository's source was not verified from this container.
+- Gateway window: resolved by `aio-store` v6 (`list_job_page`), pending the app-side confirmation in section 2. Until then the app falls back to the old window, where more than 100 jobs may leave older logs unlisted (the UI says so).
+- Accepted by the owner as known limitations (11/17): the late-write duplicate window and the browser clock jump (sections 3b and 7). A full guard needs a save-RPC migration; a follow-up task was suggested.
+- Security, separate task (owner, 11/17): `src/app/api/demo-auth/route.ts` accepts a default code committed in this public repository when `DEMO_ACCESS_CODE` is unset. First confirm or set the production variable, then remove the fallback. A follow-up task was suggested.
 - Log sync on save/post (`syncGenerationJobDraft`, `markGenerationJobWordpressPost`) still scans the 100 most recently updated jobs (pre-existing). Beyond that, the log title/WordPress state may not refresh; the draft itself is saved.
 - WordPress post requests have no client timeout (existing reservation prevents duplicates).
 - Compare-and-set protects against delays after the server reads the revision, not before.
@@ -93,10 +105,14 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
 ## 10. Next Recommended Action
-1. Review and merge the follow-up PR after required CI + CodeRabbit; release the app with the same Vercel procedure (stage → smoke → promote → smoke). Rollback = promote the previous production deployment.
-2. With explicit approval only: deploy `supabase/functions/aio-store` (same settings as 11/09: custom token auth, `verify_jwt=false`), then confirm the log list pages end with 「最も古い生成ログまで表示しています。」.
-3. With explicit approval and the correct access code: run `scripts/production-older-draft-check.mjs` (one unchanged save of the team's own test article) and then `scripts/production-article-smoke.mjs` (one paid generation).
-4. Then send Aizawa the guide (draft in the follow-up doc), after replacing placeholders with verified facts.
+1. Confirm the app reads the list through `list_job_page`:
+   1. Confirm production uses only the gateway path: `SUPABASE_SERVICE_ROLE_KEY` is not set for Production (names only: `npx vercel env ls production --scope sl2026`). The direct Supabase path also issues `+00:00` cursors.
+   2. In a logged-in browser, open `/api/generation-logs?limit=1` and decode `nextCursor` (base64url JSON).
+   3. With the gateway path only, `c` ending with `+00:00` means `list_job_page`. Ending with `Z` means the old window fallback.
+2. Access-code task (separate, owner first): confirm or set the production `DEMO_ACCESS_CODE`, then remove the default fallback in `src/app/api/demo-auth/route.ts`.
+3. With the correct access code: run `scripts/production-older-draft-check.mjs` (one unchanged save of the team's own test article), then `scripts/production-article-smoke.mjs` (one paid generation).
+4. Send Aizawa the report after replacing the remaining placeholders with verified facts. The draft is in the follow-up doc; the owner sends it.
+5. Optional: delete the Windows release clone `aio-release-20261116`; it holds a Vercel OIDC token in `.env.local`.
 
 ## 11. Suggested Review Scope for Codex
 - `listGenerationLogsPage` (three storage paths) and `decodeGenerationLogCursor` input validation.
