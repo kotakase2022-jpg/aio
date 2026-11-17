@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { createSampleDraft } from "../fixtures/article";
+import { createCompletedGenerationJob, createSampleDraft } from "../fixtures/article";
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 import { deltaNov11Form } from "../fixtures/delta-nov11";
 import { buildDraftArticleHtml } from "@/lib/draft-html";
@@ -278,6 +278,55 @@ describe("WordPress connection and posting", () => {
       String(url).endsWith("/wp-json/wp/v2/posts"),
     );
     expect(postCall?.[2]).toMatchObject({ maxResponseBytes: 10 * 1024 * 1024 });
+  });
+
+  test("posting the oldest of 120 articles marks its own generation log as posted", async () => {
+    const { saveWordpressConnection, publishDraftToWordpress } = await import(
+      "@/lib/server/wordpress"
+    );
+    const { getGenerationJob } = await import("@/lib/server/generation-jobs");
+    const template = createCompletedGenerationJob();
+    // Index 0 is the oldest article and the least recently updated job: outside the 100 most
+    // recently updated jobs that the log sync used to search.
+    const jobs = Array.from({ length: 120 }, (_, index) => {
+      const at = new Date(Date.UTC(2026, 9, 1) + index * 60_000).toISOString();
+      const draft = createSampleDraft({
+        id: `draft-wp-log-${index}`,
+        status: index === 0 ? "approved" : "draft",
+        categories: [],
+        tags: [],
+        images: [],
+        createdAt: at,
+        updatedAt: at,
+      });
+      return { ...template, id: `job-wp-log-${index}`, draft, draftId: draft.id, createdAt: at, updatedAt: at, completedAt: at };
+    });
+    await writeFile(path.join(tempDir, "generation-jobs.json"), JSON.stringify(Object.fromEntries(jobs.map((job) => [job.id, job]))), "utf8");
+    await writeFile(path.join(tempDir, "drafts.json"), JSON.stringify(Object.fromEntries(jobs.map((job) => [job.draft.id, job.draft]))), "utf8");
+    const connection = await saveWordpressConnection({
+      siteUrl: "https://wordpress.example.com",
+      username: "editor",
+      applicationPassword: "secret-app-password",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ id: 126, link: "https://wordpress.example.com/oldest-article" }, { status: 201 })),
+    );
+
+    const result = await publishDraftToWordpress({
+      draft: jobs[0].draft,
+      connectionId: connection.id,
+      status: "draft",
+      origin: "http://localhost",
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(await getGenerationJob("job-wp-log-0")).toMatchObject({
+      wordpressPostStatus: "draft",
+      wordpressPostUrl: "https://wordpress.example.com/oldest-article",
+      draft: { id: "draft-wp-log-0", status: "posted" },
+    });
+    expect((await getGenerationJob("job-wp-log-1"))?.wordpressPostStatus).toBeUndefined();
   });
 
   test("sends the same canonical FAQ and public sources used by the final HTML renderer", async () => {
