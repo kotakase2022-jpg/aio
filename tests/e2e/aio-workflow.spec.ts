@@ -3522,7 +3522,8 @@ test("generation cancel failure keeps the job active and recoverable", async ({ 
   await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
   await page.getByTestId("article-primary-button").click();
 
-  expect(cancelCalls).toBe(1);
+  // The routed cancel request is counted in the test process after click() returns; wait for it.
+  await expect.poll(() => cancelCalls).toBe(1);
   await expect(page.getByText(/記事作成の停止に失敗しました。/)).toBeVisible();
   await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
   await expect(

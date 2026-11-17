@@ -18,6 +18,7 @@
 
 ## 2. Current Branch / Commit / PR
 - This task: branch `claude/zen-mendel-fuml66` from main `4a3d69b`; PR kotakase2022-jpg/aio#55 (open). Production was not changed by this session: no deploy, no environment change, no request to the production app.
+- main moved on while this PR was open: `028e84b` = PR kotakase2022-jpg/aio#53, from another Claude session. It syncs older articles into their own log row and adds the `aio-store` action `get_job_by_draft`, an addition; the app falls back on the old gateway. It was merged into this branch, and the checks were run again (section 9). #53 did not update this file; its release state (app and Edge Function) is not recorded here, so check that PR.
 - Still current from the previous task:
   - Production runs PR kotakase2022-jpg/aio#51 (`efebb89`), deployment `dpl_4GpH2wKgF3rAmoYN8HSvt7h6LtVJ`, promoted 11/17 by the user on the Windows workstation; read-only smoke PASS. Rollback = promote `dpl_3TyMQRKm6Z63o55mPRoysRvKnSKu` (PR #50).
   - `aio-store` Edge Function v6 (`list_job_page`), Supabase project `npdyfhqugniuxfxpgngh` (dashboard name `esg-chat-data-analysis`), deployed 11/17 13:10 JST. Rollback = redeploy the v5 source (`git show ed81c15:supabase/functions/aio-store/index.ts`). Whether the app actually reads through `list_job_page` is still unconfirmed (section 10, step 7).
@@ -45,7 +46,9 @@
   - `production-smoke.mjs` additionally checks that the retired access-code login is gone and that logout ends the session.
   - `accessCodeIsRepositoryTestValue` was removed from the older-draft check record.
 - Test configuration: CI and Vitest no longer set `DEMO_ACCESS_CODE`; Vitest clears `AIO_AUTH_USERS` before each test; the E2E server gets only the test-only account from `tests/helpers/login-accounts.ts`.
-- Test robustness (pre-existing race): `uploaded visual tone image is sent to generation as upload mode` read the routed request right after `click()` without waiting. It failed once in a full run and passed 15/15 alone. It now waits for that request; the assertions are unchanged.
+- Test robustness (pre-existing races, same pattern as the loop-10 fix of `user can stop an in-progress generation job`): two E2E tests asserted, right after `click()`, on a value that the Playwright route callback sets only later in the test process. Each now waits for that value; the assertions are unchanged.
+  - `uploaded visual tone image is sent to generation as upload mode` failed once in a full run (15/15 alone).
+  - `generation cancel failure keeps the job active and recoverable` failed once in the merged-tree run (15/15 alone after the fix).
 
 ## 3b. Previous task in this loop (PR #50 / #51, released)
 - ③ cursor-paged generation logs (`GET /api/generation-logs?cursor=&limit=`, creation time + id order; gateway `list_job_page` with fallback) and ② the save step no longer freezes on 「処理中」. Details and the customer guide: `docs/aizawa-nov16-followup.md`.
@@ -71,6 +74,7 @@
 - Account changes need a redeploy (environment variable). There is no self-service password change or reset; the operator re-issues.
 - All accounts share one workspace (drafts, logs, WordPress connections); no per-user isolation (as before).
 - `scripts/check-test-integrity.mjs` matches braces without understanding comments: an apostrophe in a comment inside a test body hides that test's assertions ("does not appear to contain an assertion"). Avoid apostrophes in such comments, or fix the guard in a separate task.
+- Other E2E tests may still read a route-callback value right after `click()` (the races fixed in section 3). One left as is, `expect(submittedImageCount).toBe(0)` near line 1114, cannot fail that way: an early read also gives 0, so it may pass without proving anything. A separate test-robustness pass is worth doing.
 - From the previous task, still open:
   - Gateway: the app-side `list_job_page` confirmation is pending; until confirmed, more than 100 jobs may leave older logs unlisted (the UI says so).
   - Accepted by the owner (11/17): the late-write duplicate window and the browser clock jump. A full guard needs a save-RPC migration.
@@ -97,6 +101,8 @@
   - Coverage S/B/F/L 88.67 / 80.70 / 93.47 / 89.30 %. New auth code: route 100 % statements, `auth-users.ts` 100 %, `login-credentials.ts` 100 % statements, `auth-session.ts` 96.6 %.
   - E2E 84/84 PASS (82 existing + 2 new), run again after the last header change.
   - Build PASS (19 routes; `/login` and `/api/auth/session` replace the two retired routes).
+- After merging main (`028e84b`, PR #53) into this branch: typecheck, lint, integrity (68 files) PASS; 62 files / 666 tests PASS (#53 adds 8); contract 15 PASS; build PASS; E2E 85/85 PASS (#53 adds 1). The first merged-tree E2E run hit the cancel race (section 3), which was then fixed.
+- GitHub CI on `a81ada3` (before the merge): `Typecheck, lint, tests, E2E, build` success.
 - Not first-time green:
   - The integrity guard failed once on an apostrophe in a test comment; the comment was reworded (section 6).
   - The first full E2E run had 2 failures: (1) the new logout test caught a real defect (logout navigated before reading the response, so Chrome reported the request as aborted; fixed); (2) the pre-existing visual-tone race (section 3). The re-run passed 84/84.
