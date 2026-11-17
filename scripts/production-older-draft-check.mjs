@@ -190,7 +190,7 @@ try {
   const rowOf = (jobId) => rows.filter({ has: page.getByTestId(`generation-log-open-${jobId}`) });
   await page.getByTestId("generation-logs-toggle").click();
   await expect(rows.first()).toBeVisible();
-  const openFromList = async (jobId) => {
+  const openFromList = async (jobId, expectedTitle) => {
     const button = page.getByTestId(`generation-log-open-${jobId}`);
     for (let attempt = 0; (await button.count()) === 0; attempt += 1) {
       // Never more clicks than the pages listed through the API before this check.
@@ -202,6 +202,9 @@ try {
     await expect(rowOf(jobId)).toContainText("完了");
     await expect(rowOf(jobId)).toContainText("未投稿");
     await button.click();
+    // The screen switches to the preview once the article has loaded. Edit only after that: on
+    // production the load takes seconds, and a late load would switch the editor away again.
+    await expect(page.getByRole("article").locator("h1").first()).toHaveText(expectedTitle);
   };
   const verifyEditorShows = async (job) => {
     const draft = job.draft;
@@ -227,7 +230,7 @@ try {
     const job = await readJob(customer.log.id);
     // Draft or approved-but-unposted; either way it is only opened here.
     assert.ok(job.status === "completed" && job.draft && job.draft.status !== "posted", "the page-2 article is not an unposted article");
-    await openFromList(customer.log.id);
+    await openFromList(customer.log.id, job.draft.editedTitle);
     await verifyEditorShows(job);
     record.pageTwoReadOnlyOpen = { jobId: customer.log.id, page: pageOf(customer.index), saved: false, editorMatchesStored: true };
   } else {
@@ -248,7 +251,7 @@ try {
     );
     record.ownSave = { jobId: job.id, draftId: draft.id, page: pageOf(own.index) };
     await persist();
-    await openFromList(job.id);
+    await openFromList(job.id, draft.editedTitle);
     await verifyEditorShows(job);
 
     saveGate = { draft };
@@ -272,10 +275,13 @@ try {
     await page.reload();
     await expect(page.getByTestId("input-wizard-step-references")).toBeVisible();
     await page.getByTestId("generation-logs-toggle").click();
-    await openFromList(job.id);
+    await openFromList(job.id, draft.editedTitle);
     const reloaded = await readJob(job.id);
     assert.deepEqual(changedFields(reloaded.draft, draft), [], "the unchanged save altered stored fields");
     assert.ok(Date.parse(reloaded.draft.updatedAt) > Date.parse(draft.updatedAt), "the save did not reach the stored article");
+    // The save also syncs the article into its own generation log. A log the sync could not find
+    // keeps its previous time, so this proves the lookup by draft ID found the job.
+    assert.ok(Date.parse(reloaded.updatedAt) > Date.parse(job.updatedAt), "the save did not reach the article's generation log");
     await verifyEditorShows(reloaded);
 
     const after = await readAllLogs();
@@ -292,6 +298,8 @@ try {
       savedMessageShown: true,
       storedFieldsUnchanged: true,
       revisionAdvanced: true,
+      generationLogSynced: true,
+      storageMode: savedBody.storageMode,
       listPositionUnchanged: true,
       pageAfter: pageOf(indexAfter),
     });

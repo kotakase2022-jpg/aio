@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { NextRequest } from "next/server";
@@ -257,6 +257,191 @@ describe("generation log pages (Supabase gateway)", () => {
     expect(callSupabaseGateway.mock.calls.map(([action]) => action)).toEqual(["list_job_page"]);
   });
 });
+
+describe("log sync for articles outside the 100 most recently updated jobs", () => {
+  test("saving, approving and posting the oldest of 120 articles updates its own log entry", async () => {
+    const jobs = await writeLocalJobsUpdatedInCreationOrder(120);
+    const target = jobs[0];
+    const { POST: saveDraftRoute } = await import("@/app/api/save-draft/route");
+    const { POST: approveDraftRoute } = await import("@/app/api/approve-draft/route");
+    const { markGenerationJobWordpressPost } = await import("@/lib/server/generation-jobs");
+    const before = findListedLog(await readAllPages(), target.id);
+    expect(before).toMatchObject({ outputTitle: "Archived article 00", draftStatus: "draft" });
+
+    const saveResponse = await saveDraftRoute(new Request("http://localhost/api/save-draft", {
+      method: "POST",
+      body: JSON.stringify({ draft: { ...target.draft!, editedTitle: "Archived article 00 (edited)" } }),
+    }));
+    expect(saveResponse.status).toBe(200);
+    expect(((await saveResponse.json()) as { warnings: string[] }).warnings).toEqual([]);
+    expect(findListedLog(await readAllPages(), target.id)).toMatchObject({ outputTitle: "Archived article 00 (edited)", draftStatus: "draft" });
+
+    const approveResponse = await approveDraftRoute(new Request("http://localhost/api/approve-draft", {
+      method: "POST",
+      body: JSON.stringify({ draftId: target.draft!.id }),
+    }));
+    expect(approveResponse.status).toBe(200);
+    expect(findListedLog(await readAllPages(), target.id)).toMatchObject({ draftStatus: "approved" });
+
+    await markGenerationJobWordpressPost({ draftId: target.draft!.id, status: "draft", postUrl: "https://wordpress.example.com/?p=120" });
+    const pages = await readAllPages();
+    expect(findListedLog(pages, target.id)).toMatchObject({
+      outputTitle: "Archived article 00 (edited)",
+      draftStatus: "posted",
+      wordpressPostStatus: "draft",
+      wordpressPostUrl: "https://wordpress.example.com/?p=120",
+    });
+    // Only the target log changed; the list keeps all 120 entries in creation order.
+    const listed = pages.flatMap((page) => page.logs);
+    expect(listed.map((log) => log.id)).toEqual(newestCreatedFirst(jobs).map((job) => job.id));
+    expect(listed.filter((log) => log.wordpressPostStatus)).toHaveLength(1);
+  });
+
+  test("the gateway looks the job up by draft ID instead of searching the newest-updated window", async () => {
+    const gatewayJobs = Array.from({ length: 150 }, (_, index) => buildGatewayJob(index));
+    const target = gatewayJobs[0];
+    const store = new Map(gatewayJobs.map((job) => [job.id, structuredClone(job)]));
+    const callSupabaseGateway = mockGateway(async (action, payload) => gatewayJobStore(store, action, payload));
+    const { syncGenerationJobDraft, markGenerationJobWordpressPost } = await import("@/lib/server/generation-jobs");
+
+    await syncGenerationJobDraft({ ...target.draft!, editedTitle: "Edited oldest gateway article" });
+    await markGenerationJobWordpressPost({ draftId: target.draftId!, status: "publish", postUrl: "https://wordpress.example.com/?p=150" });
+
+    expect(callSupabaseGateway.mock.calls.map(([action]) => action)).toEqual([
+      "get_job_by_draft", "get_job", "upsert_job",
+      "get_job_by_draft", "get_job", "upsert_job",
+    ]);
+    expect(callSupabaseGateway.mock.calls[0][1]).toEqual({ draftId: target.draftId });
+    expect(store.get(target.id)).toMatchObject({
+      draft: { editedTitle: "Edited oldest gateway article", status: "posted", wordpressPostUrl: "https://wordpress.example.com/?p=150" },
+      wordpressPostStatus: "publish",
+      wordpressPostUrl: "https://wordpress.example.com/?p=150",
+    });
+  });
+
+  test("a gateway without get_job_by_draft keeps the newest-updated window search and is asked only once", async () => {
+    const gatewayJobs = Array.from({ length: 30 }, (_, index) => buildGatewayJob(index));
+    const store = new Map(gatewayJobs.map((job) => [job.id, structuredClone(job)]));
+    const { ApiError } = await import("@/lib/server/http");
+    const callSupabaseGateway = mockGateway(async (action, payload) => {
+      // As deployed before November 17: unknown actions are rejected with this exact message.
+      if (action === "get_job_by_draft") throw new ApiError("Unsupported gateway action.", 400);
+      if (action === "list_jobs") {
+        expect(payload).toEqual({ limit: 100 });
+        return { jobs: [...store.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
+      }
+      return gatewayJobStore(store, action, payload);
+    });
+    const { syncGenerationJobDraft } = await import("@/lib/server/generation-jobs");
+
+    await syncGenerationJobDraft({ ...gatewayJobs[3].draft!, editedTitle: "Saved through the old gateway" });
+    await syncGenerationJobDraft({ ...gatewayJobs[4].draft!, editedTitle: "Saved again through the old gateway" });
+
+    expect(callSupabaseGateway.mock.calls.map(([action]) => action)).toEqual([
+      "get_job_by_draft", "list_jobs", "get_job", "upsert_job",
+      "list_jobs", "get_job", "upsert_job",
+    ]);
+    expect(store.get(gatewayJobs[3].id)?.draft?.editedTitle).toBe("Saved through the old gateway");
+    expect(store.get(gatewayJobs[4].id)?.draft?.editedTitle).toBe("Saved again through the old gateway");
+  });
+
+  test("other failures of the gateway draft lookup are reported, not mistaken for an old gateway", async () => {
+    const target = buildGatewayJob(0);
+    const { ApiError } = await import("@/lib/server/http");
+    const callSupabaseGateway = mockGateway(async () => {
+      throw new ApiError("Supabase gateway request failed.", 500);
+    });
+    const { syncGenerationJobDraft } = await import("@/lib/server/generation-jobs");
+
+    await expect(syncGenerationJobDraft(target.draft!)).rejects.toMatchObject({ status: 500 });
+    expect(callSupabaseGateway.mock.calls.map(([action]) => action)).toEqual(["get_job_by_draft"]);
+  });
+
+  test("the service-role path reads one row filtered by the draft ID", async () => {
+    const target = buildGatewayJob(0);
+    const query = mockSupabaseQuery({
+      data: [{ id: target.id, input_payload: target, created_at: target.createdAt.replace("Z", "+00:00"), updated_at: target.updatedAt }],
+      error: null,
+    });
+    const { findGenerationJobForDraft } = await import("@/lib/server/generation-jobs");
+
+    await expect(findGenerationJobForDraft(target.draftId!)).resolves.toMatchObject({ id: target.id, draftId: target.draftId });
+    expect(query.calls).toEqual([
+      ["select", "id,input_payload,created_at,updated_at"],
+      ["eq", "input_payload->>kind", "article_generation_job"],
+      ["or", `input_payload->>draftId.eq.${target.draftId},input_payload->draft->>id.eq.${target.draftId}`],
+      ["order", "updated_at", { ascending: false }],
+      ["limit", 1],
+    ]);
+  });
+
+  test("a draft ID that is not a UUID never reaches the service-role filter", async () => {
+    const query = mockSupabaseQuery({ data: [], error: null });
+    const { findGenerationJobForDraft } = await import("@/lib/server/generation-jobs");
+
+    await expect(findGenerationJobForDraft('x,input_payload->>kind.neq.article_generation_job')).resolves.toBeNull();
+    expect(query.calls.some(([method]) => method === "or")).toBe(false);
+  });
+
+  test("returns a Japanese error when the service-role draft lookup fails", async () => {
+    mockSupabaseQuery({ data: null, error: { message: "job lookup failed" } });
+    const { findGenerationJobForDraft } = await import("@/lib/server/generation-jobs");
+
+    await expect(findGenerationJobForDraft(uuidFor(7))).rejects.toMatchObject({
+      message: "生成ログの読み込みに失敗しました。",
+      detail: "job lookup failed",
+      status: 500,
+    });
+  });
+});
+
+// Writes the local store directly: index 0 is the oldest article and also the least recently
+// updated job, so it lies outside the 100 most recently updated jobs.
+async function writeLocalJobsUpdatedInCreationOrder(count: number) {
+  const jobs = Array.from({ length: count }, (_, index) => {
+    const job = buildJob(index);
+    const updatedAt = new Date(baseTime + index * 60_000 + 30_000).toISOString();
+    return { ...job, updatedAt, completedAt: updatedAt, draft: { ...job.draft!, updatedAt } };
+  });
+  await writeFile(path.join(tempDir, "generation-jobs.json"), JSON.stringify(Object.fromEntries(jobs.map((job) => [job.id, job]))), "utf8");
+  await writeFile(path.join(tempDir, "drafts.json"), JSON.stringify(Object.fromEntries(jobs.map((job) => [job.draft.id, job.draft]))), "utf8");
+  return jobs;
+}
+
+function findListedLog(pages: GenerationLogPage[], id: string) {
+  const matches = pages.flatMap((page) => page.logs).filter((log) => log.id === id);
+  expect(matches).toHaveLength(1);
+  return matches[0];
+}
+
+// A job with UUID job and draft IDs, as stored in article_inputs / article_drafts.
+function buildGatewayJob(index: number): GenerationJob {
+  const job = buildJob(index, uuidFor(index));
+  const updatedAt = new Date(baseTime + index * 60_000 + 30_000).toISOString();
+  const draft = { ...job.draft!, id: `11111111-0000-4000-8000-${String(index).padStart(12, "0")}`, updatedAt };
+  return { ...job, draft, draftId: draft.id, updatedAt, completedAt: updatedAt };
+}
+
+// In-memory model of the aio-store job actions used by the log sync.
+function gatewayJobStore(store: Map<string, GenerationJob>, action: string, payload: unknown) {
+  if (action === "get_job_by_draft") {
+    const { draftId } = payload as { draftId: string };
+    const matches = [...store.values()]
+      .filter((job) => job.draftId === draftId || job.draft?.id === draftId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return Promise.resolve({ job: structuredClone(matches[0] ?? null) });
+  }
+  if (action === "get_job") {
+    return Promise.resolve({ job: structuredClone(store.get((payload as { id: string }).id) ?? null) });
+  }
+  if (action === "upsert_job") {
+    const { job, expectedUpdatedAt } = payload as { job: GenerationJob; expectedUpdatedAt?: string };
+    if (expectedUpdatedAt && store.get(job.id)?.updatedAt !== expectedUpdatedAt) return Promise.resolve({ job: null });
+    store.set(job.id, structuredClone(job));
+    return Promise.resolve({ job });
+  }
+  throw new Error(`Unexpected gateway action: ${action}`);
+}
 
 function uuidFor(index: number) {
   return `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;

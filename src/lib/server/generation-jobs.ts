@@ -441,7 +441,7 @@ async function listGatewayJobPage(
       complete: true,
     };
   } catch (error) {
-    if (error instanceof ApiError && error.status === 400 && error.message === "Unsupported gateway action.") {
+    if (isUnsupportedGatewayActionError(error)) {
       gatewayJobPageUnsupportedUntil = Date.now() + GATEWAY_JOB_PAGE_RECHECK_MS;
       return null;
     }
@@ -450,6 +450,11 @@ async function listGatewayJobPage(
     }
     throw error;
   }
+}
+
+// How a gateway deployed before an action was added rejects it.
+function isUnsupportedGatewayActionError(error: unknown) {
+  return error instanceof ApiError && error.status === 400 && error.message === "Unsupported gateway action.";
 }
 
 function paginateJobsByCreation(
@@ -497,9 +502,72 @@ function invalidGenerationLogCursorError() {
   );
 }
 
+/**
+ * The generation job whose log shows this draft, looked up by the draft ID itself so that saving
+ * or posting an old article updates its log however many jobs exist. (Searching the most recently
+ * updated jobs missed articles outside that window.) A gateway deployed before get_job_by_draft
+ * can only be searched over its most recently updated jobs, as before.
+ */
+export async function findGenerationJobForDraft(draftId: string): Promise<GenerationJob | null> {
+  assertDurableStorageConfigured("生成ログの取得");
+
+  const supabase = getSupabaseAdmin();
+  const gateway = !supabase && isSupabaseGatewayConfigured();
+  if (!supabase && !gateway) {
+    const store = await readLocalJobs();
+    return newestUpdatedJob(Object.values(store).filter((job) => jobShowsDraft(job, draftId)));
+  }
+
+  // Stored draft IDs are UUIDs (article_drafts.id), which also keeps the filter below well-formed.
+  if (UUID_PATTERN.test(draftId)) {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("article_inputs")
+        .select("id,input_payload,created_at,updated_at")
+        .eq("input_payload->>kind", "article_generation_job")
+        .or(`input_payload->>draftId.eq.${draftId},input_payload->draft->>id.eq.${draftId}`)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      if (error) {
+        throw new ApiError("生成ログの読み込みに失敗しました。", 500, error.message);
+      }
+      return ((data ?? []) as Record<string, unknown>[]).map(rowToJob).find(isGenerationJob) ?? null;
+    }
+    const job = await getGatewayJobForDraft(draftId);
+    if (job !== undefined) return job;
+  }
+
+  const recent = await listGenerationJobs(LEGACY_GATEWAY_JOB_WINDOW);
+  return recent.find((job) => jobShowsDraft(job, draftId)) ?? null;
+}
+
+// Until this time, the gateway is known to predate get_job_by_draft; skip the extra round trip.
+let gatewayJobForDraftUnsupportedUntil = 0;
+
+async function getGatewayJobForDraft(draftId: string): Promise<GenerationJob | null | undefined> {
+  if (Date.now() < gatewayJobForDraftUnsupportedUntil) return undefined;
+  try {
+    const result = await callSupabaseGateway<{ job: GenerationJob | null }>("get_job_by_draft", { draftId });
+    return result.job ?? null;
+  } catch (error) {
+    if (isUnsupportedGatewayActionError(error)) {
+      gatewayJobForDraftUnsupportedUntil = Date.now() + GATEWAY_JOB_PAGE_RECHECK_MS;
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function jobShowsDraft(job: GenerationJob, draftId: string) {
+  return job.draftId === draftId || job.draft?.id === draftId;
+}
+
+function newestUpdatedJob(jobs: GenerationJob[]) {
+  return [...jobs].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+}
+
 export async function syncGenerationJobDraft(draft: ArticleDraft) {
-  const jobs = await listGenerationJobs(100);
-  const job = jobs.find((item) => item.draftId === draft.id || item.draft?.id === draft.id);
+  const job = await findGenerationJobForDraft(draft.id);
   if (!job) {
     return null;
   }
@@ -520,8 +588,7 @@ export async function markGenerationJobWordpressPost({
   status: "draft" | "publish";
   postUrl: string;
 }) {
-  const jobs = await listGenerationJobs(100);
-  const job = jobs.find((item) => item.draftId === draftId || item.draft?.id === draftId);
+  const job = await findGenerationJobForDraft(draftId);
   if (!job) {
     return null;
   }
