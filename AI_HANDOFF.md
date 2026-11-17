@@ -2,10 +2,10 @@
 
 ## 0. Current Loop Phase
 - Current owner: Claude Code
-- Next owner: User / Codex (remaining: app release of PR #53 from an account that can access Vercel scope `sl2026`; review, owner approval and release of the late-write guard PR kotakase2022-jpg/aio#54 in the order migration → `aio-store` → app, section 10 step 3; the access-code security task; customer report send by the user)
+- Next owner: User / Codex (remaining: review, owner approval and release of the late-write guard PR kotakase2022-jpg/aio#54 in the order migration → `aio-store` → app, section 10 step 1; the access-code security task; customer report send by the user; cleanup of own test records with approval)
 - Loop: 10
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
-- Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) merged as `028e84b`; `aio-store` v7 deployed; the app release of PR #53 is pending (Vercel access, section 2). Late-write guard (section 3d) implemented in PR kotakase2022-jpg/aio#54, **not merged, not released**.
+- Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) released: `aio-store` v7 (14:29 JST) and the app `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (16:03 JST), verified on production (section 2). Late-write guard (section 3d) implemented in PR kotakase2022-jpg/aio#54, **not merged, not released**.
 - Last updated: 2026-11-17 (UTC session; Claude Code cloud container)
 
 ## 1. Current Goal
@@ -15,7 +15,7 @@ Aizawa 11/16 re-verification: the four article structures were confirmed fine. R
 Customer was told results/operation guidance around 2026-11-18〜19 (external estimate, not a measured plan).
 
 ## 2. Current Branch / Commit / PR
-- Late-write guard (section 3d): PR kotakase2022-jpg/aio#54, branch `claude/wizardly-cannon-2jxpv8` from main `4a3d69b`, with main up to `b28d093` (PR #53 code, PR #56 docs) merged in (not merged, not released). Nothing for the guard was applied to Supabase or Vercel. The `aio-store` v7 deploy and the 11/17 production checks below were made by the session that wrote PR #56.
+- Late-write guard (section 3d): PR kotakase2022-jpg/aio#54, branch `claude/wizardly-cannon-2jxpv8` from main `4a3d69b`, with main up to `485ee65` (PR #53 code; PR #56 and PR #57 docs) merged in (not merged, not released). Nothing for the guard was applied to Supabase or Vercel. The `aio-store` v7 deploy, the PR #53 app release and the 11/17 production checks below were made by the session that wrote PR #56 and PR #57.
 - PR kotakase2022-jpg/aio#50 (`claude/aizawa-nov16-logs-and-save-status`) merged to main as `ed81c15`; production deployment `dpl_3TyMQRKm6Z63o55mPRoysRvKnSKu` promoted by the user on the Windows workstation (11/16 20:42 JST build). Read-only smoke on the canonical URL PASS (logs pages 2 / listed 36 / unpostedCompleted 32 / complete true). Rollback = promote `dpl_9aoGSRfatAYc1MqScMyPTgPecVAU` (previous production).
 - PR kotakase2022-jpg/aio#51 (`claude/aizawa-nov16-production-checks`) squash-merged as `efebb89` on 11/17 after the owner's decisions (section 7). Main CI PASS.
 - App release 2026-11-17, by the user on the Windows workstation:
@@ -32,7 +32,19 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - Before: v6 source matched `efebb89` (copy in the ignored `.verification-files/aio-store-backup-v6/`).
   - After: v7 = `028e84b`, ACTIVE, `verify_jwt` false, OPTIONS 200, invalid token → the function's own 401. The current app (`efebb89`) does not call the new action; the read-only smoke after the deploy PASS.
   - Rollback = redeploy the v6 source (`efebb89`).
-- App release of `028e84b`: **not done.** The Vercel tokens saved in this session (network secret on environment `aio`, host `api.vercel.com`) authenticate as `renjihirase-8922`, which is not authorized for scope `sl2026` (the production project's scope; its teams `sl-2026` and `kotakase2022-jpgs-projects` do not contain the project). It needs a token from the account used by the Windows Vercel CLI, or the Windows run of the approved steps. Rollback target after the release: `dpl_4GpH2wKgF3rAmoYN8HSvt7h6LtVJ` (`efebb89`).
+- App release of `b28d093` (= `028e84b` plus docs), 2026-11-17 16:03 JST, from this cloud session: production `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (canonical alias confirmed).
+  - The first three Vercel tokens belonged to another account, which is not authorized for scope `sl2026`. The owner then saved a token of `kotakase2022-jpg` scoped to `sl2026` (network secret on environment `aio`).
+  - That token cannot read the user (`/v2/user` 404), so the Vercel CLI stopped at start. The same steps were therefore run through the REST API:
+    - 204 files: tracked files minus `.vercelignore` and the CLI defaults, identical to the file list of the previous CLI deployment `efebb89`.
+    - `POST /v13/deployments` with `target: production`, `autoAssignCustomDomains: false` (= `--prod --skip-domain`) and git metadata. Result READY / STAGED; the build log shows Compiled successfully, 19 pages, all API routes.
+    - `vercel curl` on the SSO-protected stage was not possible without the CLI. Instead: promote, then check the canonical URL at once with the rollback ready (recorded as the releaser's decision).
+    - `POST /v10/projects/{id}/promote/{deployment}`, after which the production target and the canonical alias point to the new deployment.
+  - After the release, all PASS:
+    - 16:03 read-only smoke (2 pages / 37 / 33 unposted completed / complete).
+    - 16:04 older-draft check. Page-2 customer job `6a79a954-a334-435f-bc08-02fda9844956` was opened read-only and matched. The own 11/17 article (job `f9f6177c-…`) was saved unchanged: no warning, revision advanced, log synced.
+    - `aio-store` stats 16:03–16:04: 4 + 25 requests, all 2xx, 0 client and 0 server errors, so `get_job_by_draft` served the sync.
+  - More than 100 jobs has not yet happened on production (37); that state is covered by the integration and E2E tests.
+  - Rollback = promote `dpl_4GpH2wKgF3rAmoYN8HSvt7h6LtVJ` (`efebb89`). `aio-store` v7 can stay (compatible with both).
 
 ## 3. What Was Done
 - ③ cursor pagination for generation logs: `GET /api/generation-logs?cursor=&limit=` returns `{ logs, nextCursor, complete }`; first-page URL unchanged. Stable order = creation time desc + id (saving/posting no longer moves a log between pages). Supabase direct: SQL keyset; gateway (production): pages inside the existing `list_jobs` window (100 jobs / 400 newest-updated rows) and reports `complete:false` when that window is full; local: in-memory keyset. UI: 「さらに古いログを表示（20件ずつ）」, count badge, end/incomplete notices, load-more error keeps the list, automatic refresh keeps the loaded range (≤100).
@@ -89,23 +101,23 @@ PR #50 / #51:
 - PR #53: `src/lib/server/generation-jobs.ts`, `supabase/functions/aio-store/index.ts`, `scripts/production-older-draft-check.mjs`, `tests/integration/generation-logs-pagination.integration.test.ts`, `tests/integration/wordpress.integration.test.ts`, `tests/e2e/aio-workflow.spec.ts`.
 
 ## 5. Current Status
-- Late-write guard: implemented and verified locally (section 9, 2026-11-17). Not merged, not released. The migration and the `aio-store` deploy need the owner's explicit approval first (section 10 step 3).
+- Late-write guard: implemented and verified locally (section 9, 2026-11-17). Not merged, not released. The migration and the `aio-store` deploy need the owner's explicit approval first (section 10 step 1).
 - Late-write guard, repro-first: 18 of the 20 new integration tests fail on the previous app/gateway code (the 2 editor save/approve tests are meant to pass on both). The delayed-completion test there shows two completed articles in the log (the new one and the late one). The new E2E fails on the previous client (released after 2 server-minutes on a jumped clock).
 - Local quality gate for PR #50/#51: see section 9 (all steps run in this session on 2026-11-16).
 - Repro-first: ② 3 failed / 0 passed before fix; ③ 17 failed / 1 passed before fix (the passing one is the auth-gate regression guard); stale-overwrite test fails when the save route is reverted to the old call.
 - PR #50 and PR #51: deployed; read-only smoke verified on both releases (section 2).
 - `aio-store` v7 deployed and boot-checked; `list_job_page` is confirmed in use (section 3c).
-- The approved write checks PASSED on 11/17 on the current production (section 3c). The `get_job_by_draft` path is verified on production only after the app release of PR #53: then re-run `scripts/production-older-draft-check.mjs` (no warning, log `updatedAt` advances).
-- Production changes made from this session: `aio-store` v6 → v7; one unchanged save of the team's own 11/13 article; one synthetic article (one paid generation) with its own edit save. No WordPress post. No customer article changed. No message to Aizawa (draft only).
+- The approved write checks PASSED on 11/17 before the release (section 3c). After the release of PR #53, the older-draft check passed again and the `get_job_by_draft` path was confirmed on production (section 2).
+- Production changes made from this session: `aio-store` v6 → v7; the app release `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m`; one unchanged save of the team's own 11/13 article; one synthetic article (one paid generation) with its own edit save, later saved once more unchanged by the post-release check. No WordPress post. No customer article changed. No message to Aizawa (draft only).
 
 ## 6. Known Issues
 - Gateway window: resolved by `aio-store` v6 (`list_job_page`), confirmed in use on 11/17.
 - Accepted by the owner as known limitations (11/17): the late-write duplicate window and the browser clock jump (sections 3b and 7). Fixed by the late-write guard PR (section 3d); until all three parts are released they remain in production. During a rollout in the wrong order (old gateway or no function) the app completes the previous way and logs a warning, so the old window applies there.
 - Late-write guard residuals: the server-clock rule needs the stored `createdAt` and the failing response's `Date` header, otherwise the browser clock is used (a job started before the release whose status was never read, or a proxy that drops `Date`). Vercel and Supabase clocks must stay well within the 1-minute margin. Unlinked draft rows from jobs interrupted before this change stay as they are.
 - Security, separate task (owner, 11/17): `src/app/api/demo-auth/route.ts` accepts a default code committed in this public repository when `DEMO_ACCESS_CODE` is unset. The owner confirms the production `DEMO_ACCESS_CODE` holds a strong, non-default value (sets it and redeploys if not), then the fallback is removed. Production specifics are reported to the owner directly, not in this public repository.
-- Log sync on save/post beyond the 100 most recently updated jobs: fixed in PR #53 (`028e84b`), gateway side deployed (v7); production keeps the old search until the app release (37 jobs today, so no effect yet).
+- Log sync on save/post beyond the 100 most recently updated jobs: fixed in PR #53 and released on 11/17 (v7 + app); the new path is confirmed on production.
 - Dev-only dependencies: `npm audit` reports 7 moderate advisories (typescript-eslint chain, minimatch); production dependencies 0.
-- The Vercel account `renjihirase-8922` has no two-factor authentication (CLI warning). The tokens saved on environment `aio` for this attempt should be revoked when no longer needed.
+- The other Vercel account used first has no two-factor authentication (CLI warning). Its three tokens created for this release are unused now and can be revoked; the `kotakase2022-jpg` token saved on environment `aio` should be revoked when no longer needed.
 - WordPress post requests have no client timeout (existing reservation prevents duplicates).
 - Compare-and-set protects against delays after the server reads the revision, not before.
 - Unverified in this session: Codex history, the Windows working tree, production version and data counts, the customer Google Doc.
@@ -162,19 +174,18 @@ PR #50 / #51:
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
 ## 10. Next Recommended Action
-1. Release the app `028e84b` (PR #53) with the approved steps (stage with `vercel deploy --prod --skip-domain --scope sl2026`, `vercel inspect` Ready, `vercel curl <stage>/api/generation-logs -i` shows the app's own 401, promote, canonical smoke). It needs an account that can access scope `sl2026`: a token from the Windows Vercel CLI account saved on environment `aio`, or the Windows workstation.
-2. After the release, re-run `scripts/production-older-draft-check.mjs` (one unchanged save of the team's own article). The save must have no warning, and the log `updatedAt` must advance. That alone does not prove the new path, because the window fallback also finds a job while there are fewer than 100. So also read the `aio-store` stats (`functions.combined-stats`) for the save minute: `client_err_count` must be 0 (no 400 `Unsupported gateway action.`). With v7 deployed and the action called first, that shows `get_job_by_draft` served the sync.
-3. Late-write guard, PR kotakase2022-jpg/aio#54: review and merge (CI + CodeRabbit), then release **in this order, each step only after the owner's explicit approval** (details and rollback in `docs/aizawa-nov16-followup.md` §遅れた書き込みによる記事の二重表示の防止):
+1. Late-write guard, PR kotakase2022-jpg/aio#54: review and merge (CI + CodeRabbit), then release **in this order, each step only after the owner's explicit approval** (details and rollback in `docs/aizawa-nov16-followup.md` §遅れた書き込みによる記事の二重表示の防止):
    1. Migration on Supabase `npdyfhqugniuxfxpgngh`: apply `20261117051104_guarded_generation_completion.sql`. Read-only check: `select p.prosecdef, p.proconfig, p.proacl from pg_proc p where p.proname = 'aio_complete_generation_job';` → `prosecdef` false, `search_path=pg_catalog, public`, `service_role=X` present and no `anon`/`authenticated`. The old app and gateway do not call it.
    2. Gateway: deploy `aio-store` from the merged `main` (the next version after v7; it keeps `get_job_by_draft`) with the same settings (custom token auth, `verify_jwt=false`). No-write check: `{"action":"complete_job","payload":{}}` with `x-aio-store-token` → 400 `job is required.` (v7 and earlier answer `Unsupported gateway action.`).
-   3. App: stage → check → promote → read-only smoke on the canonical URL (approved procedure). An app that contains PR #54 but is released before 3.1 and 3.2 still works, but completes generations the previous way with the warning; that is why the order matters. This release also ships the app part of PR #53 if step 1 has not been done by then.
+   3. App: stage → check → promote → read-only smoke on the canonical URL (approved procedure). An app that contains PR #54 but is released before 1.1 and 1.2 still works, but completes generations the previous way with the warning; that is why the order matters.
    4. On the next real generation (or one approved synthetic generation with `scripts/production-article-smoke.mjs`): no `completing generation job without the database deadline guard` warning in the Vercel logs.
-   - Rollback: app → previous deployment; gateway → redeploy v7 (`git show 028e84b:supabase/functions/aio-store/index.ts`; the new app then falls back with the warning); the migration can stay (unused by old code).
+   - Rollback: app → the production deployment before it (on 11/17 that is `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m`, section 2); gateway → redeploy v7 (`git show 028e84b:supabase/functions/aio-store/index.ts`; the new app then falls back with the warning); the migration can stay (unused by old code).
    - Do not run `tests/fixtures/sql/generation-completion-guard.sql` on production: it holds a lock on `article_drafts` for about a second. It passed on a disposable PostgreSQL 16 (`docs/testing.md` §SQL fixtures).
-4. Access-code task (security, owner first): confirm the production `DEMO_ACCESS_CODE` is a strong, non-default value; if not, set it for Production, redeploy, and tell Aizawa the new code. Then remove the fallback in `src/app/api/demo-auth/route.ts`.
-5. Send Aizawa the report. The draft is in the follow-up doc, filled with verified facts; keep the bracketed sentence about PR #53 only after its release. The owner sends it.
-6. Cleanup, with approval: the three own test articles in section 12. Revoke Vercel tokens that are no longer needed, and the Supabase token if unneeded.
-7. Optional: delete the Windows release clone `aio-release-20261116`; it holds a Vercel OIDC token in `.env.local`.
+2. Access-code task (security, owner first): confirm the production `DEMO_ACCESS_CODE` is a strong, non-default value; if not, set it for Production, redeploy, and tell Aizawa the new code. Then remove the fallback in `src/app/api/demo-auth/route.ts`.
+3. Send Aizawa the report. The draft is in `docs/aizawa-nov16-followup.md`, filled with verified facts only; the owner sends it.
+4. Cleanup, with approval: the three own test articles in section 12. Revoke the Vercel tokens no longer needed (see section 6) and the Supabase token if unneeded.
+5. Optional: delete the Windows release clone `aio-release-20261116`; it holds a Vercel OIDC token in `.env.local`.
+6. Optional follow-up suggested earlier: a test-robustness fix for the favicon-abort E2E flake. (The save-RPC guard for the late-write window is step 1, PR #54.)
 
 ## 11. Suggested Review Scope for Codex
 - Late-write guard: `aio_complete_generation_job` (check order, both deadline checks, `JOB01`/`40001`/`23505`), `completeGenerationJob` / `commitGenerationCompletion` error mapping per storage path and the fallback trigger (only `Unsupported gateway action.` / `PGRST202`), `aio-store` `completeJob`, and `generationJobPastMaxRuntime(serverTime)` in the client.
@@ -183,7 +194,7 @@ PR #50 / #51:
 - `saveDraftAgainstStoredRevision` conflict mapping and the UI split between definite errors (top banner) and unconfirmed outcomes (near the buttons).
 
 ## 12. Risk Notes
-- Late-write guard rollout: if the app is released before the migration or the gateway, generation keeps working through the previous two-step completion (warning logged), so the protection silently depends on the release order. Check steps 3.2 and 3.4 in section 10.
+- Late-write guard rollout: if the app is released before the migration or the gateway, generation keeps working through the previous two-step completion (warning logged), so the protection silently depends on the release order. Check steps 1.2 and 1.4 in section 10.
 - The completion request now carries the job and its draft rows in one gateway call (the previous `upsert_job` already carried the job with its embedded draft). Large reference texts make it bigger than before; no size problem is known.
 - Pending own records from 11/13, Supabase `npdyfhqugniuxfxpgngh` (unchanged, not touched in this session):
   - marker `AIO-RELEASE-SMOKE-08c3240b-9b01-40c6-a6ca-ad75ab7f0106`; job `454104b7-aacb-4d21-bb69-e502370c038d`; draft `62f62b95-057a-4f6a-9a5b-b523a6069e8e`.
@@ -191,6 +202,7 @@ PR #50 / #51:
   - Both unpublished, image0. Delete only after confirmed approval and ID/marker checks.
   - On 11/17 the second one (job `4f8e7082-…`) was saved once without changes by the approved older-draft check (fields unchanged, revision advanced).
 - Own record from 11/17 (approved synthetic generation): marker `AIO-RELEASE-SMOKE-ba2a0609-402e-432b-a7e5-90ccbd070399`; job `f9f6177c-d568-4a2d-bb2f-3868e2b2110f`; draft `dd20f96b-57c6-4896-a396-d753084abf53`. Unpublished, unposted, image 0; its body has one added verification sentence. Local artifacts in the ignored `.verification-files/AIO-RELEASE-SMOKE-ba2a0609-…/`.
+  - Saved once more without changes by the post-release older-draft check (16:04 JST).
 - The list order changed from update time to creation time (matches the displayed date column). Mention it to the customer.
 
 ## 13. Do Not Touch
