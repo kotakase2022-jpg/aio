@@ -375,12 +375,16 @@ describe("guarded generation completion (local development store)", () => {
     return (job: GenerationJob): GenerationJob => ({ ...job, status: "completed", draft, draftId: draft.id });
   }
 
+  // No file means nothing was ever saved; any other read or parse error fails the test.
   async function storedDrafts() {
+    let content: string;
     try {
-      return JSON.parse(await readFile(path.join(tempDir, "drafts.json"), "utf8")) as Record<string, ArticleDraft>;
-    } catch {
-      return {};
+      content = await readFile(path.join(tempDir, "drafts.json"), "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+      throw error;
     }
+    return JSON.parse(content) as Record<string, ArticleDraft>;
   }
 
   test("a completion that reaches the store after the deadline writes nothing", async () => {

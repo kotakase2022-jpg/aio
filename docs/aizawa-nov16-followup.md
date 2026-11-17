@@ -342,7 +342,7 @@ CodeRabbit（PR #51）の指摘への対応（8件、全て妥当と判断して
 - アプリ: 生成処理の最後にある「記事本体の保存」と「ジョブの完了」を、この1回の書き込みにまとめた（Supabase直結・gateway・ローカル保存の3経路）。DBが拒否した場合、ジョブは「記事生成が制限時間を超えたため停止しました」として失敗になり、記事は保存されない。編集画面の保存・承認（`aio_save_draft`）、画像の再作成、WordPress投稿は変更していない。
 - ブラウザ: 状況を読めないまま再確認したときの「7分」の判定を、サーバーの時計で行う。開始時にサーバーが返したジョブの作成日時を保存し、失敗した応答の `Date` ヘッダー（サーバーの現在時刻）と比べる。ブラウザの時計が進んでも、保持は早く終わらない。どちらかが得られない場合だけ、従来どおりブラウザの時計で判定する。画面の表示・文言は変更していない。
 
-これにより、ブラウザがジョブIDを解放する時点（サーバー時刻で作成から7分以降）では、DBはそのジョブの完了を受け付けない（作成から6分以降は拒否）。解放の後に、前回の記事が遅れて増えることはない。
+これにより、ブラウザがジョブIDを解放する時点（サーバー時刻で作成から7分以降）では、DBはそのジョブの完了を受け付けない（作成から6分以降は拒否）。解放の後に、前回の記事が遅れて増えることはない。ただし、これはサーバー時刻が得られ、Vercel と Supabase の時計の差が1分の余裕に収まる場合に限る。サーバー時刻が得られない場合は従来どおりブラウザの時計で判定するため、ブラウザの時計が進むと保持が早く終わることがある（下記「残る制約」）。
 
 ### 反映の途中（旧 gateway・旧DB）の扱い
 
@@ -352,11 +352,16 @@ CodeRabbit（PR #51）の指摘への対応（8件、全て妥当と判断して
 ### 反映順（各手順の実行前に所有者の承認が必要）
 
 1. マイグレーション（Supabase `npdyfhqugniuxfxpgngh`）: `20261117051104_guarded_generation_completion.sql` を適用する。適用後、SQLエディタで読み取りだけの確認をする。
-   - `select p.prosecdef, p.proconfig, p.proacl from pg_proc p where p.proname = 'aio_complete_generation_job';`
-   - `prosecdef` が false（security invoker）、`proconfig` が `search_path=pg_catalog, public` であること。`proacl` に `service_role=X` があり、`anon`・`authenticated` がないこと（関数の所有者は表示される）。
+   - `select p.prosecdef, p.proconfig from pg_proc p where p.proname = 'aio_complete_generation_job';`
+   - `prosecdef` が false（security invoker）、`proconfig` が `search_path=pg_catalog, public` であること。
+   - `select has_function_privilege('anon', 'public.aio_complete_generation_job(jsonb,timestamptz,jsonb,jsonb)', 'execute') as anon, has_function_privilege('authenticated', 'public.aio_complete_generation_job(jsonb,timestamptz,jsonb,jsonb)', 'execute') as authenticated, has_function_privilege('service_role', 'public.aio_complete_generation_job(jsonb,timestamptz,jsonb,jsonb)', 'execute') as service_role;`
+   - `anon`・`authenticated` が false、`service_role` が true であること。PUBLIC 経由の実行権限も、これで確認できる。
 2. gateway: マージ後の `main` の `aio-store` を、これまでと同じ設定（独自トークン認証、`verify_jwt=false`）でデプロイする。現在は v7（`028e84b`、`get_job_by_draft` を含む）が稼働しているため（上記「本番反映（PR #53）」）、次の版になる。デプロイ後、書き込みのない確認として `{"action":"complete_job","payload":{}}` を送り（`x-aio-store-token` が必要）、HTTP 400 `job is required.` が返ることを確認する。v7 以前なら `Unsupported gateway action.` が返る。この要求は入力の確認で止まり、DBには触れない。
 3. アプリ（Vercel）: 承認済みの手順（ステージ → 確認 → promote → canonical URL で読み取り専用の smoke）で反映する。
-4. 反映後: 次の実際の生成のときに、Vercel のログに上記の警告が出ていないことを確認する。
+4. 反映後: 次の実際の生成（または承認を得た合成生成1件）で、ガード付きの完了が使われたことを確認する。
+   - ジョブが完了し、「ドラフトを保存しました」と表示されること。
+   - その時刻の `aio-store` の呼び出し統計（`functions.combined-stats`）で、クライアントエラーが0件であること。アプリは `complete_job` を先に呼び、400「Unsupported gateway action.」のときだけ従来の書き込みに戻るため、これで `complete_job` で記事が保存されたことを示せる。
+   - Vercel のログに上記の警告が出ていないこと。
 
 ### ロールバック
 
@@ -378,7 +383,7 @@ CodeRabbit（PR #51）の指摘への対応（8件、全て妥当と判断して
 - サーバー時刻での判定には、開始時に記録した作成日時と、失敗した応答の `Date` ヘッダーが必要。この変更より前に開始して一度も状況を読めていないジョブや、`Date` ヘッダーを返さない中継装置を通る場合は、従来どおりブラウザの時計で判定する。
 - Vercel（作成日時・`Date`）と Supabase（DBの時計）の時計の差が、1分の余裕より十分に小さいこと（通常はミリ秒単位）を前提とする。
 - 既存の、どのジョブにも紐づかない下書き行（この変更より前に途中で終了したジョブのもの）はそのまま残る。今後の生成では、記事本体はジョブの完了と同時にしか保存されない。
-- 本番での書き込み確認は、この変更の前の本番で 11/17 に PASS した（上記「11/17 厳密な自己検証」）。この変更の反映後は、合成生成1件で、ガード付きの完了が使われること（Vercel のログに上記の警告が出ないこと）を確認する。有料のAI生成を伴うため、実行前に承認を得る。
+- 本番での書き込み確認は、この変更の前の本番で 11/17 に PASS した（上記「11/17 厳密な自己検証」）。この変更の反映後は、合成生成1件で、上記「反映順」の4.（生成の成功、`aio-store` の統計でクライアントエラー0件、警告なし）を確認する。有料のAI生成を伴うため、実行前に承認を得る。
 
 ## 未確認事項・残課題
 
