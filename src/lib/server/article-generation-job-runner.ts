@@ -6,10 +6,10 @@ import {
   type ArticleImageFailure,
 } from "@/lib/server/article-images";
 import { fetchUrlContent } from "@/lib/server/content";
-import { saveDraft } from "@/lib/server/drafts";
 import {
   assertGenerationJobActive,
   assertGenerationJobWithinDeadline,
+  completeGenerationJob,
   DRAFT_SAVED_STEP_DETAIL,
   getGenerationJob,
   updateGenerationJob,
@@ -139,10 +139,11 @@ export async function runArticleGenerationJob(jobId: string) {
     // Checked again with no I/O in between: a late step write must not let a save start after
     // the deadline.
     assertGenerationJobWithinDeadline(activeJob);
-    await saveDraft(nextDraft);
+    // The draft and the job's completion are committed together, and only while the stored job
+    // is still running and within its deadline; a write delayed past it changes nothing.
     // Clients stop polling once they see "completed", so the completed status and the
     // finished save step must become visible in the same write.
-    await updateGenerationJob(jobId, (current) => ({
+    await completeGenerationJob(jobId, nextDraft, (current) => ({
       ...current,
       status: "completed",
       draft: nextDraft,

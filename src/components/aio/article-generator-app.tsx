@@ -101,8 +101,12 @@ import type {
 const activeGenerationJobStorageKey = "aio-active-generation-job-id";
 // When this browser started (or first lost track of) the stored job.
 const activeGenerationJobStartedAtStorageKey = "aio-active-generation-job-started-at";
-// The generation worker stops after 300 s and the server fails a stuck job after 6 minutes, so
-// beyond this a stored job can no longer be generating, even if its status cannot be read.
+// When the server created the stored job, on the server's clock.
+const activeGenerationJobCreatedAtStorageKey = "aio-active-generation-job-created-at";
+// The generation worker stops after 300 s, and the database refuses a job's completion 6 minutes
+// after the job was created, so beyond this a stored job can no longer produce an article, even
+// if its status cannot be read. Only a database commit that stalls for over a minute after the
+// last deadline check could still land later.
 const generationJobMaxRuntimeMs = 7 * 60 * 1000;
 const generationLogPageSize = 20;
 const generationLogRefreshLimit = 100;
@@ -563,6 +567,7 @@ export function ArticleGeneratorApp() {
       generationPollingRef.current = started.job.id;
       window.localStorage.setItem(activeGenerationJobStorageKey, started.job.id);
       window.localStorage.setItem(activeGenerationJobStartedAtStorageKey, String(Date.now()));
+      window.localStorage.setItem(activeGenerationJobCreatedAtStorageKey, started.job.createdAt);
       applyGenerationJob(started.job);
       await pollGenerationJob(started.job.id);
     } catch (error) {
@@ -595,8 +600,7 @@ export function ArticleGeneratorApp() {
       }
       generationPollingRef.current = null;
       setActiveGenerationJobId(null);
-      window.localStorage.removeItem(activeGenerationJobStorageKey);
-      window.localStorage.removeItem(activeGenerationJobStartedAtStorageKey);
+      forgetStoredGenerationJob();
       setActiveError("記事作成を停止しました。");
       markRunningAsError("ユーザー操作により停止しました。");
       void loadGenerationLogs();
@@ -681,6 +685,13 @@ export function ArticleGeneratorApp() {
         ) {
           return;
         }
+        // A job stored before its creation time was recorded gets it from the first answer.
+        if (
+          window.localStorage.getItem(activeGenerationJobStorageKey) === jobId &&
+          !window.localStorage.getItem(activeGenerationJobCreatedAtStorageKey)
+        ) {
+          window.localStorage.setItem(activeGenerationJobCreatedAtStorageKey, result.job.createdAt);
+        }
         applyGenerationJob(result.job, shouldRestoreInputs);
         if (shouldRestoreInputs) {
           setGenerationResumeChecked(true);
@@ -724,10 +735,11 @@ export function ArticleGeneratorApp() {
       }
       const wasManualRecheck = unconfirmedJobRecheckRef.current;
       unconfirmedJobRecheckRef.current = false;
-      if (wasManualRecheck && error instanceof ApiHttpError && error.status >= 500) {
-        // The server keeps failing to read this job even on the editor's re-check. While the job
-        // could still be generating, keep it: releasing it would allow a concurrent second run.
-        if (!generationJobPastMaxRuntime()) {
+      if (wasManualRecheck && isServerFailureAnswer(error)) {
+        // The server keeps failing to read this job even on the editor's re-check (the application,
+        // or a gateway page in its place). While the job could still be generating, keep it:
+        // releasing it would allow a concurrent second run.
+        if (!generationJobPastMaxRuntime(error.serverTime)) {
           finishGenerationPolling(jobId, { keepResumeKey: true });
           const message = `前回の記事作成の状況をサーバーから読み込めませんでした（${readError(error)}）。前回の記事作成がまだ続いている可能性があるため、新しい記事作成は始めていません。数分待ってから、もう一度ボタンを押して確認してください。`;
           setActiveError(message);
@@ -762,8 +774,17 @@ export function ArticleGeneratorApp() {
     }
   }
 
-  /** Whether the stored job started long enough ago that it can no longer be generating. */
-  function generationJobPastMaxRuntime() {
+  /**
+   * Whether the stored job started long enough ago that it can no longer produce an article.
+   * Measured on the server's clock when the failed answer says what time it is there: the job's
+   * creation time and that answer both come from the server, so a wrong or jumping clock in this
+   * browser cannot end the hold before the database stops accepting the job's completion.
+   */
+  function generationJobPastMaxRuntime(serverTime?: number) {
+    const createdAt = Date.parse(window.localStorage.getItem(activeGenerationJobCreatedAtStorageKey) ?? "");
+    if (serverTime !== undefined && Number.isFinite(createdAt)) {
+      return serverTime - createdAt >= generationJobMaxRuntimeMs;
+    }
     const startedAt = Number(window.localStorage.getItem(activeGenerationJobStartedAtStorageKey));
     if (!Number.isFinite(startedAt) || startedAt <= 0) {
       // Unknown (stored before this record existed): start counting from now, conservatively.
@@ -780,9 +801,14 @@ export function ArticleGeneratorApp() {
     setUnconfirmedJobPending(keepResumeKey);
     setActiveGenerationJobId((current) => (current === jobId ? null : current));
     if (!keepResumeKey && window.localStorage.getItem(activeGenerationJobStorageKey) === jobId) {
-      window.localStorage.removeItem(activeGenerationJobStorageKey);
-      window.localStorage.removeItem(activeGenerationJobStartedAtStorageKey);
+      forgetStoredGenerationJob();
     }
+  }
+
+  function forgetStoredGenerationJob() {
+    window.localStorage.removeItem(activeGenerationJobStorageKey);
+    window.localStorage.removeItem(activeGenerationJobStartedAtStorageKey);
+    window.localStorage.removeItem(activeGenerationJobCreatedAtStorageKey);
   }
 
   function applyGenerationJob(
@@ -4661,7 +4687,13 @@ type ApiRequestOptions = { timeoutMs?: number };
  * of the application. Callers must not report such an outcome as a success or a failure.
  */
 class ApiOutcomeUnknownError extends Error {
-  constructor(reason: "timeout" | "network" | "incomplete") {
+  constructor(
+    reason: "timeout" | "network" | "incomplete",
+    /** Set when a platform gateway answered (a bare 502-504) in place of the application. */
+    readonly gatewayStatus?: number,
+    /** The server's clock when that gateway answered (its Date header), if it said. */
+    readonly serverTime?: number,
+  ) {
     super(
       reason === "timeout"
         ? "サーバーから応答がありませんでした"
@@ -4678,10 +4710,17 @@ class ApiHttpError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** The server's clock when it answered (its Date header), if it said. */
+    readonly serverTime?: number,
   ) {
     super(message);
     this.name = "ApiHttpError";
   }
+}
+
+function readServerTime(response: Response) {
+  const time = Date.parse(response.headers.get("date") ?? "");
+  return Number.isFinite(time) ? time : undefined;
 }
 
 /**
@@ -4690,6 +4729,18 @@ class ApiHttpError extends Error {
  */
 function isUnresolvedJobStatusError(error: unknown) {
   return error instanceof ApiOutcomeUnknownError || (error instanceof ApiHttpError && error.status !== 404);
+}
+
+/**
+ * A server answered the request with a failure: the application (5xx), or a platform gateway in its
+ * place (a bare 502-504, for example when the route timed out). Unlike a lost request, both answers
+ * carry the server's clock when it says (Date header).
+ */
+function isServerFailureAnswer(error: unknown): error is ApiHttpError | ApiOutcomeUnknownError {
+  return (
+    (error instanceof ApiHttpError && error.status >= 500) ||
+    (error instanceof ApiOutcomeUnknownError && error.gatewayStatus !== undefined)
+  );
 }
 
 async function apiPost<T>(url: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
@@ -4738,12 +4789,13 @@ async function requestApi<T>(url: string, init: RequestInit, { timeoutMs }: ApiR
     // Application errors always carry ok:false; a bare 502-504 comes from the platform, which
     // may have cut off a request that the application had already committed.
     if (!response.ok && json.ok === undefined && [502, 503, 504].includes(response.status)) {
-      throw new ApiOutcomeUnknownError("incomplete");
+      throw new ApiOutcomeUnknownError("incomplete", response.status, readServerTime(response));
     }
     if (!response.ok || json.ok === false) {
       throw new ApiHttpError(
         [json.error, json.detail].filter(Boolean).join(" / ") || response.statusText,
         response.status,
+        readServerTime(response),
       );
     }
     return json as T;

@@ -53,6 +53,41 @@ describe("Supabase migration contract", () => {
     }
   });
 
+  test("adds the guarded generation completion without changing earlier objects", async () => {
+    const { GENERATION_JOB_EXPIRY_MS, GENERATION_JOB_NOT_ACTIVE_SQLSTATE } = await import("@/lib/server/generation-jobs");
+    const filenames = (await readdir(migrationDirectory))
+      .filter((filename) => filename.endsWith(".sql"))
+      .sort();
+    const guardMigration = "20261117051104_guarded_generation_completion.sql";
+    expect(filenames.indexOf(guardMigration)).toBeGreaterThan(
+      filenames.indexOf("20261109125814_atomic_draft_save.sql"),
+    );
+    const sql = await readFile(path.join(migrationDirectory, guardMigration), "utf8");
+    const signature = "public.aio_complete_generation_job(jsonb, timestamptz, jsonb, jsonb)";
+
+    // Additive: one new function; nothing existing is dropped, altered or redefined.
+    expect(sql.match(/create or replace function/gi)).toEqual(["create or replace function"]);
+    expect(sql).toContain("create or replace function public.aio_complete_generation_job(");
+    expect(sql).not.toMatch(/\b(?:drop|alter|truncate)\b/i);
+    expect(sql).not.toMatch(/\b(?:insert\s+into|delete\s+from)\b/i);
+    // Same conventions as aio_save_draft.
+    expect(sql).toContain("security invoker");
+    expect(sql).toContain("set search_path = pg_catalog, public");
+    // One transaction: lock the job row, save the draft, complete the job.
+    expect(sql).toContain("from public.article_inputs where id = job_id for update");
+    expect(sql).toContain("perform public.aio_save_draft(draft_row, image_rows, null)");
+    expect(sql).toContain("update public.article_inputs");
+    // The deadline of the server, read from the database clock before and again after the writes.
+    expect(sql).toContain(`interval '${GENERATION_JOB_EXPIRY_MS / 60_000} minutes'`);
+    expect(sql.match(/if clock_timestamp\(\) >= stored\.created_at \+ completion_deadline then/g)).toHaveLength(2);
+    expect(sql).not.toMatch(/\bnow\(\)/);
+    expect(sql).toContain(`errcode = '${GENERATION_JOB_NOT_ACTIVE_SQLSTATE}'`);
+    // Service role only.
+    expect(sql).toContain(`revoke all on function ${signature} from public, anon, authenticated;`);
+    expect(sql).toContain(`grant execute on function ${signature} to service_role;`);
+    expect(sql).not.toMatch(/\bgrant\b[^;]*\bto\b[^;]*\b(?:anon|authenticated|public)\b/i);
+  });
+
   test("keeps production gateway credentials out of tracked migrations", async () => {
     const filenames = (await readdir(migrationDirectory))
       .filter((filename) => filename.endsWith(".sql"))

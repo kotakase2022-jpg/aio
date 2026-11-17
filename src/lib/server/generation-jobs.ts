@@ -12,6 +12,7 @@ import {
 import { truncateText } from "@/lib/utils";
 import { withLocalStoreLock, writeLocalJson } from "@/lib/server/local-store";
 import { articleFormSchema } from "@/lib/server/article-form-schema";
+import { draftSaveRows, saveDraft } from "@/lib/server/drafts";
 import type {
   ArticleDraft,
   ArticleFormPayload,
@@ -30,7 +31,17 @@ const dataDir = process.env.VERCEL
 const jobFile = path.join(dataDir, "generation-jobs.json");
 
 // The POST worker has a 300-second budget; allow another minute before recovery.
-const GENERATION_JOB_EXPIRY_MS = 6 * 60 * 1000;
+// aio_complete_generation_job enforces the same limit inside the database.
+export const GENERATION_JOB_EXPIRY_MS = 6 * 60 * 1000;
+
+// What aio_complete_generation_job raises, and aio-store answers, when the stored job is no
+// longer running or is past its deadline. Nothing was written in that case.
+export const GENERATION_JOB_NOT_ACTIVE_SQLSTATE = "JOB01";
+export const GATEWAY_JOB_NOT_ACTIVE_MESSAGE = "Generation job can no longer be completed.";
+// PostgREST: no function with this name and these arguments.
+const POSTGREST_FUNCTION_NOT_FOUND = "PGRST202";
+const GENERATION_JOB_DEADLINE_MESSAGE =
+  "記事生成が制限時間を超えたため停止しました。入力内容を確認し、もう一度「AIによる記事作成」を実行してください。";
 
 export const DRAFT_SAVED_STEP_DETAIL = "ドラフトを保存しました";
 const UNCONFIRMED_SAVE_STEP_DETAIL =
@@ -213,7 +224,7 @@ export async function updateGenerationJob(
     if (current.status === "canceled" || current.status === "failed") return current;
     const next = updater(current);
     if (next === current || (current.status === "completed" && next.status !== "completed")) return current;
-    next.updatedAt = new Date(Math.max(Date.now(), Date.parse(current.updatedAt) + 1)).toISOString();
+    next.updatedAt = nextJobRevision(current);
     if (await saveGenerationJob(next, current.updatedAt)) return next;
   }
   throw new ApiError("生成ジョブが更新されました。もう一度お試しください。", 409);
@@ -280,11 +291,121 @@ export function assertGenerationJobWithinDeadline(job: GenerationJob, now = Date
     ? now - createdAt >= GENERATION_JOB_EXPIRY_MS
     : isGenerationJobExpired(job, now);
   if (pastDeadline) {
-    throw new ApiError(
-      "記事生成が制限時間を超えたため停止しました。入力内容を確認し、もう一度「AIによる記事作成」を実行してください。",
-      409,
-    );
+    throw generationJobDeadlineError();
   }
+}
+
+function generationJobDeadlineError() {
+  return new ApiError(GENERATION_JOB_DEADLINE_MESSAGE, 409);
+}
+
+type CompletionCommit = "committed" | "conflict" | "guard-unavailable";
+
+/**
+ * Saves the generated draft and marks its job completed in one write that the storage applies
+ * only while the stored job is still running and within its deadline. A completion that reaches
+ * the database late (after the deadline, or after a cancel) therefore writes nothing: no article
+ * appears in the generation log once the browser may have stopped holding the job.
+ * Throws a 409 in that case; the caller ends the job as failed.
+ * The deadline is checked inside the transaction, not at its commit: a commit that stalls for
+ * longer than the 1-minute margin after the last check can still land after the hold ends.
+ */
+export async function completeGenerationJob(
+  jobId: string,
+  draft: ArticleDraft,
+  complete: (job: GenerationJob) => GenerationJob,
+) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const current = await assertGenerationJobActive(jobId);
+    const next = complete(current);
+    next.updatedAt = nextJobRevision(current);
+    const outcome = await commitGenerationCompletion(next, current.updatedAt, draft);
+    if (outcome === "committed") return next;
+    if (outcome === "guard-unavailable") return completeWithoutStorageGuard(current, draft, complete);
+    // "conflict": the job row was written after it was read; read it again.
+  }
+  throw new ApiError("生成ジョブが更新されました。もう一度お試しください。", 409);
+}
+
+async function commitGenerationCompletion(
+  job: GenerationJob,
+  expectedUpdatedAt: string,
+  draft: ArticleDraft,
+): Promise<CompletionCommit> {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { draftRow, imageRows } = draftSaveRows(draft);
+    const { error } = await supabase.rpc("aio_complete_generation_job", {
+      job_row: sanitizeForPostgres({ id: job.id, input_payload: job, updated_at: job.updatedAt }),
+      expected_updated_at: expectedUpdatedAt,
+      draft_row: draftRow,
+      image_rows: imageRows,
+    });
+    if (!error) return committedThroughGuard(job.id, "aio_complete_generation_job");
+    if (error.code === GENERATION_JOB_NOT_ACTIVE_SQLSTATE) throw generationJobDeadlineError();
+    if (error.code === "40001") return "conflict";
+    if (error.code === POSTGREST_FUNCTION_NOT_FOUND) return "guard-unavailable";
+    throw new ApiError("下書きの保存に失敗しました。", 500, error.message);
+  }
+
+  if (isSupabaseGatewayConfigured()) {
+    const { draftRow, imageRows } = draftSaveRows(draft);
+    try {
+      await callSupabaseGateway("complete_job", { job, expectedUpdatedAt, row: draftRow, images: imageRows });
+      return committedThroughGuard(job.id, "aio-store complete_job");
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      if (error.status === 409 && error.message === GATEWAY_JOB_NOT_ACTIVE_MESSAGE) throw generationJobDeadlineError();
+      if (error.status === 409) return "conflict";
+      if (isUnsupportedGatewayActionError(error)) return "guard-unavailable";
+      throw error;
+    }
+  }
+
+  // Development store: the same checks, then both writes, all under the job store lock.
+  return withLocalStoreLock(jobFile, async () => {
+    const store = await readLocalJobs();
+    const stored = store[job.id];
+    if (stored?.status !== "running") throw generationJobDeadlineError();
+    assertGenerationJobWithinDeadline(stored);
+    if (stored.updatedAt !== expectedUpdatedAt) return "conflict";
+    await saveDraft(draft);
+    store[job.id] = job;
+    await writeLocalJson(jobFile, store);
+    return "committed";
+  });
+}
+
+/**
+ * One server log line per guarded completion on a durable store, naming the job, so a release
+ * can be checked for a specific job (the fallback path logs a warning instead).
+ */
+function committedThroughGuard(jobId: string, path: string): CompletionCommit {
+  console.info(`Generation job ${jobId} completed through the database deadline guard (${path}).`);
+  return "committed";
+}
+
+/**
+ * A gateway or database deployed before aio_complete_generation_job cannot apply the guard.
+ * Complete as before (draft, then job) so generation keeps working during a rollout, but say so:
+ * a delayed write is not stopped by the database on this path.
+ */
+async function completeWithoutStorageGuard(
+  current: GenerationJob,
+  draft: ArticleDraft,
+  complete: (job: GenerationJob) => GenerationJob,
+) {
+  console.warn(
+    `aio_complete_generation_job is not available (apply the migration and deploy aio-store); completing generation job ${current.id} without the database deadline guard.`,
+  );
+  // As before the guard existed: checked with no I/O between the check and the save.
+  assertGenerationJobWithinDeadline(current);
+  await saveDraft(draft);
+  return updateGenerationJob(current.id, complete);
+}
+
+function nextJobRevision(current: GenerationJob) {
+  return new Date(Math.max(Date.now(), Date.parse(current.updatedAt) + 1)).toISOString();
 }
 
 export async function listGenerationJobs(limit = 30) {
