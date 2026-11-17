@@ -17,7 +17,7 @@
 - The production `DEMO_ACCESS_CODE` status was never confirmed. After this release the variable is not read anymore, so the exposure ends with the release; until then production behaves as before.
 
 ## 2. Current Branch / Commit / PR
-- This task: branch `claude/zen-mendel-fuml66` from main `4a3d69b`; PR kotakase2022-jpg/aio#53 (open). Production was not changed by this session: no deploy, no environment change, no request to the production app.
+- This task: branch `claude/zen-mendel-fuml66` from main `4a3d69b`; PR kotakase2022-jpg/aio#55 (open). Production was not changed by this session: no deploy, no environment change, no request to the production app.
 - Still current from the previous task:
   - Production runs PR kotakase2022-jpg/aio#51 (`efebb89`), deployment `dpl_4GpH2wKgF3rAmoYN8HSvt7h6LtVJ`, promoted 11/17 by the user on the Windows workstation; read-only smoke PASS. Rollback = promote `dpl_3TyMQRKm6Z63o55mPRoysRvKnSKu` (PR #50).
   - `aio-store` Edge Function v6 (`list_job_page`), Supabase project `npdyfhqugniuxfxpgngh` (dashboard name `esg-chat-data-analysis`), deployed 11/17 13:10 JST. Rollback = redeploy the v5 source (`git show ed81c15:supabase/functions/aio-store/index.ts`). Whether the app actually reads through `list_job_page` is still unconfirmed (section 10, step 7).
@@ -80,11 +80,11 @@
   - Human source review; 11/13 pending own records (section 12).
 
 ## 7. CodeRabbit Review
-- PR kotakase2022-jpg/aio#53 (this task): review pending at handoff time. Check the PR for findings.
+- PR kotakase2022-jpg/aio#55 (this task): review pending at handoff time. Check the PR for findings.
 - PRs #50 and #51: all findings were fixed or decided by the owner (see `git log` and the PR threads).
   - The access-code finding from #51 is what this task resolves.
   - The late-write and clock-jump residual risks were accepted as known limitations (section 6).
-- Codex GitHub review: not performed on #50, #51 or #53.
+- Codex GitHub review: not performed on #50, #51 or #55.
 
 ## 8. Optional Bugbot Findings
 - Status: Not run.
@@ -107,7 +107,7 @@
 Owner, in this order (details in Japanese: `docs/login-accounts.md`):
 1. Create the accounts (customer and team) on your own PC: `npm run auth:create-user -- <email>` (Windows: `npm.cmd`). Keep the printed passwords private.
 2. Vercel Production: add `AIO_AUTH_USERS` (mark it Sensitive) with all entries as one JSON array. Keep `DEMO_AUTH_SECRET` as it is.
-3. After CI and CodeRabbit on PR #53, merge it, then stage, check and promote as usual.
+3. After CI and CodeRabbit on PR #55, merge it, then stage, check and promote as usual.
 4. Read-only smoke with a team account: set `AIO_SMOKE_LOGIN_EMAIL` and `AIO_SMOKE_LOGIN_PASSWORD` (for example in the ignored `.env.local`), then run `node scripts/production-smoke.mjs`.
 5. Give the customer their email and password through a private channel, and tell them the access code no longer works.
 6. Remove `DEMO_ACCESS_CODE` from Vercel.
