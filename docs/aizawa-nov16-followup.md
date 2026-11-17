@@ -262,14 +262,14 @@ CodeRabbit（PR #51）の指摘への対応（8件、全て妥当と判断して
 1. マイグレーション（Supabase `npdyfhqugniuxfxpgngh`）: `20261117051104_guarded_generation_completion.sql` を適用する。適用後、SQLエディタで読み取りだけの確認をする。
    - `select p.prosecdef, p.proconfig, p.proacl from pg_proc p where p.proname = 'aio_complete_generation_job';`
    - `prosecdef` が false（security invoker）、`proconfig` が `search_path=pg_catalog, public` であること。`proacl` に `service_role=X` があり、`anon`・`authenticated` がないこと（関数の所有者は表示される）。
-2. gateway: `aio-store` を v6 と同じ設定（独自トークン認証、`verify_jwt=false`）でデプロイする。デプロイ後、書き込みのない確認として `{"action":"complete_job","payload":{}}` を送り（`x-aio-store-token` が必要）、HTTP 400 `job is required.` が返ることを確認する。旧版なら `Unsupported gateway action.` が返る。この要求は入力の確認で止まり、DBには触れない。
-3. アプリ（Vercel）: 承認済みの手順（ステージ → 確認 → promote → canonical URL で読み取り専用の smoke）で反映する。
+2. gateway: マージ後の `main` の `aio-store` を、これまでと同じ設定（独自トークン認証、`verify_jwt=false`）でデプロイする。kotakase2022-jpg/aio#56 の記録では、現在は v7（`028e84b`、`get_job_by_draft` を含む）が稼働しており、次の版になる（このセッションからは未確認）。デプロイ後、書き込みのない確認として `{"action":"complete_job","payload":{}}` を送り（`x-aio-store-token` が必要）、HTTP 400 `job is required.` が返ることを確認する。v7 以前なら `Unsupported gateway action.` が返る。この要求は入力の確認で止まり、DBには触れない。
+3. アプリ（Vercel）: 承認済みの手順（ステージ → 確認 → promote → canonical URL で読み取り専用の smoke）で反映する。PR #53 のアプリ部分がそれまでに反映されていなければ、この反映で一緒に反映される（gateway 側の `get_job_by_draft` は v7 で反映済み）。
 4. 反映後: 次の実際の生成のときに、Vercel のログに上記の警告が出ていないことを確認する。
 
 ### ロールバック
 
 - アプリ: 直前の本番 deployment を promote する。旧アプリは新しい関数・操作を使わない。
-- gateway: v6 のソース（`git show efebb89:supabase/functions/aio-store/index.ts`）を再デプロイする。新アプリは従来の書き込みに戻る（警告が出る）。
+- gateway: 直前の版 v7 のソース（`git show 028e84b:supabase/functions/aio-store/index.ts`）を再デプロイする。新アプリは従来の書き込みに戻る（警告が出る）。
 - マイグレーション: 戻す必要はない（旧アプリからは呼ばれない）。削除する場合は、アプリと gateway を戻した後に `drop function public.aio_complete_generation_job(jsonb, timestamptz, jsonb, jsonb);` を実行する（要承認）。データの巻き戻しは不要。
 
 ### 検証（このセッション、ローカル）

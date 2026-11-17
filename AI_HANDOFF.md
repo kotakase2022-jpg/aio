@@ -5,7 +5,7 @@
 - Next owner: User (owner approval, then release of the late-write guard in the order migration → `aio-store` → app, section 10 step 1) / Codex (review). Still open: production write checks after the access-code task; customer report send by the user.
 - Loop: 10
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
-- Phase: PR #50 (11/16) and PR #51 (11/17) released to production; `aio-store` v6 deployed (section 2). Late-write guard (section 3c) implemented in PR kotakase2022-jpg/aio#54 (branch `claude/wizardly-cannon-2jxpv8`), **not merged, not released**. Production write checks still pending.
+- Phase: PR #50 (11/16) and PR #51 (11/17) released to production; `aio-store` v6 deployed (section 2). Late-write guard (section 3d) implemented in PR kotakase2022-jpg/aio#54 (branch `claude/wizardly-cannon-2jxpv8`), **not merged, not released**. Production write checks still pending.
 - Last updated: 2026-11-17 (UTC session; Claude Code cloud container)
 
 ## 1. Current Goal
@@ -15,7 +15,7 @@ Aizawa 11/16 re-verification: the four article structures were confirmed fine. R
 Customer was told results/operation guidance around 2026-11-18〜19 (external estimate, not a measured plan).
 
 ## 2. Current Branch / Commit / PR
-- Late-write guard (section 3c): PR kotakase2022-jpg/aio#54, branch `claude/wizardly-cannon-2jxpv8` from main `4a3d69b` (not merged, not released). Nothing was applied to Supabase or Vercel from this session.
+- Late-write guard (section 3d): PR kotakase2022-jpg/aio#54, branch `claude/wizardly-cannon-2jxpv8` from main `4a3d69b`, with main `028e84b` (PR #53) merged in (not merged, not released). Nothing was applied to Supabase or Vercel from this session. PR kotakase2022-jpg/aio#56 (open, another session) records `aio-store` v7 = `028e84b` as deployed on 11/17 and the PR #53 app release as pending; not verified from this session.
 - PR kotakase2022-jpg/aio#50 (`claude/aizawa-nov16-logs-and-save-status`) merged to main as `ed81c15`; production deployment `dpl_3TyMQRKm6Z63o55mPRoysRvKnSKu` promoted by the user on the Windows workstation (11/16 20:42 JST build). Read-only smoke on the canonical URL PASS (logs pages 2 / listed 36 / unpostedCompleted 32 / complete true). Rollback = promote `dpl_9aoGSRfatAYc1MqScMyPTgPecVAU` (previous production).
 - PR kotakase2022-jpg/aio#51 (`claude/aizawa-nov16-production-checks`) squash-merged as `efebb89` on 11/17 after the owner's decisions (section 7). Main CI PASS.
 - App release 2026-11-17, by the user on the Windows workstation:
@@ -39,7 +39,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Fixed: `aio-store` gains `list_job_page` (created_at/id keyset, jobs only, limit+1 rows); the app uses it first and falls back to the window paging on the old gateway's 400 `Unsupported gateway action.` (cached 5 min), so the app release is safe before the gateway deploy. A refresh during a pending older page includes that page. The primary/regenerate button re-checks a stored unconfirmed job instead of starting a new one.
 - Gated production check scripts (not yet run successfully on production; the first attempt stopped at login because the entered access code was rejected, nothing was written): `scripts/production-older-draft-check.mjs`, extended `scripts/production-article-smoke.mjs`. Paused on the user's instruction.
 
-## 3c. Late-write guard (owner's 11/17 known limitation, PR kotakase2022-jpg/aio#54, not released)
+## 3d. Late-write guard (owner's 11/17 known limitation, PR kotakase2022-jpg/aio#54, not released)
 - Problem: a draft save or job completion already sent could be applied late by Supabase after the browser released the held job ID (7 min), and a forward jump of the browser clock could end the hold early. Either way the generation log could show two articles.
 - Database: additive migration `supabase/migrations/20261117051104_guarded_generation_completion.sql` adds `aio_complete_generation_job(job_row, expected_updated_at, draft_row, image_rows)`. In one transaction it locks the job row (`for update`), requires kind = job, status `running` and `clock_timestamp() < created_at + 6 minutes`, compare-and-sets `updated_at` (`40001`), refuses an existing draft id (`23505`), saves the draft through the unchanged `aio_save_draft`, writes the completed job, and checks the deadline again after the writes. A late or slowed-down completion raises SQLSTATE `JOB01` and writes nothing. `security invoker`, fixed `search_path`, EXECUTE revoked from public/anon/authenticated and granted to service_role only. No existing object, RLS or grant changed.
 - Gateway: `aio-store` gains `complete_job` (calls the RPC; `JOB01` → 409 `Generation job can no longer be completed.`, `40001` → 409). Existing actions unchanged.
@@ -48,7 +48,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Result: when the browser releases the hold (≥ 7 min after creation on the server clock) the database already refuses that job's completion (≥ 6 min), so no article can be added afterwards.
 
 ## 4. Files Changed
-Late-write guard PR (section 3c):
+Late-write guard PR (section 3d):
 - New: `supabase/migrations/20261117051104_guarded_generation_completion.sql`, `tests/fixtures/sql/generation-completion-guard.sql`, `tests/fixtures/sql/supabase-stub.sql`, `tests/helpers/supabase-store-mirror.ts`, `tests/integration/generation-completion-guard.integration.test.ts`.
 - Changed: `supabase/functions/aio-store/index.ts` (`complete_job`), `src/lib/server/generation-jobs.ts`, `src/lib/server/article-generation-job-runner.ts`, `src/lib/server/drafts.ts` (exports `draftSaveRows`), `src/components/aio/article-generator-app.tsx`, `tests/contract/supabase-migrations.contract.test.ts` (one test added), `tests/e2e/aio-workflow.spec.ts` (one test added), `docs/aizawa-nov16-followup.md`, `docs/testing.md` (SQL fixtures), this file. No existing test was changed or weakened. AGENTS.md / CLAUDE.md unchanged.
 
@@ -72,7 +72,7 @@ PR #50 / #51:
 
 ## 6. Known Issues
 - Gateway window: resolved by `aio-store` v6 (`list_job_page`), pending the app-side confirmation in section 2. Until then the app falls back to the old window, where more than 100 jobs may leave older logs unlisted (the UI says so).
-- Accepted by the owner as known limitations (11/17): the late-write duplicate window and the browser clock jump (sections 3b and 7). Fixed by the late-write guard PR (section 3c); until all three parts are released they remain in production. During a rollout in the wrong order (old gateway or no function) the app completes the previous way and logs a warning, so the old window applies there.
+- Accepted by the owner as known limitations (11/17): the late-write duplicate window and the browser clock jump (sections 3b and 7). Fixed by the late-write guard PR (section 3d); until all three parts are released they remain in production. During a rollout in the wrong order (old gateway or no function) the app completes the previous way and logs a warning, so the old window applies there.
 - Late-write guard residuals: the server-clock rule needs the stored `createdAt` and the failing response's `Date` header, otherwise the browser clock is used (a job started before the release whose status was never read, or a proxy that drops `Date`). Vercel and Supabase clocks must stay well within the 1-minute margin. Unlinked draft rows from jobs interrupted before this change stay as they are.
 - Security, separate task (owner, 11/17): `src/app/api/demo-auth/route.ts` accepts a default code committed in this public repository when `DEMO_ACCESS_CODE` is unset. First confirm or set the production variable, then remove the fallback. A follow-up task was suggested.
 - Log sync on save/post (`syncGenerationJobDraft`, `markGenerationJobWordpressPost`) still scans the 100 most recently updated jobs (pre-existing). Beyond that, the log title/WordPress state may not refresh; the draft itself is saved.
@@ -131,10 +131,11 @@ PR #50 / #51:
 ## 10. Next Recommended Action
 1. Late-write guard: review and merge the PR (CI + CodeRabbit), then release **in this order, each step only after the owner's explicit approval** (details and rollback in `docs/aizawa-nov16-followup.md` §遅れた書き込みによる記事の二重表示の防止):
    1. Migration on Supabase `npdyfhqugniuxfxpgngh`: apply `20261117051104_guarded_generation_completion.sql`. Read-only check: `select p.prosecdef, p.proconfig, p.proacl from pg_proc p where p.proname = 'aio_complete_generation_job';` → `prosecdef` false, `search_path=pg_catalog, public`, `service_role=X` present and no `anon`/`authenticated`. The old app and gateway do not call it.
-   2. Gateway: deploy `aio-store` with the v6 settings (custom token auth, `verify_jwt=false`). No-write check: `{"action":"complete_job","payload":{}}` with `x-aio-store-token` → 400 `job is required.` (v6 answers `Unsupported gateway action.`).
+   2. Gateway: deploy `aio-store` from the merged `main` (the next version after v7; it keeps `get_job_by_draft` from PR #53) with the same settings (custom token auth, `verify_jwt=false`). No-write check: `{"action":"complete_job","payload":{}}` with `x-aio-store-token` → 400 `job is required.` (v7 and earlier answer `Unsupported gateway action.`).
    3. App: stage → check → promote → read-only smoke on the canonical URL (approved procedure).
    4. On the next real generation: no `completing generation job without the database deadline guard` warning in the Vercel logs.
-   - Rollback: app → previous deployment; gateway → `git show efebb89:supabase/functions/aio-store/index.ts` (the new app then falls back with the warning); the migration can stay (unused by old code).
+   - This app release also ships the app part of PR #53 if it has not been released by then (its gateway part, `get_job_by_draft`, is in v7).
+   - Rollback: app → previous deployment; gateway → redeploy v7 (`git show 028e84b:supabase/functions/aio-store/index.ts`; the new app then falls back with the warning); the migration can stay (unused by old code).
    - Do not run `tests/fixtures/sql/generation-completion-guard.sql` on production: it holds a lock on `article_drafts` for about a second. It passed on a disposable PostgreSQL 16 here (`docs/testing.md` §SQL fixtures).
 2. Confirm the app reads the list through `list_job_page`:
    1. Confirm production uses only the gateway path: `SUPABASE_SERVICE_ROLE_KEY` is not set for Production (names only: `npx vercel env ls production --scope sl2026`). The direct Supabase path also issues `+00:00` cursors.
