@@ -4502,6 +4502,71 @@ test("the hold on an unreadable job is timed on the server clock, so a jumped br
   expect(errors()).toEqual([]);
 });
 
+test("a gateway error page on the re-check is timed on the server clock too, so the hold still ends after 7 minutes", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generation-jobs\/job-completed-1$/],
+  });
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  const createdAt = Date.now();
+  const runningJob = {
+    ...job,
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    createdAt: new Date(createdAt).toISOString(),
+    steps: job.steps.map((step) => (step.id === "save" ? { ...step, status: "running" as const, detail: undefined } : step)),
+  };
+  let startRequests = 0;
+  await page.route((url) => url.pathname === "/api/generation-jobs", async (route) => {
+    startRequests += 1;
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+  // The platform answers in place of the application, as when the status route times out while the
+  // database hangs: a bare 504 page without the application body, dated on the server clock.
+  let serverMinutesSinceCreation = 2;
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    await route.fulfill({
+      status: 504,
+      contentType: "text/html",
+      headers: { date: new Date(createdAt + serverMinutesSinceCreation * 60 * 1000).toUTCString() },
+      body: "<html><body>Gateway Timeout</body></html>",
+    });
+  });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for a gateway error page on the re-check.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（サーバーの応答が途中で途切れました）", { timeout: 20_000 });
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBe("job-completed-1");
+
+  // The clock of this browser jumped 8 minutes ahead, but the server says 2 minutes have passed: the job
+  // may still finish, so it stays held and no second generation starts.
+  await page.evaluate(() => {
+    window.localStorage.setItem("aio-active-generation-job-started-at", String(Date.now() - 8 * 60 * 1000));
+  });
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成がまだ続いている可能性があるため、新しい記事作成は始めていません", { timeout: 20_000 });
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBe("job-completed-1");
+  expect(startRequests).toBe(1);
+
+  // Past 7 minutes on the server clock the gateway error page releases the hold like any other failed
+  // re-check on the server, so the editor is not locked out while the status route keeps timing out.
+  serverMinutesSinceCreation = 7.5;
+  await page.evaluate(() => {
+    window.localStorage.setItem("aio-active-generation-job-started-at", String(Date.now()));
+  });
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成の状況をサーバーから読み込めませんでした（サーバーの応答が途中で途切れました）", { timeout: 20_000 });
+  await expect(page.getByTestId("active-error")).toContainText("生成ログの「更新」で確認してから");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-created-at"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-started-at"))).toBeNull();
+  expect(startRequests).toBe(1);
+  expect(errors()).toEqual([]);
+});
+
 test("a refresh started while another refresh still owes an older page keeps that page", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   const job = createCompletedGenerationJob();
