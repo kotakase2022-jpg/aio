@@ -5,7 +5,7 @@
 - Next owner: User (owner approval, then release of the late-write guard in the order migration → `aio-store` → app, section 10 step 1) / Codex (review). Still open: production write checks after the access-code task; customer report send by the user.
 - Loop: 10
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
-- Phase: PR #50 (11/16) and PR #51 (11/17) released to production; `aio-store` v6 deployed (section 2). Late-write guard (section 3c) implemented on branch `claude/wizardly-cannon-2jxpv8`, PR open, **not released**. Production write checks still pending.
+- Phase: PR #50 (11/16) and PR #51 (11/17) released to production; `aio-store` v6 deployed (section 2). Late-write guard (section 3c) implemented in PR kotakase2022-jpg/aio#54 (branch `claude/wizardly-cannon-2jxpv8`), **not merged, not released**. Production write checks still pending.
 - Last updated: 2026-11-17 (UTC session; Claude Code cloud container)
 
 ## 1. Current Goal
@@ -15,7 +15,7 @@ Aizawa 11/16 re-verification: the four article structures were confirmed fine. R
 Customer was told results/operation guidance around 2026-11-18〜19 (external estimate, not a measured plan).
 
 ## 2. Current Branch / Commit / PR
-- Late-write guard (section 3c): branch `claude/wizardly-cannon-2jxpv8` from main `4a3d69b`, PR open (not merged, not released). Nothing was applied to Supabase or Vercel from this session.
+- Late-write guard (section 3c): PR kotakase2022-jpg/aio#54, branch `claude/wizardly-cannon-2jxpv8` from main `4a3d69b` (not merged, not released). Nothing was applied to Supabase or Vercel from this session.
 - PR kotakase2022-jpg/aio#50 (`claude/aizawa-nov16-logs-and-save-status`) merged to main as `ed81c15`; production deployment `dpl_3TyMQRKm6Z63o55mPRoysRvKnSKu` promoted by the user on the Windows workstation (11/16 20:42 JST build). Read-only smoke on the canonical URL PASS (logs pages 2 / listed 36 / unpostedCompleted 32 / complete true). Rollback = promote `dpl_9aoGSRfatAYc1MqScMyPTgPecVAU` (previous production).
 - PR kotakase2022-jpg/aio#51 (`claude/aizawa-nov16-production-checks`) squash-merged as `efebb89` on 11/17 after the owner's decisions (section 7). Main CI PASS.
 - App release 2026-11-17, by the user on the Windows workstation:
@@ -39,7 +39,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Fixed: `aio-store` gains `list_job_page` (created_at/id keyset, jobs only, limit+1 rows); the app uses it first and falls back to the window paging on the old gateway's 400 `Unsupported gateway action.` (cached 5 min), so the app release is safe before the gateway deploy. A refresh during a pending older page includes that page. The primary/regenerate button re-checks a stored unconfirmed job instead of starting a new one.
 - Gated production check scripts (not yet run successfully on production; the first attempt stopped at login because the entered access code was rejected, nothing was written): `scripts/production-older-draft-check.mjs`, extended `scripts/production-article-smoke.mjs`. Paused on the user's instruction.
 
-## 3c. Late-write guard (owner's 11/17 known limitation, separate PR, not released)
+## 3c. Late-write guard (owner's 11/17 known limitation, PR kotakase2022-jpg/aio#54, not released)
 - Problem: a draft save or job completion already sent could be applied late by Supabase after the browser released the held job ID (7 min), and a forward jump of the browser clock could end the hold early. Either way the generation log could show two articles.
 - Database: additive migration `supabase/migrations/20261117051104_guarded_generation_completion.sql` adds `aio_complete_generation_job(job_row, expected_updated_at, draft_row, image_rows)`. In one transaction it locks the job row (`for update`), requires kind = job, status `running` and `clock_timestamp() < created_at + 6 minutes`, compare-and-sets `updated_at` (`40001`), refuses an existing draft id (`23505`), saves the draft through the unchanged `aio_save_draft`, writes the completed job, and checks the deadline again after the writes. A late or slowed-down completion raises SQLSTATE `JOB01` and writes nothing. `security invoker`, fixed `search_path`, EXECUTE revoked from public/anon/authenticated and granted to service_role only. No existing object, RLS or grant changed.
 - Gateway: `aio-store` gains `complete_job` (calls the RPC; `JOB01` → 409 `Generation job can no longer be completed.`, `40001` → 409). Existing actions unchanged.
@@ -82,7 +82,7 @@ PR #50 / #51:
 - Earlier items still open: shared demo auth (no per-user isolation), human source review, 11/13 pending own records cleanup (below).
 
 ## 7. CodeRabbit Review
-- Late-write guard PR: review pending at handoff (check the PR).
+- PR kotakase2022-jpg/aio#54 (late-write guard): review pending at handoff (check the PR).
 - PR kotakase2022-jpg/aio#50, review of `8344f5e`: 5 actionable comments.
   - Fixed: inherited `VERCEL` could split the E2E seed/read store (`VERCEL: ""` in webServer env); a 2xx response with an unreadable body is now an unconfirmed outcome; refresh assertions now wait for the `limit=` refresh response before counting rows.
   - Intentionally not adopted in this PR (recorded on the threads): (a) a stale request delayed *before* the server reads the revision can still win: not only after the 60 s timeout but also on a quick retry after an early connection drop if the old request starts processing late (an earlier "only >60 s delay" statement was wrong and was corrected after CodeRabbit's reply); concurrent editing from several screens stays last-writer-wins as before this PR; (b) concurrent *first* saves of a draft that has no stored row are not create-only (legacy drafts without a canonical row only). Both need client base-revision tracking plus a request ID and/or an RPC change (migration). Follow-up recommended.
