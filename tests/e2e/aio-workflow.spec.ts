@@ -4396,6 +4396,69 @@ test("a status read that fails on the server keeps the job, and a failing re-che
   expect(errors()).toEqual([]);
 });
 
+test("the hold on an unreadable job is timed on the server clock, so a jumped browser clock cannot end it early", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generation-jobs\/job-completed-1$/],
+  });
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  const createdAt = Date.now();
+  const runningJob = {
+    ...job,
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    createdAt: new Date(createdAt).toISOString(),
+    steps: job.steps.map((step) => (step.id === "save" ? { ...step, status: "running" as const, detail: undefined } : step)),
+  };
+  let startRequests = 0;
+  await page.route((url) => url.pathname === "/api/generation-jobs", async (route) => {
+    startRequests += 1;
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+  // The server keeps failing to read the job; each answer says what time it is on the server.
+  let serverMinutesSinceCreation = 2;
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    await route.fulfill({
+      status: 500,
+      headers: { date: new Date(createdAt + serverMinutesSinceCreation * 60 * 1000).toUTCString() },
+      json: { ok: false, error: "生成ジョブの読み込みに失敗しました。" },
+    });
+  });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for a jumped browser clock.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（生成ジョブの読み込みに失敗しました。）", { timeout: 20_000 });
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-created-at"))).toBe(runningJob.createdAt);
+
+  // The clock of this browser jumped 8 minutes ahead, but the server says 2 minutes have passed: the job
+  // may still finish, so it stays held and no second generation starts.
+  await page.evaluate(() => {
+    window.localStorage.setItem("aio-active-generation-job-started-at", String(Date.now() - 8 * 60 * 1000));
+  });
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成がまだ続いている可能性があるため、新しい記事作成は始めていません", { timeout: 20_000 });
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBe("job-completed-1");
+  expect(startRequests).toBe(1);
+
+  // Past 7 minutes on the server clock the database no longer accepts the completion of this job,
+  // so the hold ends even though the own record of this browser says the job just started.
+  serverMinutesSinceCreation = 7.5;
+  await page.evaluate(() => {
+    window.localStorage.setItem("aio-active-generation-job-started-at", String(Date.now()));
+  });
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成の状況をサーバーから読み込めませんでした", { timeout: 20_000 });
+  await expect(page.getByTestId("active-error")).toContainText("生成ログの「更新」で確認してから");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-created-at"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-started-at"))).toBeNull();
+  expect(startRequests).toBe(1);
+  expect(errors()).toEqual([]);
+});
+
 test("a refresh started while another refresh still owes an older page keeps that page", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page);
   const job = createCompletedGenerationJob();
