@@ -96,7 +96,7 @@ Access-code task (separate; CodeRabbit finding on PR #51):
   - `/login`: email and password, same card style.
   - Header: the signed-in email and a ログアウト button (DELETE, then `location.replace("/login")`, so Back cannot show the signed-in page). It sits beside the primary button column, so the requirement message stays under the button it explains.
   - API 401 text is now 「認証が必要です。ログインしてください。」.
-  - The return path after login is checked by URL resolution. This also rejects `/\host` and tab/newline forms that the old `startsWith("//")` check let through (an open redirect).
+  - The return path after login is checked by URL resolution. This also rejects `/\host` and tab/newline forms that the old `startsWith("//")` check let through (an open redirect). A resolved path that starts with `//` is rejected too. Otherwise dot segments (`/.//host/x`) produced one that a second check, in the login form, turned into another host (CodeRabbit, section 7).
 - Operator tooling: `npm run auth:create-user -- <email>` (`scripts/create-login-user.mjs`). It prints a generated password (about 116 bits) once, plus the entry; `--password-stdin` hashes a chosen password (15+ characters). Japanese guide with the release order: `docs/login-accounts.md`.
 - Production scripts:
   - All three require `AIO_SMOKE_LOGIN_EMAIL` and `AIO_SMOKE_LOGIN_PASSWORD`, with no fallback.
@@ -106,6 +106,11 @@ Access-code task (separate; CodeRabbit finding on PR #51):
 - Test robustness (pre-existing races, same pattern as the loop-10 fix of `user can stop an in-progress generation job`): two E2E tests asserted, right after `click()`, on a value that the Playwright route callback sets only later in the test process. Each now waits for that value; the assertions are unchanged.
   - `uploaded visual tone image is sent to generation as upload mode` failed once in a full run (15/15 alone).
   - `generation cancel failure keeps the job active and recoverable` failed once on the tree merged with `028e84b` (15/15 alone after the fix).
+  - `theme candidate failure can be retried and then applied` failed once in the run after the CodeRabbit fixes (10/10 alone after the fix).
+  - `competitor research failure resets progress and remains recoverable` failed once in a later run (10/10 alone after the fix).
+  - `legacy fixed authentication cookie cannot bypass the login screen` hit the favicon abort known since loop 10 (2/20 on untouched main).
+    - Root cause: the test opened `/login` only to read the origin, so the next navigation could cut off that favicon request.
+    - It now sets the cookies from `baseURL` before its only navigation (20/20).
 - Account setup started: at the owner's request, that session generated the owner's own account entry. It went to the owner as a private file, not into this repository. The customer's account is still to be created before the release.
 
 ## 4. Files Changed
@@ -143,7 +148,10 @@ Access-code task (separate; CodeRabbit finding on PR #51):
   - No login rate limit: serverless instances share no store. Mitigation: generated ~116-bit passwords or 15+ characters, scrypt cost per attempt, the same answer and cost for unknown emails.
   - Account changes need a redeploy (environment variable). There is no self-service password change or reset; the operator re-issues.
   - `scripts/check-test-integrity.mjs` matches braces without understanding comments: an apostrophe in a comment inside a test body hides that test's assertions ("does not appear to contain an assertion"). Avoid apostrophes in such comments, or fix the guard in a separate task.
-  - Other E2E tests may still read a route-callback value right after `click()` (the races fixed in section 3d). One left as is, `expect(submittedImageCount).toBe(0)`, cannot fail that way: an early read also gives 0, so it may pass without proving anything. A separate test-robustness pass is worth doing.
+  - About 30 more E2E assertions read a route-callback value right after `click()` without waiting, the race fixed four times in section 3d (four different ones fired across five full runs in this container). Find them by a synchronous `expect(...)` on the line after a `.click();`, mostly `expect(calls.<name>).toBe(n)`.
+    - CI retries once, so each one shows up only as an occasional flake.
+    - `expect(submittedImageCount).toBe(0)` cannot fail that way (an early read also gives 0), so it may pass without proving anything.
+    - Fixing them all, with `await expect.poll(...)`, is a separate test-robustness task.
 - Log sync on save/post beyond the 100 most recently updated jobs: fixed in PR #53 (`028e84b`), gateway side deployed (v7); production keeps the old search until the app release (37 jobs today, so no effect yet).
 - Dev-only dependencies: `npm audit` reports 7 moderate advisories (typescript-eslint chain, minimatch); production dependencies 0.
 - The Vercel account `renjihirase-8922` has no two-factor authentication (CLI warning). The tokens saved on environment `aio` for this attempt should be revoked when no longer needed.
@@ -180,7 +188,10 @@ Access-code task (separate; CodeRabbit finding on PR #51):
   - Also awaiting the owner, as part of the same residual-risk decision: a forward jump of the browser clock during a 5xx outage could end the 7 min hold early (CodeRabbit). A full guarantee needs server-side control of the save (migration).
   - Not changed, left for the owner: remove the default demo access code from `src/app/api/demo-auth/route.ts` and reject login when `DEMO_ACCESS_CODE` is unset. A valid security finding, but if production relies on the default it would lock everyone out. The owner asked to set the access-code topic aside.
 - PR kotakase2022-jpg/aio#53: CodeRabbit review of `2aa463d` after the rate limit reset: no actionable comments, merge risk minimal.
-- PR kotakase2022-jpg/aio#55 (access-code task): not reviewed yet. The automatic review and one `@coderabbitai review` request (06:36 UTC) were both rate-limited. The session watching the PR re-requests once after the reset and fixes valid findings.
+- PR kotakase2022-jpg/aio#55 (access-code task): reviewed at `1a83b4c` after two rate-limited attempts (review requested again at 07:38 UTC). 3 actionable findings. All three were reproduced by new tests before fixing, and are fixed in the next commit:
+  - (Major, security) Open redirect after login: `next=/.//return-path.invalid//evil.example` became `//return-path.invalid//evil.example` on the page and `//evil.example` in the form, so the browser left the site. `safeReturnPath` now also rejects a resolved path that starts with `//`, so a second check changes nothing. Unit tests (both checks, idempotence, same origin) and an E2E login with that `next`. The thread stays open for the owner, as a security finding.
+  - (Minor) A JSON `null` body made the login route throw (500). Any non-object JSON now gets the usual 400. Integration test with `null`, a number, a string and an array.
+  - (Minor) The length limit counted raw input at login but normalized input at creation, so a password the script accepted could be refused (`"Å"` × 150). Login now counts after NFKC too, and the route no longer checks raw length. Unit and integration tests with that password.
 - Codex GitHub review: not performed on #50, #51, #53 or #55 (usage limit); no credits added.
 
 ## 8. Optional Bugbot Findings
@@ -203,7 +214,10 @@ Access-code task (separate; CodeRabbit finding on PR #51):
   - Not first-time green:
     - The integrity guard failed once on an apostrophe in a test comment; the comment was reworded.
     - The new logout test caught a real defect: logout navigated before reading the response, so Chrome reported the request as aborted. Fixed.
-    - Two pre-existing E2E races (section 3d).
+    - Four pre-existing E2E races and the favicon abort (section 3d).
+  - After the CodeRabbit fixes: typecheck, lint, integrity (68 files) PASS; 62 files / 670 tests PASS; contract 15 PASS; build PASS.
+    - Full E2E runs hit, one per run, the theme-candidate race, the favicon abort and the competitor-research race. Each was fixed at its root (section 3d).
+    - Final full E2E: 86/86 PASS (85 + the new open-redirect test).
   - Manual check in a local production build: login screen, wrong-password message, header with email and ログアウト, logout back to `/login`.
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 

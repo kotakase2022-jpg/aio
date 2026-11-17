@@ -995,13 +995,14 @@ test("theme candidate failure can be retried and then applied", async ({ page })
   await openInputStep(page, "theme");
   await page.getByTestId("theme-candidates-button").click();
 
-  expect(calls.themeCandidates).toBe(1);
+  // Routed requests are counted in the test process after click() returns; wait for each count.
+  await expect.poll(() => calls.themeCandidates).toBe(1);
   await expect(page.getByTestId("theme-candidates-error")).toContainText("theme candidate failed");
   await expect(page.getByTestId("theme-candidates-button")).toBeEnabled();
 
   await page.getByTestId("theme-candidates-button").click();
 
-  expect(calls.themeCandidates).toBe(2);
+  await expect.poll(() => calls.themeCandidates).toBe(2);
   expect(calls.themeCandidatePrimaryInfo).toContain("Primary field observation");
   await expect(page.getByTestId("theme-candidates-error")).toHaveCount(0);
   await expect(page.getByTestId("theme-candidate-card-0")).toContainText(
@@ -1138,7 +1139,8 @@ test("competitor research failure resets progress and remains recoverable", asyn
     .fill("Competitor memo for recoverable research failure.");
   await page.getByTestId("competitor-research-button").click();
 
-  expect(calls.competitorResearch).toBe(1);
+  // The routed request is counted in the test process after click() returns; wait for it.
+  await expect.poll(() => calls.competitorResearch).toBe(1);
   await expect(page.getByText("競合情報調査に失敗しました。")).toBeVisible();
   await expect(page.getByTestId("competitor-research-button")).toBeEnabled();
   await expect(page.getByTestId("competitor-research-progress")).toBeHidden();
@@ -3071,6 +3073,25 @@ test("login rejects the retired access code and a wrong password, then preserves
   expect(errors()).toEqual([]);
 });
 
+test("a return path that a second check would turn into another site stays on this site", async ({
+  page,
+}) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+
+  await page.route("**/api/generation-logs", async (route) => {
+    await route.fulfill({ json: { ok: true, logs: [] } });
+  });
+
+  // The page checks `next`, and the form checks the result again right before navigating.
+  await page.goto("/login?next=%2F.%2F%2Freturn-path.invalid%2F%2Fevil.example");
+  const origin = new URL(page.url()).origin;
+  await submitLogin(page);
+
+  await page.waitForURL((url) => url.origin === origin && url.pathname === "/");
+  await expect(page.getByTestId("article-primary-button")).toBeVisible();
+  expect(errors()).toEqual([]);
+});
+
 test("the retired access-code screen leads to the login screen and its API admits nobody", async ({
   page,
 }) => {
@@ -3090,10 +3111,13 @@ test("the retired access-code screen leads to the login screen and its API admit
 test("legacy fixed authentication cookie cannot bypass the login screen", async ({
   page,
   context,
+  baseURL,
 }) => {
   const errors = collectUnexpectedBrowserErrors(page);
-  await page.goto("/login");
-  const origin = new URL(page.url()).origin;
+  // The cookies are set before the only navigation. Opening a page first just to read the origin
+  // let the next navigation cut off the favicon request of that page (an intermittent requestfailed).
+  expect(baseURL).toBeTruthy();
+  const origin = baseURL as string;
   await context.clearCookies();
   await context.addCookies([
     {

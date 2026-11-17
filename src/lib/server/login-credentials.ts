@@ -91,21 +91,27 @@ export function hashPasswordSync(password: string, params: ScryptParams = DEFAUL
 
 export async function verifyPassword(password: string, encodedHash: string) {
   const parsed = parsePasswordHash(encodedHash);
-  if (!parsed || password.length > PASSWORD_MAX_LENGTH) {
+  const normalized = normalizePassword(password);
+  // The same limit as passwordProblem, counted after normalization: whatever the script accepted
+  // logs in, however the characters are typed (composed or not).
+  if (!parsed || normalized.length > PASSWORD_MAX_LENGTH) {
     return false;
   }
 
   const key = await new Promise<Buffer>((resolve, reject) => {
-    scrypt(normalizePassword(password), parsed.salt, parsed.key.length, scryptOptions(parsed), (error, derived) =>
+    scrypt(normalized, parsed.salt, parsed.key.length, scryptOptions(parsed), (error, derived) =>
       error ? reject(error) : resolve(derived),
     );
   });
   return timingSafeEqual(key, parsed.key);
 }
 
-/** Spends the same work as a real check for an email that has no account, then fails. */
+/**
+ * Does the same as a real check for an email that has no account, then fails: the same hash work,
+ * or the same early refusal for an overlong password.
+ */
 export async function rejectUnknownAccount(password: string) {
-  await verifyPassword(password.slice(0, PASSWORD_MAX_LENGTH), UNKNOWN_ACCOUNT_HASH);
+  await verifyPassword(password, UNKNOWN_ACCOUNT_HASH);
   return false;
 }
 

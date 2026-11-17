@@ -96,6 +96,11 @@ describe("email and password login", () => {
       { email: "   ", password: "   " },
       { email: 1, password: ["x"] },
       "not json",
+      // Valid JSON that is not an object.
+      "null",
+      "123",
+      "\"text\"",
+      "[]",
     ]) {
       const rejected = await POST(loginRequest(body));
       expect(rejected.status, JSON.stringify(body)).toBe(400);
@@ -136,6 +141,18 @@ describe("email and password login", () => {
     // The server log says why, without naming an account or a hash.
     expect(consoleError).toHaveBeenCalledWith(expect.stringMatching(/^Login is unavailable: AIO_AUTH_USERS/));
     expect(consoleError.mock.calls.flat().join("\n")).not.toMatch(/@|scrypt:|test-only-password/);
+  });
+
+  test("a password the account script accepts also logs in, counted after normalization", async () => {
+    // 300 code units as typed, 150 after NFKC: within the limit both when created and when typed again.
+    const account = { email: "combining@example.test", password: "Å".repeat(150) };
+    process.env.AIO_AUTH_USERS = authUsersValue([account]);
+    const { POST } = await import("@/app/api/auth/session/route");
+
+    const accepted = await POST(loginRequest(account));
+
+    expect(accepted.status).toBe(200);
+    expect(accepted.headers.getSetCookie().some((cookie) => cookie.startsWith("aio_session=v2."))).toBe(true);
   });
 
   test("production without a session secret refuses to log in", async () => {

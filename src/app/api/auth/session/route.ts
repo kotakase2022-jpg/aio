@@ -9,7 +9,6 @@ import {
 import {
   EMAIL_MAX_LENGTH,
   normalizeEmail,
-  PASSWORD_MAX_LENGTH,
   rejectUnknownAccount,
   verifyPassword,
 } from "@/lib/server/login-credentials";
@@ -29,17 +28,19 @@ export async function POST(request: Request) {
     return failure(CONFIGURATION_ERROR, 500);
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
-    email?: unknown;
-    password?: unknown;
-  };
+  const parsed: unknown = await request.json().catch(() => null);
+  // Valid JSON need not be an object (`null`, a number, a string); all of those carry no input.
+  const body: { email?: unknown; password?: unknown } =
+    parsed !== null && typeof parsed === "object" ? parsed : {};
   const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
   // New passwords never start or end with a space, so trimming only forgives a pasted one.
   const password = typeof body.password === "string" ? body.password.trim() : "";
   if (!email || !password) {
     return failure(MISSING_INPUT_ERROR, 400);
   }
-  if (email.length > EMAIL_MAX_LENGTH || password.length > PASSWORD_MAX_LENGTH) {
+  // No account has a longer email. The password length is checked by verifyPassword after
+  // normalization, the same way the account script checks a new password.
+  if (email.length > EMAIL_MAX_LENGTH) {
     return failure(INVALID_CREDENTIALS_ERROR, 401);
   }
 
