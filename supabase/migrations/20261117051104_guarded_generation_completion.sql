@@ -1,8 +1,9 @@
 -- A generation run commits its article (draft and images) and the job's completion in one
--- transaction, and only while the job row is still running and younger than the generation
--- deadline. A save or completion request that the database applies late therefore changes
--- nothing once the deadline has passed: it can no longer add an article to the generation log
--- after the editor's browser has stopped holding the job.
+-- transaction, and only if the job row is still running and younger than the generation
+-- deadline when this function checks it. A save or completion request that the database
+-- processes after the deadline therefore changes nothing. The checks run inside the
+-- transaction, not at its commit: a commit that stalls for longer than the margin to the
+-- browser's 7-minute hold can still land after the browser has stopped holding the job.
 -- Additive only: aio_save_draft and every existing object stay unchanged, so the deployed
 -- application and gateway keep working while this function is rolled out.
 create or replace function public.aio_complete_generation_job(
@@ -18,7 +19,8 @@ set search_path = pg_catalog, public
 as $$
 declare
   -- Same limit as GENERATION_JOB_EXPIRY_MS in src/lib/server/generation-jobs.ts. A browser that
-  -- cannot read the job keeps holding it for 7 minutes, so nothing may commit after 6.
+  -- cannot read the job keeps holding it for 7 minutes; the minute between is the margin for
+  -- clock differences and for the commit that follows the last check.
   completion_deadline constant interval := interval '6 minutes';
   job_payload jsonb := job_row -> 'input_payload';
   job_id uuid;
@@ -67,8 +69,8 @@ begin
     set input_payload = job_payload, updated_at = job_updated_at
     where id = job_id;
 
-  -- Checked again after the writes: a transaction slowed down on its way (lock wait, I/O) that
-  -- would commit after the deadline is rolled back as a whole instead.
+  -- Checked again after the writes: a transaction slowed down on its way (lock wait, I/O) past
+  -- the deadline is rolled back as a whole instead. The commit itself comes after this check.
   if clock_timestamp() >= stored.created_at + completion_deadline then
     raise exception 'Generation job passed its completion deadline' using errcode = 'JOB01';
   end if;

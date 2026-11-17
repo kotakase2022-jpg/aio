@@ -245,9 +245,9 @@ the JavaScript stand-ins used by the integration tests:
 
 - `tests/fixtures/sql/draft-atomicity.sql`: `aio_save_draft` (atomic rollback, revision guard,
   service-role-only execution).
-- `tests/fixtures/sql/generation-completion-guard.sql`: `aio_complete_generation_job` (commits only
-  while the job is running and younger than 6 minutes; a delayed or slowed-down completion writes
-  nothing; cancel/fail/complete states, revision guard, atomic rollback, create-only draft, editor
+- `tests/fixtures/sql/generation-completion-guard.sql`: `aio_complete_generation_job` (saves only if
+  its checks find the job running and younger than 6 minutes; a delayed or slowed-down completion
+  writes nothing; cancel/fail/complete states, revision guard, atomic rollback, create-only draft, editor
   saves unaffected, service-role-only execution). It holds a lock on `article_drafts` for about a
   second, so run it on a disposable database, not on production.
 - `tests/fixtures/sql/supabase-stub.sql`: stand-ins for the Supabase roles and schemas, for a
