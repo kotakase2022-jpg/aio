@@ -251,6 +251,22 @@ steps. The script blocks application mutations, never generates/saves/posts an a
 its screenshot under ignored `.verification-files/`. Set `AIO_SMOKE_BASE_URL` to a deployment URL
 in the same project to check it before promotion. This smoke is not a substitute for the full E2E.
 
+Two production checks write data and run only with explicit approval, a confirmation value, and
+`DEMO_ACCESS_CODE` set by the operator:
+
+- `scripts/production-article-smoke.mjs` (`AIO_SMOKE_WRITE_CONFIRM=create-one-disposable-article`)
+  creates one marker-tagged, image-free article. Since November 16 it also checks that the save
+  step reads 「ドラフトを保存しました」 (never 処理中) and that the new log is listed on the first
+  page as 完了 / 未投稿.
+- `scripts/production-older-draft-check.mjs`
+  (`AIO_SMOKE_WRITE_CONFIRM=save-own-test-draft-unchanged`; no access-code fallback) opens an
+  unposted customer article beyond the first 20 logs read-only and compares the editor with the
+  stored title, body and structure/table/FAQ settings. It then saves the release team's own
+  `AIO-RELEASE-SMOKE-` article once without changes. Before sending, it blocks the save if the
+  payload differs from the stored article. After a reload it requires every saved field except
+  `updatedAt` to be unchanged and the list position to be the same. It prints IDs, pages and
+  booleans only.
+
 `npm run test:live:openai:image` is an opt-in, paid, one-image contract probe using the configured
 image model. It verifies a complete PNG in memory without saving to Storage or the database.
 Run it only with approved API credentials and cost authorization, like the text live probe.

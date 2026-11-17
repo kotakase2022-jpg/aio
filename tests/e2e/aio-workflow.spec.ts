@@ -3421,12 +3421,15 @@ test("user can stop an in-progress generation job from the primary CTA", async (
   await expect(page.getByTestId("article-primary-button")).toContainText("記事作成をストップ");
   await page.getByTestId("article-primary-button").click();
 
-  expect(cancelCalls).toBe(1);
+  // The click resolves before the routed cancel request is counted; wait for it, then require
+  // that exactly one cancel was sent once the UI has settled.
+  await expect.poll(() => cancelCalls).toBe(1);
   await expect(page.getByText("記事作成を停止しました。")).toBeVisible();
   await expect(page.getByTestId("article-primary-button")).toContainText("AIによる記事作成");
   await expect(
     page.evaluate(() => window.localStorage.getItem("aio-active-generation-job-id")),
   ).resolves.toBeNull();
+  expect(cancelCalls).toBe(1);
   expect(errors()).toEqual([]);
 });
 
@@ -4192,6 +4195,271 @@ test("a failed older-log request keeps the listed logs and can be retried", asyn
   expect(errors()).toEqual([]);
 });
 
+test("a refresh while an older page is still loading keeps that page in the list", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const jobs = Array.from({ length: 41 }, (_, index) => buildSeededJob(index));
+  await seedLocalStore(jobs);
+  try {
+    let releaseOlderPage: () => void = () => {};
+    const olderPageHeld = new Promise<void>((resolve) => {
+      releaseOlderPage = resolve;
+    });
+    let holdNextOlderPage = true;
+    await page.route((url) => url.pathname === "/api/generation-logs" && url.searchParams.has("cursor"), async (route) => {
+      if (holdNextOlderPage) {
+        holdNextOlderPage = false;
+        await olderPageHeld;
+      }
+      await route.fallback();
+    });
+    await login(page, { preparePrimaryInfo: false });
+    await page.getByTestId("generation-logs-toggle").click();
+    const rows = page.getByTestId("generation-logs-content").locator("tbody tr");
+    await expect(rows).toHaveCount(20);
+
+    await page.getByTestId("generation-logs-load-more").click();
+    await expect(page.getByTestId("generation-logs-load-more").locator(".animate-spin")).toHaveCount(1);
+    const refreshed = waitForGenerationLogRefresh(page, 40);
+    await page.getByTestId("generation-logs-panel").getByRole("button", { name: "更新", exact: true }).click();
+    await refreshed;
+    await expect(rows).toHaveCount(40);
+    const olderPageAnswered = page.waitForResponse((response) => new URL(response.url()).searchParams.has("cursor"));
+    releaseOlderPage();
+    // Only check once the superseded answer has arrived and the page had a chance to apply it.
+    await (await olderPageAnswered).finished();
+    await settleAnimationFrames(page);
+
+    // The superseded older-page response is ignored, but the refresh already covers its rows.
+    await expect(rows).toHaveCount(40);
+    await expect(page.getByTestId("generation-log-open-e2e-log-01")).toBeVisible();
+    await expect(page.getByTestId("generation-logs-load-more")).toBeEnabled();
+    await expect(page.getByTestId("generation-logs-load-more").locator(".animate-spin")).toHaveCount(0);
+    await page.getByTestId("generation-logs-load-more").click();
+    await expect(rows).toHaveCount(41);
+    expect(errors()).toEqual([]);
+  } finally {
+    await clearLocalStore();
+  }
+});
+
+test("an unconfirmed generation is checked again instead of starting a second one", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedRequests: [/\/api\/generation-jobs\/job-completed-1$/],
+  });
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  const runningJob = {
+    ...job,
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    steps: job.steps.map((step) => (step.id === "save" ? { ...step, status: "running" as const, detail: undefined } : step)),
+  };
+  let startRequests = 0;
+  await page.route((url) => url.pathname === "/api/generation-jobs", async (route) => {
+    startRequests += 1;
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+  let dropStatusChecks = Number.POSITIVE_INFINITY;
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    if (dropStatusChecks > 0) {
+      dropStatusChecks -= 1;
+      await route.abort("connectionreset");
+      return;
+    }
+    await route.fallback();
+  });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for an unconfirmed generation.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（通信が切断されました）", { timeout: 20_000 });
+  await expect(page.getByTestId("active-error")).toContainText("新しい記事作成は始めずに状況の確認を再開します");
+  expect(startRequests).toBe(1);
+
+  // The button re-checks the stored job; no second (paid) generation is requested.
+  dropStatusChecks = 0;
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" })).toBeVisible();
+  await expect(page.getByTestId("generation-step-save")).toContainText("Saved");
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成は完了していました。");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBeNull();
+  expect(startRequests).toBe(1);
+  expect(errors()).toEqual([]);
+});
+
+test("after a reload whose status checks are lost, the button re-checks the job without any form input", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedRequests: [/\/api\/generation-jobs\/job-completed-1$/],
+  });
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  let startRequests = 0;
+  await page.route((url) => url.pathname === "/api/generation-jobs", async (route) => {
+    startRequests += 1;
+    await route.fulfill({ json: { ok: true, job } });
+  });
+  let dropStatusChecks = Number.POSITIVE_INFINITY;
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    if (dropStatusChecks > 0) {
+      dropStatusChecks -= 1;
+      await route.abort("connectionreset");
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/demo-login");
+  await page.evaluate(() => {
+    window.localStorage.setItem("aio-active-generation-job-id", "job-completed-1");
+  });
+  await page.getByTestId("demo-access-code").fill("202607");
+  await page.getByTestId("demo-login-submit").click();
+  await page.waitForURL("**/");
+  await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（通信が切断されました）", { timeout: 20_000 });
+  // No status read succeeded, so the form was never restored and a new start would lack input.
+  await expect(page.getByTestId("reference-text-0")).toHaveValue("");
+  await expect(page.getByTestId("article-primary-button")).toBeEnabled();
+
+  dropStatusChecks = 0;
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" })).toBeVisible();
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成は完了していました。");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBeNull();
+  expect(startRequests).toBe(0);
+  expect(errors()).toEqual([]);
+});
+
+test("a status read that fails on the server keeps the job, and a failing re-check releases it with guidance", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, {
+    allowedFailedResponses: [/\/api\/generation-jobs\/job-completed-1$/],
+  });
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  const runningJob = {
+    ...job,
+    status: "running" as const,
+    draft: undefined,
+    draftId: undefined,
+    completedAt: undefined,
+    steps: job.steps.map((step) => (step.id === "save" ? { ...step, status: "running" as const, detail: undefined } : step)),
+  };
+  let startRequests = 0;
+  await page.route((url) => url.pathname === "/api/generation-jobs", async (route) => {
+    startRequests += 1;
+    await route.fulfill({ json: { ok: true, job: runningJob } });
+  });
+  // A temporary storage failure answers the status read with an application error, not a lost request.
+  let failStatusReads = Number.POSITIVE_INFINITY;
+  await page.route("**/api/generation-jobs/job-completed-1", async (route) => {
+    if (failStatusReads > 0) {
+      failStatusReads -= 1;
+      await route.fulfill({ status: 500, json: { ok: false, error: "生成ジョブの読み込みに失敗しました。" } });
+      return;
+    }
+    await route.fallback();
+  });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for a failing status read.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("記事作成の状況を確認できませんでした（生成ジョブの読み込みに失敗しました。）", { timeout: 20_000 });
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBe("job-completed-1");
+
+  // The re-check also fails on the server while the job could still be generating: keep it, so a
+  // second generation cannot run at the same time.
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成がまだ続いている可能性があるため、新しい記事作成は始めていません", { timeout: 20_000 });
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBe("job-completed-1");
+  expect(startRequests).toBe(1);
+
+  // Past the maximum run time the job can no longer be generating: the ID is released so the
+  // editor is not locked out, with guidance to check the logs first.
+  await page.evaluate(() => {
+    window.localStorage.setItem("aio-active-generation-job-started-at", String(Date.now() - 8 * 60 * 1000));
+  });
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByTestId("active-error")).toContainText("前回の記事作成の状況をサーバーから読み込めませんでした", { timeout: 20_000 });
+  await expect(page.getByTestId("active-error")).toContainText("生成ログの「更新」で確認してから");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("aio-active-generation-job-id"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("aio-active-generation-job-started-at"))).toBeNull();
+  expect(startRequests).toBe(1);
+
+  // Only now does the button start a new job; one transient failure on the way is retried silently.
+  failStatusReads = 1;
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("generation-step-save")).toContainText("Saved");
+  await expect(page.getByTestId("active-error")).toHaveCount(0);
+  expect(startRequests).toBe(2);
+  expect(errors()).toEqual([]);
+});
+
+test("a refresh started while another refresh still owes an older page keeps that page", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const job = createCompletedGenerationJob();
+  job.draft!.images = [];
+  await mockCommonApiRoutes(page, job);
+  const summaries: GenerationLogSummary[] = Array.from({ length: 41 }, (_, index) => ({
+    id: `overlap-log-${String(40 - index).padStart(2, "0")}`,
+    status: "completed",
+    createdAt: new Date(Date.UTC(2026, 9, 1) + (40 - index) * 60_000).toISOString(),
+    updatedAt: "2026-11-16T00:00:00.000Z",
+    inputSummary: `重なる更新 ${40 - index}`,
+    outputTitle: `重なる更新 ${40 - index}`,
+    draftStatus: "draft",
+  }));
+  let releaseOlderPage: () => void = () => {};
+  const olderPageHeld = new Promise<void>((resolve) => {
+    releaseOlderPage = resolve;
+  });
+  let releaseFirstRefresh: () => void = () => {};
+  const firstRefreshHeld = new Promise<void>((resolve) => {
+    releaseFirstRefresh = resolve;
+  });
+  const refreshLimits: number[] = [];
+  let heldAnswersDelivered = 0;
+  await page.route((url) => url.pathname === "/api/generation-logs", async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    if (params.has("cursor")) {
+      await olderPageHeld;
+      await route.fulfill({ json: { ok: true, logs: summaries.slice(20, 40), nextCursor: "after-40", complete: true } });
+      heldAnswersDelivered += 1;
+      return;
+    }
+    const limit = Number(params.get("limit") ?? 20);
+    const held = params.has("limit") && refreshLimits.push(limit) === 1;
+    if (held) await firstRefreshHeld;
+    await route.fulfill({ json: { ok: true, logs: summaries.slice(0, limit), nextCursor: limit < summaries.length ? `after-${limit}` : null, complete: true } });
+    if (held) heldAnswersDelivered += 1;
+  });
+  await login(page);
+  await page.getByTestId("generation-logs-toggle").click();
+  const rows = page.getByTestId("generation-logs-content").locator("tbody tr");
+  await expect(rows).toHaveCount(20);
+
+  await page.getByTestId("generation-logs-load-more").click();
+  await page.getByTestId("generation-logs-panel").getByRole("button", { name: "更新", exact: true }).click();
+  await expect.poll(() => refreshLimits).toEqual([40]);
+  // A finished generation refreshes the logs again before the first refresh has answered.
+  await page.getByTestId("reference-text-0").fill("Reference for overlapping log refreshes.");
+  await page.getByTestId("article-primary-button").click();
+  await expect(page.getByRole("article").getByRole("heading", { name: "AIO Content Operations Guide" })).toBeVisible();
+  await expect.poll(() => refreshLimits).toEqual([40, 40]);
+  await expect(rows).toHaveCount(40);
+  releaseFirstRefresh();
+  releaseOlderPage();
+  // Only check once both superseded answers were delivered and the page had a chance to apply them.
+  await expect.poll(() => heldAnswersDelivered).toBe(2);
+  await settleAnimationFrames(page);
+
+  await expect(rows).toHaveCount(40);
+  await expect(page.getByTestId("generation-log-open-overlap-log-01")).toBeVisible();
+  await expect(page.getByTestId("generation-logs-load-more")).toBeEnabled();
+  expect(errors()).toEqual([]);
+});
+
 test("generation status checks survive a brief disconnect and report repeated loss as unconfirmed", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedRequests: [/\/api\/generation-jobs\/job-completed-1$/],
@@ -4298,6 +4566,13 @@ function buildSeededJob(
     wordpressPostStatus: posted ? "draft" : undefined,
     wordpressPostUrl,
   };
+}
+
+// Lets the page process what it has already received (resolved fetches, then React renders).
+async function settleAnimationFrames(page: Page) {
+  await page.evaluate(
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+  );
 }
 
 // Registered before the action, so an assertion cannot pass on the list shown before the refresh.

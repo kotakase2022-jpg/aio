@@ -10,6 +10,9 @@ import { deltaNov11Form } from "../tests/fixtures/delta-nov11.ts";
 // Deliberately separate from the default read-only production smoke.
 nextEnv.loadEnvConfig(process.cwd());
 assert.equal(process.env.AIO_SMOKE_WRITE_CONFIRM, "create-one-disposable-article");
+// The operator sets the production code; a value committed in this public repository is no gate.
+const accessCode = process.env.DEMO_ACCESS_CODE?.trim();
+assert.ok(accessCode, "Set DEMO_ACCESS_CODE to the production access code; this smoke has no fallback. Nothing was changed.");
 const baseURL = "https://aio-article-generator.vercel.app";
 const marker = `AIO-RELEASE-SMOKE-${randomUUID()}`;
 const directory = path.resolve(".verification-files", marker);
@@ -48,8 +51,13 @@ try {
     await route.continue();
   });
   await page.goto("/");
-  await page.getByTestId("demo-access-code").fill(process.env.DEMO_ACCESS_CODE || "202607");
+  await page.getByTestId("demo-access-code").fill(accessCode);
+  const loginAnswer = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/demo-auth");
   await page.getByTestId("demo-login-submit").click();
+  // A rejected code stops here at once; nothing has been sent except the login attempt.
+  const loginStatus = (await loginAnswer).status();
+  if (loginStatus === 401) throw new Error("Production rejected DEMO_ACCESS_CODE (アクセスコードが違います). Nothing was changed. Set the production access code and run again.");
+  assert.equal(loginStatus, 200, `login returned HTTP ${loginStatus}`);
   await page.waitForURL(`${baseURL}/`);
   await page.getByTestId("reference-text-0").fill(deltaNov11Form.references[0].text);
   const step = async (name) => page.getByTestId(`input-wizard-step-button-${name}`).click();
@@ -79,9 +87,17 @@ try {
     if (result.job?.status === "failed") throw new Error(result.job.error);
     return result.job?.status === "completed";
   }, { timeout: 240_000 });
-  const draft = (await completedResponse.json()).job.draft;
+  const completedJob = (await completedResponse.json()).job;
+  const draft = completedJob.draft;
   record.draftId = draft.id;
   await persist();
+  // November 16 ②: the first completed poll already reports the draft as saved, never 処理中.
+  const saveStep = completedJob.steps.find((item) => item.id === "save");
+  assert.equal(saveStep?.status, "done");
+  assert.equal(saveStep?.detail, "ドラフトを保存しました");
+  await expect(page.getByTestId("generation-step-save")).toContainText("ドラフトを保存しました");
+  await expect(page.getByTestId("generation-step-save")).not.toContainText("処理中");
+  record.saveStepShown = "ドラフトを保存しました";
   assert.equal(draft.aiResult.content_policy_version, 2);
   assert.equal(draft.inputPayload.tableMode, "none");
   assert.equal(draft.inputPayload.supplementalFaqMode, "none");
@@ -100,10 +116,22 @@ try {
   assert.equal(savedResult.ok, true);
   assert.deepEqual(savedResult.warnings, []);
   await page.reload();
+  // The new article is on the first log page, after only logs created later, as 完了 / 未投稿.
+  const firstLogPage = await (await context.request.get("/api/generation-logs")).json();
+  const logPosition = firstLogPage.logs.findIndex((log) => log.id === record.jobId);
+  assert.ok(logPosition >= 0, "the new article is not on the first log page");
+  const createdAt = Date.parse(firstLogPage.logs[logPosition].createdAt);
+  assert.ok(firstLogPage.logs.slice(0, logPosition).every((log) => Date.parse(log.createdAt) >= createdAt));
+  record.logPosition = logPosition;
   await page.getByTestId("generation-logs-toggle").click();
+  const logRow = page.getByTestId("generation-logs-content").locator("tbody tr")
+    .filter({ has: page.getByTestId(`generation-log-open-${record.jobId}`) });
+  await expect(logRow).toContainText("完了");
+  await expect(logRow).toContainText("未投稿");
   await page.getByTestId(`generation-log-open-${record.jobId}`).click();
   const article = page.getByRole("article");
   await expect(article).toContainText(editMarker);
+  await expect(page.getByTestId("generation-step-save")).toContainText("ドラフトを保存しました");
   await expect(article.locator("table, .aio-faq-block")).toHaveCount(0);
   const preview = await article.locator(":scope > div").innerHTML();
   await page.getByTestId("copy-body-html-button").click();

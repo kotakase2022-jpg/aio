@@ -49,6 +49,8 @@ Deno.serve(async (request) => {
         return ok(await getJob(payload));
       case "list_jobs":
         return ok(await listJobs(payload));
+      case "list_job_page":
+        return ok(await listJobPage(payload));
       case "upsert_draft":
         return ok(await upsertDraft(payload));
       case "get_draft":
@@ -126,6 +128,40 @@ async function listJobs(payload: Payload) {
     .filter(Boolean)
     .slice(0, limit);
   return { jobs };
+}
+
+const CURSOR_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// One page of generation jobs, newest creation first with the id as tiebreaker (keyset), so
+// every job stays reachable however many exist and only one page of rows is read.
+async function listJobPage(payload: Payload) {
+  const limit = clampLimit(Number(payload.limit ?? 20), 1, 100);
+  let query = supabase
+    .from("article_inputs")
+    .select("id,input_payload,created_at,updated_at")
+    .eq("input_payload->>kind", "article_generation_job")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+  if (payload.cursor !== undefined && payload.cursor !== null) {
+    const cursor = requireRecord(payload.cursor, "cursor");
+    const createdAt = requireString(cursor.createdAt, "cursor.createdAt");
+    const id = requireString(cursor.id, "cursor.id");
+    if (!CURSOR_TIMESTAMP_PATTERN.test(createdAt) || !Number.isFinite(Date.parse(createdAt)) || !UUID_PATTERN.test(id)) {
+      throw new HttpError("Invalid cursor.", 400);
+    }
+    query = query.or(`created_at.lt."${createdAt}",and(created_at.eq."${createdAt}",id.lt."${id}")`);
+  }
+  const { data, error } = await query;
+  if (error) throw new HttpError(error.message, 500);
+  const rows = (data ?? []) as Payload[];
+  const pageRows = rows.slice(0, limit);
+  const last = pageRows.at(-1);
+  return {
+    jobs: pageRows.map(rowToJob).filter(Boolean),
+    nextCursor: rows.length > limit && last ? { createdAt: String(last.created_at), id: String(last.id) } : null,
+  };
 }
 
 async function upsertDraft(payload: Payload) {
