@@ -24,7 +24,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - `aio-store` Edge Function, Supabase project `npdyfhqugniuxfxpgngh` (dashboard name `esg-chat-data-analysis`): v5 → v6 at 2026-11-17 13:10 JST. Deployed from this cloud session (owner approved) with Supabase CLI 3.2.0 `functions deploy --use-api --no-verify-jwt --yes` and an access token the owner saved as a network secret on the personal environment `aio`.
   - Before: v5 source matched `ed81c15` except one trailing blank line.
   - After: v6 = `efebb89` (contains `list_job_page`), ACTIVE, `verify_jwt` false. OPTIONS 200; an invalid gateway token gets the function's own 401 (so it boots and reads its token table).
-  - Not yet confirmed: that the app actually reads the list through `list_job_page`, rather than the fallback. Check: the `c` value of a decoded `nextCursor` ends with `+00:00`, not `Z`.
+  - Not yet confirmed: that the app actually reads the list through `list_job_page`, rather than the fallback. See section 10, step 1. A `+00:00` cursor proves it only when production uses the gateway path alone.
   - Rollback = redeploy the v5 source (`git show ed81c15:supabase/functions/aio-store/index.ts`; a downloaded copy is in the ignored `.verification-files/aio-store-backup-v5/`).
 
 ## 3. What Was Done
@@ -105,7 +105,10 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
 ## 10. Next Recommended Action
-1. Confirm the app reads the list through `list_job_page`: in a logged-in browser, open `/api/generation-logs?limit=1`, decode `nextCursor` (base64url JSON), and check that `c` ends with `+00:00`.
+1. Confirm the app reads the list through `list_job_page`:
+   1. Confirm production uses only the gateway path: `SUPABASE_SERVICE_ROLE_KEY` is not set for Production (names only: `npx vercel env ls production --scope sl2026`). The direct Supabase path also issues `+00:00` cursors.
+   2. In a logged-in browser, open `/api/generation-logs?limit=1` and decode `nextCursor` (base64url JSON).
+   3. With the gateway path only, `c` ending with `+00:00` means `list_job_page`. Ending with `Z` means the old window fallback.
 2. Access-code task (separate, owner first): confirm or set the production `DEMO_ACCESS_CODE`, then remove the default fallback in `src/app/api/demo-auth/route.ts`.
 3. With the correct access code: run `scripts/production-older-draft-check.mjs` (one unchanged save of the team's own test article), then `scripts/production-article-smoke.mjs` (one paid generation).
 4. Send Aizawa the report after replacing the remaining placeholders with verified facts. The draft is in the follow-up doc; the owner sends it.
