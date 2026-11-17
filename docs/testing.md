@@ -238,6 +238,37 @@ node scripts/generate-document-fixtures.mjs
 
 Fixtures must not contain production data, personal information, API keys, or customer content.
 
+### SQL fixtures (real PostgreSQL)
+
+The database functions in `supabase/migrations` are verified on a real PostgreSQL, not only through
+the JavaScript stand-ins used by the integration tests:
+
+- `tests/fixtures/sql/draft-atomicity.sql`: `aio_save_draft` (atomic rollback, revision guard,
+  service-role-only execution).
+- `tests/fixtures/sql/generation-completion-guard.sql`: `aio_complete_generation_job` (commits only
+  while the job is running and younger than 6 minutes; a delayed or slowed-down completion writes
+  nothing; cancel/fail/complete states, revision guard, atomic rollback, create-only draft, editor
+  saves unaffected, service-role-only execution). It holds a lock on `article_drafts` for about a
+  second, so run it on a disposable database, not on production.
+- `tests/fixtures/sql/supabase-stub.sql`: stand-ins for the Supabase roles and schemas, for a
+  disposable local database only (it refuses to run where `auth` or `storage` already exist).
+
+With a disposable local PostgreSQL (`psql` connected to an empty database):
+
+```bash
+psql -v ON_ERROR_STOP=1 -f tests/fixtures/sql/supabase-stub.sql
+```
+
+```bash
+for f in supabase/migrations/*.sql; do psql -v ON_ERROR_STOP=1 -f "$f" || break; done
+```
+
+```bash
+for f in draft-atomicity generation-completion-guard; do (echo 'begin;'; cat "tests/fixtures/sql/$f.sql"; echo 'rollback;') | psql -v ON_ERROR_STOP=1 -At || break; done
+```
+
+Each fixture prints one `PASS: ...` line and runs inside `BEGIN` / `ROLLBACK`; never commit it.
+
 ## E2E
 
 The PC Chromium suite builds and starts an isolated local production server. It never reuses an

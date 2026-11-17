@@ -51,6 +51,8 @@ Deno.serve(async (request) => {
         return ok(await listJobs(payload));
       case "list_job_page":
         return ok(await listJobPage(payload));
+      case "complete_job":
+        return ok(await completeJob(payload));
       case "upsert_draft":
         return ok(await upsertDraft(payload));
       case "get_draft":
@@ -177,6 +179,31 @@ async function upsertDraft(payload: Payload) {
   if (error) throw new HttpError(error.message, error.code === "40001" ? 409 : 500);
 
   return { draftId };
+}
+
+// Saves a generated draft and marks its job completed in one database transaction, applied only
+// while the stored job is still running and within its deadline (aio_complete_generation_job).
+async function completeJob(payload: Payload) {
+  const job = requireRecord(payload.job, "job");
+  const jobId = requireString(job.id, "job.id");
+  const row = requireRecord(payload.row, "row");
+  const draftId = requireString(row.id, "row.id");
+  if (!Array.isArray(payload.images)) throw new HttpError("images is required.", 400);
+
+  const { error } = await supabase.rpc("aio_complete_generation_job", {
+    job_row: { id: jobId, input_payload: job, updated_at: requireString(job.updatedAt, "job.updatedAt") },
+    expected_updated_at: requireString(payload.expectedUpdatedAt, "expectedUpdatedAt"),
+    draft_row: row,
+    image_rows: payload.images,
+  });
+  // The job is no longer running or is past its deadline; nothing was written.
+  if (error?.code === "JOB01") throw new HttpError("Generation job can no longer be completed.", 409);
+  // The migration is not applied yet: answer like a gateway without this action, so the app
+  // completes the previous way instead of failing the generation.
+  if (error?.code === "PGRST202") throw new HttpError("Unsupported gateway action.", 400);
+  if (error) throw new HttpError(error.message, error.code === "40001" ? 409 : 500);
+
+  return { jobId, draftId };
 }
 
 async function getDraft(payload: Payload) {

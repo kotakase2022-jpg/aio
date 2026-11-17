@@ -152,6 +152,11 @@ async function readLocalDrafts(): Promise<LocalDraftStore> {
   }
 }
 
+/** The article_drafts row and article_images rows of a draft, as the save RPCs take them. */
+export function draftSaveRows(draft: ArticleDraft) {
+  return { draftRow: draftToRow(draft), imageRows: draftToImageRows(draft) };
+}
+
 function draftToRow(draft: ArticleDraft) {
   return sanitizeForPostgres({
     id: draft.id,
