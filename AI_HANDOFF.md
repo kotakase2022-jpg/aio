@@ -3,12 +3,12 @@
 ## 0. Current Loop Phase
 - Current owner: Claude Code
 - Next owner: User / Codex. Remaining:
-  - The app release of PR #53, from an account that can access Vercel scope `sl2026`.
   - The access-code task: PR #55, which needs `AIO_AUTH_USERS` set before its release (section 10).
   - The customer report, sent by the user.
+  - Cleanup of own test records, with approval.
 - Loop: 10
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
-- Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) merged as `028e84b`; `aio-store` v7 deployed; the app release of PR #53 is pending (Vercel access, section 2).
+- Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) released: `aio-store` v7 (14:29 JST) and the app `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (16:03 JST), verified on production (section 2).
 - Access-code task (a second Claude Code session on 11/17, section 3d): PR #55 replaces the shared access code with email + password login. It is open with CI PASS, CodeRabbit is rate-limited, and it is not deployed. **Do not deploy it before `AIO_AUTH_USERS` exists in Vercel Production** (otherwise nobody can log in).
 - Last updated: 2026-11-17 (UTC; two Claude Code cloud sessions)
 
@@ -44,10 +44,23 @@ Access-code task (separate; CodeRabbit finding on PR #51):
   - After: v7 = `028e84b`, ACTIVE, `verify_jwt` false, OPTIONS 200, invalid token → the function's own 401. The current app (`efebb89`) does not call the new action; the read-only smoke after the deploy PASS.
   - Rollback = redeploy the v6 source (`efebb89`).
 - PR kotakase2022-jpg/aio#55 (`claude/zen-mendel-fuml66`, access-code task): open.
-  - Branched from `4a3d69b`. Main was merged into it twice: `028e84b` (PR #53) and `b28d093` (PR #56, this file's 11/17 record). CI PASS on `b68316a`.
+  - Branched from `4a3d69b`. Main was merged into it three times: `028e84b` (PR #53), `b28d093` (PR #56) and `485ee65` (PR #57, the release record of #53).
+  - CI PASS on `1a83b4c`. The two pushes after it ran no CI until the merge of `485ee65`, because the PR then had a conflict with main.
   - Not deployed. That session made no production change: no deploy, no environment change, no request to the production app.
-  - Rollback after its release = promote the deployment before it. That restores the access-code login, including the committed-default exposure.
-- App release of `028e84b`: **not done.** The Vercel tokens saved in this session (network secret on environment `aio`, host `api.vercel.com`) authenticate as `renjihirase-8922`, which is not authorized for scope `sl2026` (the production project's scope; its teams `sl-2026` and `kotakase2022-jpgs-projects` do not contain the project). It needs a token from the account used by the Windows Vercel CLI, or the Windows run of the approved steps. Rollback target after the release: `dpl_4GpH2wKgF3rAmoYN8HSvt7h6LtVJ` (`efebb89`).
+  - Rollback after its release = promote the deployment before it (today `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m`). That restores the access-code login, including the committed-default exposure.
+- App release of `b28d093` (= `028e84b` plus docs), 2026-11-17 16:03 JST, from this cloud session: production `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (canonical alias confirmed).
+  - The first three Vercel tokens belonged to another account, which is not authorized for scope `sl2026`. The owner then saved a token of `kotakase2022-jpg` scoped to `sl2026` (network secret on environment `aio`).
+  - That token cannot read the user (`/v2/user` 404), so the Vercel CLI stopped at start. The same steps were therefore run through the REST API:
+    - 204 files: tracked files minus `.vercelignore` and the CLI defaults, identical to the file list of the previous CLI deployment `efebb89`.
+    - `POST /v13/deployments` with `target: production`, `autoAssignCustomDomains: false` (= `--prod --skip-domain`) and git metadata. Result READY / STAGED; the build log shows Compiled successfully, 19 pages, all API routes.
+    - `vercel curl` on the SSO-protected stage was not possible without the CLI. Instead: promote, then check the canonical URL at once with the rollback ready (recorded as the releaser's decision).
+    - `POST /v10/projects/{id}/promote/{deployment}`, after which the production target and the canonical alias point to the new deployment.
+  - After the release, all PASS:
+    - 16:03 read-only smoke (2 pages / 37 / 33 unposted completed / complete).
+    - 16:04 older-draft check. Page-2 customer job `6a79a954-a334-435f-bc08-02fda9844956` was opened read-only and matched. The own 11/17 article (job `f9f6177c-…`) was saved unchanged: no warning, revision advanced, log synced.
+    - `aio-store` stats 16:03–16:04: 4 + 25 requests, all 2xx, 0 client and 0 server errors, so `get_job_by_draft` served the sync.
+  - More than 100 jobs has not yet happened on production (37); that state is covered by the integration and E2E tests.
+  - Rollback = promote `dpl_4GpH2wKgF3rAmoYN8HSvt7h6LtVJ` (`efebb89`). `aio-store` v7 can stay (compatible with both).
 
 ## 3. What Was Done
 - ③ cursor pagination for generation logs: `GET /api/generation-logs?cursor=&limit=` returns `{ logs, nextCursor, complete }`; first-page URL unchanged. Stable order = creation time desc + id (saving/posting no longer moves a log between pages). Supabase direct: SQL keyset; gateway (production): pages inside the existing `list_jobs` window (100 jobs / 400 newest-updated rows) and reports `complete:false` when that window is full; local: in-memory keyset. UI: 「さらに古いログを表示（20件ずつ）」, count badge, end/incomplete notices, load-more error keeps the list, automatic refresh keeps the loaded range (≤100).
@@ -135,8 +148,8 @@ Access-code task (separate; CodeRabbit finding on PR #51):
 - Repro-first: ② 3 failed / 0 passed before fix; ③ 17 failed / 1 passed before fix (the passing one is the auth-gate regression guard); stale-overwrite test fails when the save route is reverted to the old call.
 - PR #50 and PR #51: deployed; read-only smoke verified on both releases (section 2).
 - `aio-store` v7 deployed and boot-checked; `list_job_page` is confirmed in use (section 3c).
-- The approved write checks PASSED on 11/17 on the current production (section 3c). The `get_job_by_draft` path is verified on production only after the app release of PR #53: then re-run `scripts/production-older-draft-check.mjs` (no warning, log `updatedAt` advances).
-- Production changes made from this session: `aio-store` v6 → v7; one unchanged save of the team's own 11/13 article; one synthetic article (one paid generation) with its own edit save. No WordPress post. No customer article changed. No message to Aizawa (draft only).
+- The approved write checks PASSED on 11/17 before the release (section 3c). After the release of PR #53, the older-draft check passed again and the `get_job_by_draft` path was confirmed on production (section 2).
+- Production changes made from this session: `aio-store` v6 → v7; the app release `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m`; one unchanged save of the team's own 11/13 article; one synthetic article (one paid generation) with its own edit save, later saved once more unchanged by the post-release check. No WordPress post. No customer article changed. No message to Aizawa (draft only).
 - PR #55: local gate PASS on the tree merged with main (section 9), CI PASS; not merged, not deployed. Its session changed nothing in production.
 
 ## 6. Known Issues
@@ -152,9 +165,9 @@ Access-code task (separate; CodeRabbit finding on PR #51):
     - CI retries once, so each one shows up only as an occasional flake.
     - `expect(submittedImageCount).toBe(0)` cannot fail that way (an early read also gives 0), so it may pass without proving anything.
     - Fixing them all, with `await expect.poll(...)`, is a separate test-robustness task.
-- Log sync on save/post beyond the 100 most recently updated jobs: fixed in PR #53 (`028e84b`), gateway side deployed (v7); production keeps the old search until the app release (37 jobs today, so no effect yet).
+- Log sync on save/post beyond the 100 most recently updated jobs: fixed in PR #53 and released on 11/17 (v7 + app); the new path is confirmed on production.
 - Dev-only dependencies: `npm audit` reports 7 moderate advisories (typescript-eslint chain, minimatch); production dependencies 0.
-- The Vercel account `renjihirase-8922` has no two-factor authentication (CLI warning). The tokens saved on environment `aio` for this attempt should be revoked when no longer needed.
+- The other Vercel account used first has no two-factor authentication (CLI warning). Its three tokens created for this release are unused now and can be revoked; the `kotakase2022-jpg` token saved on environment `aio` should be revoked when no longer needed.
 - WordPress post requests have no client timeout (existing reservation prevents duplicates).
 - Compare-and-set protects against delays after the server reads the revision, not before.
 - Unverified in this session: Codex history, the Windows working tree, production version and data counts, the customer Google Doc.
@@ -220,20 +233,20 @@ Access-code task (separate; CodeRabbit finding on PR #51):
     - Full E2E runs hit, one per run, the theme-candidate race, the favicon abort and the competitor-research race. Each was fixed at its root (section 3d).
     - Full E2E: 86/86 PASS (85 + the new open-redirect test). After the form follow-up: 670 tests PASS and E2E 87/87 PASS (+ the form test).
   - Manual check in a local production build: login screen, wrong-password message, header with email and ログアウト, logout back to `/login`.
+  - After merging `485ee65` (PR #57, docs only; this file resolved by hand again): typecheck, lint, integrity (68 files) PASS; 62 files / 670 tests PASS; contract 15 PASS.
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
 ## 10. Next Recommended Action
-1. Release the app `028e84b` (PR #53) with the approved steps (stage with `vercel deploy --prod --skip-domain --scope sl2026`, `vercel inspect` Ready, `vercel curl <stage>/api/generation-logs -i` shows the app's own 401, promote, canonical smoke). It needs an account that can access scope `sl2026`: a token from the Windows Vercel CLI account saved on environment `aio`, or the Windows workstation.
-2. After the release, re-run `scripts/production-older-draft-check.mjs` (one unchanged save of the team's own article). The save must have no warning, and the log `updatedAt` must advance. That alone does not prove the new path, because the window fallback also finds a job while there are fewer than 100. So also read the `aio-store` stats (`functions.combined-stats`) for the save minute: `client_err_count` must be 0 (no 400 `Unsupported gateway action.`). With v7 deployed and the action called first, that shows `get_job_by_draft` served the sync.
-3. Access-code task (PR #55; owner decision 11/17: retire the access code). Steps in Japanese: `docs/login-accounts.md`.
+1. Access-code task (PR #55; owner decision 11/17: retire the access code). Steps in Japanese: `docs/login-accounts.md`.
    1. Create the accounts: `npm run auth:create-user -- <email>` (Windows: `npm.cmd`). The owner's own entry already exists (section 3d); the customer's does not.
    2. Vercel Production: add `AIO_AUTH_USERS` (Sensitive) with every entry in one JSON array. Keep `DEMO_AUTH_SECRET`.
-   3. After CI and CodeRabbit, merge PR #55. Release it with the steps of item 1. Once main contains #53, it can ship in the same release.
+   3. After CI and CodeRabbit, merge PR #55. Release it with the approved steps of section 2 (stage, check, promote, canonical smoke).
    4. Read-only smoke with a team login (`AIO_SMOKE_LOGIN_EMAIL`, `AIO_SMOKE_LOGIN_PASSWORD`). Then tell the customer their login privately, and remove `DEMO_ACCESS_CODE` from Vercel.
-   5. The production scripts follow the deployed login. While the access-code app is still live, run them from a checkout without PR #55 (for example `b28d093`). After the release, run them with `AIO_SMOKE_LOGIN_*`.
-4. Send Aizawa the report. The draft is in the follow-up doc, filled with verified facts; keep the bracketed sentence about PR #53 only after its release. The owner sends it.
-5. Cleanup, with approval: the three own test articles in section 12. Revoke Vercel tokens that are no longer needed, and the Supabase token if unneeded.
-6. Optional: delete the Windows release clone `aio-release-20261116`; it holds a Vercel OIDC token in `.env.local`.
+   5. The production scripts follow the deployed login. While the access-code app is still live (production runs `b28d093` today), run them from a checkout without PR #55. After the release, run them with `AIO_SMOKE_LOGIN_*`.
+2. Send Aizawa the report. The draft is in `docs/aizawa-nov16-followup.md`, filled with verified facts only; the owner sends it. If PR #55 ships first, the customer also needs the new login (sent separately and privately by the owner).
+3. Cleanup, with approval: the three own test articles in section 12. Revoke the Vercel tokens no longer needed (see section 6) and the Supabase token if unneeded.
+4. Optional: delete the Windows release clone `aio-release-20261116`; it holds a Vercel OIDC token in `.env.local`.
+5. Optional follow-ups suggested earlier: a save-RPC guard for the late-write window, and a test-robustness pass over the remaining E2E click-then-assert races (section 6). The favicon-abort flake is fixed in PR #55.
 
 ## 11. Suggested Review Scope for Codex
 - `listGenerationLogsPage` (three storage paths) and `decodeGenerationLogCursor` input validation.
@@ -252,6 +265,7 @@ Access-code task (separate; CodeRabbit finding on PR #51):
   - Both unpublished, image0. Delete only after confirmed approval and ID/marker checks.
   - On 11/17 the second one (job `4f8e7082-…`) was saved once without changes by the approved older-draft check (fields unchanged, revision advanced).
 - Own record from 11/17 (approved synthetic generation): marker `AIO-RELEASE-SMOKE-ba2a0609-402e-432b-a7e5-90ccbd070399`; job `f9f6177c-d568-4a2d-bb2f-3868e2b2110f`; draft `dd20f96b-57c6-4896-a396-d753084abf53`. Unpublished, unposted, image 0; its body has one added verification sentence. Local artifacts in the ignored `.verification-files/AIO-RELEASE-SMOKE-ba2a0609-…/`.
+  - Saved once more without changes by the post-release older-draft check (16:04 JST).
 - The list order changed from update time to creation time (matches the displayed date column). Mention it to the customer.
 
 ## 13. Do Not Touch
