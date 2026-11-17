@@ -141,6 +141,8 @@ export function createSupabaseStoreMirror() {
   function from(table: string) {
     if (!tables[table]) throw new Error(`unexpected table ${table}`);
     const filters: Array<[string, unknown]> = [];
+    // Each entry is one or() group: a row matches when any of its alternatives does.
+    const anyOf: Array<Array<[string, string]>> = [];
     const orders: Array<[string, boolean]> = [];
     let limit = Number.POSITIVE_INFINITY;
     let update: Row | null = null;
@@ -150,6 +152,9 @@ export function createSupabaseStoreMirror() {
         column === "updated_at" || column === "created_at"
           ? sameInstant(candidate[column], value)
           : readColumn(candidate, column) === value,
+      ) &&
+      anyOf.every((alternatives) =>
+        alternatives.some(([column, value]) => String(readColumn(candidate, column) ?? "") === value),
       );
     const run = (): Result => {
       const rows = [...tables[table].values()].filter(matches);
@@ -173,6 +178,15 @@ export function createSupabaseStoreMirror() {
       select: () => builder,
       eq: (column: string, value: unknown) => {
         filters.push([column, value]);
+        return builder;
+      },
+      // Only "column.eq.value" alternatives; anything else fails the test instead of matching wrongly.
+      or: (expression: string) => {
+        anyOf.push(expression.split(",").map((part) => {
+          const alternative = /^([\w>-]+)\.eq\.([^,()"]+)$/.exec(part);
+          if (!alternative) throw new Error(`The store mirror does not model the filter ${expression}`);
+          return [alternative[1], alternative[2]];
+        }));
         return builder;
       },
       order: (column: string, options: { ascending?: boolean } = {}) => {
@@ -274,11 +288,12 @@ export async function connectAioStoreGateway(
   return { actions };
 }
 
+/** A column, or a JSON path into one such as `input_payload->draft->>id`. */
 function readColumn(candidate: Row, column: string) {
-  const jsonPath = /^(\w+)->>(\w+)$/.exec(column);
-  if (!jsonPath) return candidate[column];
-  const json = candidate[jsonPath[1]];
-  return isRecord(json) ? json[jsonPath[2]] : undefined;
+  const [base, ...keys] = column.split(/->>?/);
+  let value: unknown = candidate[base];
+  for (const key of keys) value = isRecord(value) ? value[key] : undefined;
+  return value;
 }
 
 function sameInstant(a: unknown, b: unknown) {

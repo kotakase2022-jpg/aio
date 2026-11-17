@@ -38,7 +38,6 @@ export const GENERATION_JOB_EXPIRY_MS = 6 * 60 * 1000;
 // longer running or is past its deadline. Nothing was written in that case.
 export const GENERATION_JOB_NOT_ACTIVE_SQLSTATE = "JOB01";
 export const GATEWAY_JOB_NOT_ACTIVE_MESSAGE = "Generation job can no longer be completed.";
-const GATEWAY_UNSUPPORTED_ACTION_MESSAGE = "Unsupported gateway action.";
 // PostgREST: no function with this name and these arguments.
 const POSTGREST_FUNCTION_NOT_FOUND = "PGRST202";
 const GENERATION_JOB_DEADLINE_MESSAGE =
@@ -356,7 +355,7 @@ async function commitGenerationCompletion(
       if (!(error instanceof ApiError)) throw error;
       if (error.status === 409 && error.message === GATEWAY_JOB_NOT_ACTIVE_MESSAGE) throw generationJobDeadlineError();
       if (error.status === 409) return "conflict";
-      if (error.status === 400 && error.message === GATEWAY_UNSUPPORTED_ACTION_MESSAGE) return "guard-unavailable";
+      if (isUnsupportedGatewayActionError(error)) return "guard-unavailable";
       throw error;
     }
   }

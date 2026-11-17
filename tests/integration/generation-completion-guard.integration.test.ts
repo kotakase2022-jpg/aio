@@ -226,11 +226,18 @@ describe.each(storageModes)("guarded generation completion (%s)", (mode) => {
     const { POST: save } = await import("@/app/api/save-draft/route");
     const saved = await save(draftRequest("save-draft", { ...draft, editedTitle: "Edited a week later" }));
     expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ ok: true, warnings: [] });
     const { POST: approve } = await import("@/app/api/approve-draft/route");
     const approved = await approve(draftRequest("approve-draft", { ...draft, editedTitle: "Edited a week later" }));
     expect(approved.status).toBe(200);
+    expect(await approved.json()).toMatchObject({ ok: true, warnings: [] });
 
     expect(mirror.tables.article_drafts.get(draft.id)).toMatchObject({ edited_title: "Edited a week later", status: "approved" });
+    // The log of that job shows the edit: its sync found the job and wrote it, after the deadline.
+    expect(mirror.tables.article_inputs.get("7f0c8c1e-1a2b-4c3d-8e9f-0a1b2c3d4e5f")?.input_payload).toMatchObject({
+      status: "completed",
+      draft: { editedTitle: "Edited a week later", status: "approved" },
+    });
     expect(mirror.rpcCalls.map((call) => call.name)).toEqual(["aio_save_draft", "aio_save_draft"]);
     if (mode === "gateway") expect(gatewayActions).not.toContain("complete_job");
   });
@@ -254,7 +261,7 @@ describe("storage that predates the completion guard", () => {
 
   test("a deployed aio-store without complete_job still completes generation the previous way, and says so", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    // Exactly what aio-store v6 answers for an action it does not know.
+    // Exactly what an aio-store deployed before complete_job (v7 and earlier) answers for it.
     const { mirror, gatewayActions } = await useStore("gateway", (action) =>
       action === "complete_job" ? Response.json({ ok: false, error: "Unsupported gateway action." }, { status: 400 }) : undefined,
     );
