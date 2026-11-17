@@ -273,6 +273,9 @@ try {
     const reloaded = await readJob(job.id);
     assert.deepEqual(changedFields(reloaded.draft, draft), [], "the unchanged save altered stored fields");
     assert.ok(Date.parse(reloaded.draft.updatedAt) > Date.parse(draft.updatedAt), "the save did not reach the stored article");
+    // The save also syncs the article into its own generation log. A log the sync could not find
+    // keeps its previous time, so this proves the lookup by draft ID found the job.
+    assert.ok(Date.parse(reloaded.updatedAt) > Date.parse(job.updatedAt), "the save did not reach the article's generation log");
     await verifyEditorShows(reloaded);
 
     const after = await readAllLogs();
@@ -289,6 +292,8 @@ try {
       savedMessageShown: true,
       storedFieldsUnchanged: true,
       revisionAdvanced: true,
+      generationLogSynced: true,
+      storageMode: savedBody.storageMode,
       listPositionUnchanged: true,
       pageAfter: pageOf(indexAfter),
     });
