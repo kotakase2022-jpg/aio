@@ -339,7 +339,7 @@ async function commitGenerationCompletion(
       draft_row: draftRow,
       image_rows: imageRows,
     });
-    if (!error) return "committed";
+    if (!error) return committedThroughGuard(job.id, "aio_complete_generation_job");
     if (error.code === GENERATION_JOB_NOT_ACTIVE_SQLSTATE) throw generationJobDeadlineError();
     if (error.code === "40001") return "conflict";
     if (error.code === POSTGREST_FUNCTION_NOT_FOUND) return "guard-unavailable";
@@ -350,7 +350,7 @@ async function commitGenerationCompletion(
     const { draftRow, imageRows } = draftSaveRows(draft);
     try {
       await callSupabaseGateway("complete_job", { job, expectedUpdatedAt, row: draftRow, images: imageRows });
-      return "committed";
+      return committedThroughGuard(job.id, "aio-store complete_job");
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       if (error.status === 409 && error.message === GATEWAY_JOB_NOT_ACTIVE_MESSAGE) throw generationJobDeadlineError();
@@ -375,6 +375,15 @@ async function commitGenerationCompletion(
 }
 
 /**
+ * One server log line per guarded completion on a durable store, naming the job, so a release
+ * can be checked for a specific job (the fallback path logs a warning instead).
+ */
+function committedThroughGuard(jobId: string, path: string): CompletionCommit {
+  console.info(`Generation job ${jobId} completed through the database deadline guard (${path}).`);
+  return "committed";
+}
+
+/**
  * A gateway or database deployed before aio_complete_generation_job cannot apply the guard.
  * Complete as before (draft, then job) so generation keeps working during a rollout, but say so:
  * a delayed write is not stopped by the database on this path.
@@ -385,7 +394,7 @@ async function completeWithoutStorageGuard(
   complete: (job: GenerationJob) => GenerationJob,
 ) {
   console.warn(
-    "aio_complete_generation_job is not available (apply the migration and deploy aio-store); completing generation job without the database deadline guard.",
+    `aio_complete_generation_job is not available (apply the migration and deploy aio-store); completing generation job ${current.id} without the database deadline guard.`,
   );
   // As before the guard existed: checked with no I/O between the check and the save.
   assertGenerationJobWithinDeadline(current);

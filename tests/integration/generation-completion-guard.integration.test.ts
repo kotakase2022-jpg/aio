@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi, type MockInstance } from "vitest";
 import { createCompletedGenerationJob, createSampleDraft, sampleArticleResult, sampleFormPayload } from "../fixtures/article";
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 import {
@@ -26,6 +26,14 @@ vi.mock("next/server", async (importOriginal) => ({
 }));
 
 const DEADLINE_MESSAGE = "記事生成が制限時間を超えたため停止しました";
+let guardLog: MockInstance<typeof console.info>;
+
+/** Server log lines that report a completion through the database deadline guard. */
+function guardedCompletionLogs() {
+  return guardLog.mock.calls
+    .map((call) => String(call[0]))
+    .filter((line: string) => line.includes("completed through the database deadline guard"));
+}
 const processEnvSnapshot = snapshotProcessEnv();
 const storageModes = ["supabase", "gateway"] as const;
 type StorageMode = (typeof storageModes)[number];
@@ -34,6 +42,7 @@ let tempDir = "";
 beforeEach(async () => {
   vi.resetModules();
   scheduledWork.length = 0;
+  guardLog = vi.spyOn(console, "info").mockImplementation(() => undefined);
   tempDir = await mkdtemp(path.join(os.tmpdir(), "aio-completion-guard-"));
   process.env.AIO_LOCAL_DATA_DIR = tempDir;
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -121,6 +130,10 @@ describe.each(storageModes)("guarded generation completion (%s)", (mode) => {
     // No separate, unguarded draft save or job update completes the job.
     expect(mirror.rpcCalls.map((call) => call.name)).toEqual(["aio_complete_generation_job"]);
     expect(mirror.completionWrites).toEqual(["rpc"]);
+    // One log line names the job and the path, so a release can be checked job by job.
+    expect(guardedCompletionLogs()).toEqual([
+      `Generation job ${job.id} completed through the database deadline guard (${mode === "gateway" ? "aio-store complete_job" : "aio_complete_generation_job"}).`,
+    ]);
     // PostgREST matches the function by its argument names.
     expect(Object.keys(completionCalls(mirror)[0].args).sort()).toEqual([...COMPLETION_RPC_PARAMETERS].sort());
     if (mode === "gateway") {
@@ -163,6 +176,7 @@ describe.each(storageModes)("guarded generation completion (%s)", (mode) => {
     expect(status.body.job.status).toBe("failed");
     expect(mirror.completionWrites).toEqual(["rpc"]);
     expect(mirror.rpcCalls.filter((call) => call.name === "aio_save_draft")).toEqual([]);
+    expect(guardedCompletionLogs()).toEqual([expect.stringContaining(second.job.id)]);
   });
 
   test("a cancel that lands while the completion is on its way wins, and no article is saved", async () => {
@@ -256,7 +270,8 @@ describe("storage that predates the completion guard", () => {
     expect(draftTitles(mirror)).toEqual(["Article for Before the migration"]);
     expect(mirror.rpcCalls.map((call) => call.name)).toEqual(["aio_complete_generation_job", "aio_save_draft"]);
     expect(mirror.completionWrites).toEqual(["update"]);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("without the database deadline guard"));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(`completing generation job ${job.id} without the database deadline guard`));
+    expect(guardedCompletionLogs()).toEqual([]);
   });
 
   test("a deployed aio-store without complete_job still completes generation the previous way, and says so", async () => {
@@ -273,7 +288,8 @@ describe("storage that predates the completion guard", () => {
     expect(draftTitles(mirror)).toEqual(["Article for Before the gateway"]);
     expect(gatewayActions.filter((action) => ["complete_job", "upsert_draft"].includes(action))).toEqual(["complete_job", "upsert_draft"]);
     expect(mirror.completionWrites).toEqual(["update"]);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("without the database deadline guard"));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(`completing generation job ${job.id} without the database deadline guard`));
+    expect(guardedCompletionLogs()).toEqual([]);
   });
 
   test("a deployed aio-store on a database without the migration also completes the previous way", async () => {
@@ -288,7 +304,8 @@ describe("storage that predates the completion guard", () => {
     expect(draftTitles(mirror)).toEqual(["Article for Gateway before the migration"]);
     expect(gatewayActions.filter((action) => ["complete_job", "upsert_draft"].includes(action))).toEqual(["complete_job", "upsert_draft"]);
     expect(mirror.completionWrites).toEqual(["update"]);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("without the database deadline guard"));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(`completing generation job ${job.id} without the database deadline guard`));
+    expect(guardedCompletionLogs()).toEqual([]);
   });
 
   test("other completion failures are not mistaken for an old gateway", async () => {
