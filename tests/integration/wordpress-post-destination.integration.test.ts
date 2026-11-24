@@ -292,6 +292,51 @@ describe("WordPress post destinations", () => {
     expect(requests.some((request) => request.url.includes("/wp/v2/types"))).toBe(false);
   });
 
+  test("a post type whose key starts with an underscore is listed and used under its own route", async () => {
+    const connection = await connect();
+    const underscored = { ...wordpressTypes.column, slug: "_column", rest_base: "_column" };
+    const requests = stubWordpress((request) => {
+      if (request.url === `${site}/wp-json/wp/v2/types?context=edit`) return Response.json({ post: wordpressTypes.post, _column: underscored });
+      if (request.method === "POST" && request.url === `${site}/wp-json/wp/v2/_column`) {
+        return Response.json({ id: 504, link: `${site}/?post_type=_column&p=504` }, { status: 201 });
+      }
+      return undefined;
+    });
+    const { listWordpressPostTypes, publishDraftToWordpress } = await import("@/lib/server/wordpress");
+
+    const postTypes = await listWordpressPostTypes({ connectionId: connection.id });
+    const result = await publishDraftToWordpress({
+      draft: approvedDraft(),
+      connectionId: connection.id,
+      status: "draft",
+      origin: "http://localhost",
+      postType: "_column",
+    });
+
+    expect(postTypes.map((postType) => postType.slug)).toEqual(["post", "_column"]);
+    expect(result.postType).toEqual({ slug: "_column", name: "コラム" });
+    expect(requests.filter((request) => request.method === "POST").map((request) => request.url)).toEqual([`${site}/wp-json/wp/v2/_column`]);
+  });
+
+  test("a post type that cannot store a title and body is neither listed nor posted to", async () => {
+    const connection = await connect();
+    // WordPress drops the body of a type without editor support, so the article would arrive empty.
+    const titleOnly = { ...wordpressTypes.column, slug: "notice", name: "お知らせ", rest_base: "notice", supports: { title: true } };
+    const requests = stubWordpress((request) =>
+      request.url === `${site}/wp-json/wp/v2/types?context=edit` ? Response.json({ post: wordpressTypes.post, notice: titleOnly }) : undefined,
+    );
+    const { listWordpressPostTypes, publishDraftToWordpress } = await import("@/lib/server/wordpress");
+
+    const postTypes = await listWordpressPostTypes({ connectionId: connection.id });
+    await expect(
+      publishDraftToWordpress({ draft: approvedDraft(), connectionId: connection.id, status: "draft", origin: "http://localhost", postType: "notice" }),
+    ).rejects.toMatchObject({ status: 400, message: "選択した投稿先（notice）がWordPressで見つかりません。" });
+
+    expect(postTypes.map((postType) => postType.slug)).toEqual(["post"]);
+    expect(requests.every((request) => request.method === "GET")).toBe(true);
+    expect(await readReservations()).toEqual({});
+  });
+
   test("the post-types route returns the destinations, and the post route rejects a malformed destination", async () => {
     const connection = await connect();
     stubWordpress((request) =>

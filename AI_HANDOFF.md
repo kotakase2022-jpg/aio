@@ -80,13 +80,13 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 
 ## 3d. WordPress 投稿先 (2026-11-24, PR #58)
 - Report: the guide says to choose 「投稿先」=「コラム」 (preselected from the second time) and that drafts appear under コラム. The tool showed no such field, and a draft posted without it was not under コラム. The attached Google Drive file could not be opened from this session.
-- Cause: the tool had no destination and always posted to `/wp-json/wp/v2/posts` (standard 投稿). No branch or commit ever had a post-type choice; the guide came from outside this repository. The test draft most likely sits in 投稿 → 下書き (not verified against production data). Posting also creates missing categories/tags as 投稿 terms.
+- Cause: the tool had no destination and always posted to `/wp-json/wp/v2/posts` (standard 投稿). No branch or commit ever had a post-type choice; the guide came from outside this repository. The test draft most likely sits in 投稿 → 下書き (not verified against production data; check the article's WordPress column in the logs or 投稿 → 下書き in WordPress). Posting also creates missing categories/tags as 投稿 terms.
 - Change:
   - `POST /api/wordpress/post-types` lists creatable post types from `/wp/v2/types?context=edit`.
   - The screen adds a 「投稿先」 select. A first post to a site needs an explicit choice; the choice is remembered per site in `localStorage`.
   - The server posts to the type's own REST route after re-reading the list, before the reservation, and skips unsupported fields with one warning.
   - Requests without a post type, or with `post`, behave exactly as before.
-- Not verified: the customer's WordPress (no post, no type read). コラム appears only if it has `show_in_rest`.
+- Not verified: the customer's WordPress (no post, no type read). コラム appears only if it has `show_in_rest`, the connected user can edit it, and it supports title and editor (types without both are excluded, CodeRabbit).
 - Not possible from this session: a production UI check after login, because the access code changed. Re-sending the article already in 投稿 needs its reservation released and its state reset (operator decision, production data change).
 - Record and customer reply draft: `docs/aizawa-nov24-wordpress-destination.md`.
 
@@ -163,7 +163,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 
 ## 10. Next Recommended Action
 1. PR #58: after CI and CodeRabbit, merge and release with the approved steps. After the release, the owner (or Aizawa) signs in, connects WordPress and checks that 「投稿先」 lists コラム.
-2. If コラム is not listed: the site must expose the post type to the REST API (`show_in_rest`); ask the site's administrator.
+2. If コラム is not listed: check the 投稿先 error message, then whether the connected WordPress user can edit コラム, then ask the site's administrator to expose it to the REST API (`show_in_rest`).
 3. Send Aizawa the reply in `docs/aizawa-nov24-wordpress-destination.md`. Choose option A or B for the article already sent to 投稿: A = an operator releases its reservation and resets its state (production data change, owner approval), B = create a new article.
 4. Access code: done by the owner on 11/17 (production value set, session secret rotated). Remove the code fallback in `src/app/api/demo-auth/route.ts` as a separate task (open PR #55 replaces the shared code with per-user login; review it separately).
 5. Cleanup, with approval: the three own test articles in section 12. Revoke Vercel tokens that are no longer needed and the Supabase token if unneeded.

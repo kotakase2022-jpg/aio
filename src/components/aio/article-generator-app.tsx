@@ -2753,7 +2753,7 @@ export function ArticleGeneratorApp() {
                   </div>
                   {connection ? (
                     <p data-testid="wordpress-post-type-note" className="text-xs leading-5 text-slate-500">
-                      投稿先は、WordPress管理画面のメニュー名（例：投稿、コラム）で表示されます。一覧にない投稿先は、WordPress側でREST APIに公開されていない可能性があります。一度選んだ投稿先は、このブラウザでは次回から自動で選ばれます。
+                      投稿先は、WordPress管理画面のメニュー名（例：投稿、コラム）で表示されます。一覧にない投稿先は、WordPress側でREST APIに公開されていないか、接続したユーザーにその投稿先の編集権限がない可能性があります。一度選んだ投稿先は、このブラウザでは次回から自動で選ばれます。
                     </p>
                   ) : null}
                   {wpPostTypesError ? (

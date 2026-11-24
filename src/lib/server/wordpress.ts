@@ -44,10 +44,11 @@ const EXCLUDED_WORDPRESS_POST_TYPES = new Set([
   "wp_font_family",
   "wp_font_face",
 ]);
-// REST route parts as WordPress registers them (e.g. "wp/v2" + "posts"); each part starts with a
-// letter or digit, so no ".." can appear.
-const WORDPRESS_REST_BASE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
-const WORDPRESS_REST_NAMESPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*)*$/;
+// REST route parts as WordPress registers them (e.g. "wp/v2" + "posts", or "_column" for a type
+// named so). A rest_base has no dots or slashes; a namespace part never starts with a dot, so no
+// "." or ".." part can appear.
+const WORDPRESS_REST_BASE_PATTERN = /^[A-Za-z0-9_-]+$/;
+const WORDPRESS_REST_NAMESPACE_PATTERN = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$/;
 
 const MAX_WORDPRESS_MEDIA_BYTES = 10 * 1024 * 1024;
 const MAX_WORDPRESS_API_RESPONSE_BYTES = 1024 * 1024;
@@ -352,6 +353,9 @@ function readWordpressPostType(value: unknown): WordpressPostType[] {
   // ignores fields a post type does not register.
   const supports =
     item.supports && typeof item.supports === "object" ? (item.supports as Record<string, unknown>) : null;
+  // WordPress stores the title and body only for types that support them. Without both the article
+  // would arrive empty yet count as posted, so such a type is not a destination.
+  if (supports && (supports.title !== true || supports.editor !== true)) return [];
   const taxonomies = Array.isArray(item.taxonomies)
     ? item.taxonomies.filter((taxonomy): taxonomy is string => typeof taxonomy === "string")
     : null;
