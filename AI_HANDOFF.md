@@ -2,11 +2,11 @@
 
 ## 0. Current Loop Phase
 - Current owner: Claude Code
-- Next owner: User / Codex (remaining: release of PR #59 and the owner's checks after login; the reply to Aizawa about 投稿先; cleanup of own test records with approval)
+- Next owner: the next Claude Code session (handoff of 2026-11-24 06:08 UTC: `docs/session-handoff-2026-11-24.md`), then User / Codex (remaining: CodeRabbit re-review and release of PR #59; the owner's checks after login; the reply to Aizawa about 投稿先; cleanup of own test records with approval)
 - Loop: 10
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
 - Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) released: `aio-store` v7 (14:29 JST) and the app `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (16:03 JST), verified on production (section 2).
-- 2026-11-24: Aizawa reported that the guide's 「投稿先」 (コラム) was missing in the tool. PR #58 adds the post-type choice, released 13:48 JST. PR #59 shows WordPress post failures under the post button (section 3d).
+- 2026-11-24: Aizawa reported that the guide's 「投稿先」 (コラム) was missing in the tool. PR #58 adds the post-type choice, released 13:48 JST. PR #59 shows WordPress post failures under the post button (section 3d). PR #59 is not merged: CI PASS on `06e283b`, CodeRabbit's 3 findings fixed, its re-review was rate limited (next slot about 06:37 UTC).
 - Last updated: 2026-11-24 (UTC session; Claude Code cloud container)
 
 ## 1. Current Goal
@@ -94,6 +94,8 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Not verified: the customer's WordPress (no post, no type read). コラム appears only if it has `show_in_rest`, the connected user can edit it, and it supports title and editor (types without both are excluded, CodeRabbit).
 - Not possible from this session: a production UI check after login, because the access code changed.
 - PR #59: WordPress post failures and unconfirmed outcomes now appear right under the post button (`wordpress-post-error`, `role="alert"`), not at the page top; editing the WordPress form clears them.
+  - `8b93cfc` (CodeRabbit follow-up on PR #58): a custom post type whose response lacks `supports` is no longer listed, and posting to it is refused before the reservation. 投稿 is unchanged.
+  - `06e283b` (CodeRabbit on PR #59): the post result (failure or success) carries its draft id and is shown only while that article is open. Before, opening another article from the logs kept showing it; the old page-top banner was cleared on open, so this part was a regression of PR #59. A result added below the visible area is scrolled into view (`block: "nearest"`). The reply draft no longer says unfamiliar categories or tags can be deleted, because the tool reuses existing terms with the same name.
 - Record and customer reply draft: `docs/aizawa-nov24-wordpress-destination.md`.
 
 ## 4. Files Changed
@@ -153,7 +155,9 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - Also awaiting the owner, as part of the same residual-risk decision: a forward jump of the browser clock during a 5xx outage could end the 7 min hold early (CodeRabbit). A full guarantee needs server-side control of the save (migration).
   - Not changed, left for the owner: remove the default demo access code from `src/app/api/demo-auth/route.ts` and reject login when `DEMO_ACCESS_CODE` is unset. A valid security finding, but if production relies on the default it would lock everyone out. The owner asked to set the access-code topic aside.
 - PR kotakase2022-jpg/aio#53: CodeRabbit review of `2aa463d` after the rate limit reset: no actionable comments, merge risk minimal.
-- Codex GitHub review: not performed on #50, #51 or #53 (usage limit); no credits added.
+- PR kotakase2022-jpg/aio#58: 4 findings fixed in `935a66c` before the merge (types without title and editor excluded, keys starting with `_` allowed, why a type may be missing, wording of unverified items). After the release CodeRabbit added that a missing `supports` still passed; fixed in PR #59 `8b93cfc` and answered on the thread.
+- PR kotakase2022-jpg/aio#59, review of `8b93cfc`: 3 Minor findings, all fixed in `06e283b`, threads answered and resolved: the post error was not tied to its draft, the alert could be added off screen, the reply draft suggested deleting categories/tags that may be in use. The incremental review of `06e283b` was rate limited; request it again with `@coderabbitai review` after the reset.
+- Codex GitHub review: not performed on #50, #51, #53, #58 or #59 (usage limit); no credits added.
 
 ## 8. Optional Bugbot Findings
 - Status: Not run.
@@ -164,11 +168,13 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Follow-up after CodeRabbit (`32409be`): full gate PASS again (625 tests, contract 15, coverage 88.01/79.87/92.99/88.66%, E2E 81/81, build PASS). The final commit adds 1 more E2E (reload re-check without form input). Its gate result is recorded in the PR.
 - Follow-up branch (self-verification fixes), 2026-11-16, this session: typecheck/lint/integrity (64 files) PASS; 58 files / 625 tests PASS (+3 net: 4 new gateway tests, 1 test now models the old gateway); contract 15 PASS; coverage S/B/F/L 88.04/79.91/93.11/88.69%; Chromium PC E2E 79/79 PASS (77 + 2 new); build PASS. The new tests fail on the previous code. One full run hit the known `user can stop an in-progress generation job` race (30/30 in isolation): the test asserted the cancel counter before the routed request was counted. It now waits for the count and still requires exactly one cancel at the end (not weakened).
 - 11/17 (PR #53), this session: typecheck / lint / integrity (64 files) PASS; 58 files / 636 tests PASS; contract 15 PASS; coverage S/B/F/L 88.35/80.23/93.05/88.97%; build PASS; E2E first full run 82 passed / 1 failed (the known favicon-abort flake), second full run 83/83 PASS. CI PASS on both PR heads.
-- Details and the list of new E2E flows: `docs/aizawa-nov16-followup.md` §検証 and §「11/17 厳密な自己検証」.
+- 11/24 (PR #58), this session: typecheck / lint / integrity (65 files) PASS; 59 files / 646 tests PASS; contract 15 PASS; E2E 85/85 PASS (the first full run had the known favicon-abort flake); build PASS; CI PASS.
+- 11/24 (PR #59 at `06e283b`), this session: typecheck / lint / integrity (65 files) PASS; 59 files / 647 tests PASS; coverage S/B/F/L 88.41/80.48/93.03/89.08%; contract 15 PASS; E2E 89/89 PASS (build run by the E2E web server); CI PASS. The 3 new E2E tests and the new integration test fail on the previous code.
+- Details and the list of new E2E flows: `docs/aizawa-nov16-followup.md` §検証 and §「11/17 厳密な自己検証」; for 11/24 `docs/aizawa-nov24-wordpress-destination.md` §検証.
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
 ## 10. Next Recommended Action
-1. PR #58 is released (`dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`, rollback `dpl_7p9Gv5UwUaHaiywBZXtkZeqCDyh8`). Release PR #59 after approval. Then the owner (or Aizawa) signs in, connects WordPress and checks that 「投稿先」 lists コラム.
+1. PR #58 is released (`dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`, rollback `dpl_7p9Gv5UwUaHaiywBZXtkZeqCDyh8`). PR #59 (approved as "wait for CodeRabbit, then release"): request the CodeRabbit re-review after the rate limit resets, squash merge, release through the Vercel REST API and record it. Steps, scripts and checks: `docs/session-handoff-2026-11-24.md`. Rollback for that release: `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`. Then the owner (or Aizawa) signs in, connects WordPress and checks that 「投稿先」 lists コラム.
 2. If コラム is not listed: check the 投稿先 error message, then whether the connected WordPress user can edit コラム, then ask the site's administrator to expose it to the REST API (`show_in_rest`).
 3. Send Aizawa the reply in `docs/aizawa-nov24-wordpress-destination.md` after PR #59 is released, and ask for the failure message they saw, if any.
 4. Access code: done by the owner on 11/17 (production value set, session secret rotated). Remove the code fallback in `src/app/api/demo-auth/route.ts` as a separate task (open PR #55 replaces the shared code with per-user login; review it separately).
@@ -197,3 +203,6 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Windows uses npm.cmd/npx.cmd. In this Linux container Node 24 lives at `/opt/node24/bin`.
 - `.verification-files/` is ignored and deploy-excluded. It holds the local Playwright override, run manifests (IDs and booleans only), the `aio-store` v5/v6 backups, and `*.local.mjs` copies of the production scripts that change only the browser launch (container Chromium + session proxy) or, for local runs, the target host.
 - Previous release evidence: `docs/aizawa-nov11-followup.md`, `docs/adversarial-verification-2026-11-09.md`.
+- Session handoff of 2026-11-24 (state, next steps, the REST release helper, the no-sign-in check, the local Playwright config): `docs/session-handoff-2026-11-24.md`. A new cloud container does not have `.verification-files/`; recreate the Playwright override from that file.
+- GitHub GraphQL is not available from cloud sessions: list review threads with `GET /repos/{o}/{r}/pulls/{n}/ccr/review_threads`, resolve with `POST /repos/{o}/{r}/pulls/{n}/ccr/comments/{id}/resolve`.
+- `npm run test:integrity` misreads a test whose body (comments included) has an odd number of apostrophes and reports "does not appear to contain an assertion"; avoid `'` in comments inside tests.
