@@ -2,6 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  WORDPRESS_FORBIDDEN_BY_WORDPRESS_HINT,
+  WORDPRESS_UNAUTHORIZED_HINT,
+} from "@/lib/wordpress-rejection-hints";
 import { createSampleDraft } from "../fixtures/article";
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 import { createMockHttpServer, sendJson } from "../helpers/mock-http-server";
@@ -209,7 +213,8 @@ describe("WordPress REST API contract", () => {
       ).rejects.toMatchObject({
         status: 401,
         message: "WordPressカテゴリーの検索に失敗しました。",
-        detail: "Sorry, you are not allowed to list categories.",
+        // The cause and the fix come first, then what WordPress itself said.
+        detail: `${WORDPRESS_UNAUTHORIZED_HINT} WordPressの応答：Sorry, you are not allowed to list categories.`,
       });
 
       const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);
@@ -412,7 +417,12 @@ describe("WordPress REST API contract", () => {
 
       if (request.method === "POST" && request.pathname === "/wp-json/wp/v2/media/301") {
         expect(request.json).toMatchObject({ alt_text: "Contract featured image" });
-        sendJson(response, { message: "Alt text cannot be updated." }, 403);
+        // WordPress sends a REST error with its code, message and status.
+        sendJson(
+          response,
+          { code: "rest_cannot_edit", message: "Alt text cannot be updated.", data: { status: 403 } },
+          403,
+        );
         return;
       }
 
@@ -453,7 +463,7 @@ describe("WordPress REST API contract", () => {
       ).rejects.toMatchObject({
         status: 403,
         message: "WordPressメディアの代替テキスト更新に失敗しました。",
-        detail: "Alt text cannot be updated.",
+        detail: `${WORDPRESS_FORBIDDEN_BY_WORDPRESS_HINT} WordPressの応答：Alt text cannot be updated.`,
       });
 
       const requestNames = server.requests.map((request) => `${request.method} ${request.pathname}`);

@@ -150,6 +150,16 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - The evening reply is a draft and has not been sent. It was given to the owner outside this repository, because it names the hosting company and other site specifics.
   - The earlier reply in `docs/aizawa-nov24-wordpress-destination.md` was sent: Aizawa answered its requests.
 - Vantage point: WebFetch from the Windows workstation goes out through the owner's line in Japan, so it cannot test overseas access. Use the production request log instead (section 14).
+- App change in the same PR (#61, not released yet). Its release needs the owner's approval (section 10).
+  - For a WordPress 401 or 403, the error detail now says what usually causes it and what to do.
+  - The detail then gives what the site said, with the markup removed.
+  - A 403 is split into two cases:
+    - WordPress itself refused, with a `rest_` error code. The hint points to the role of the connected user (編集者 or above).
+    - It was refused before WordPress, with no such code (for example an HTML page). The hint points to the server's overseas restriction of the REST API, a WAF or a security plugin.
+  - The texts are in `src/lib/wordpress-rejection-hints.ts`. Every WordPress request in `src/lib/server/wordpress.ts` uses them.
+  - In 投稿先, the next step follows the status:
+    - after a 403, press 「再読み込み」 once the cause is fixed;
+    - after a 401, nothing more is needed, because 保存 reloads the list.
 
 ## 4. Files Changed
 - `src/lib/server/generation-jobs.ts`, `src/lib/server/article-generation-job-runner.ts`, `src/lib/server/drafts.ts`, `src/types/aio.ts`
@@ -159,6 +169,10 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - `scripts/production-smoke.mjs`: adds read-only paged-log checks (paged API deployed, all pages without duplicates, load-more grows the list) and prints counts only; mutation blocking unchanged. Verified against a local production build with a git-ignored copy (host/browser lines only); not run on production.
 - Docs: `docs/aizawa-nov16-followup.md`, `docs/testing.md`, this file. AGENTS.md / CLAUDE.md unchanged.
 - PR #53: `src/lib/server/generation-jobs.ts`, `supabase/functions/aio-store/index.ts`, `scripts/production-older-draft-check.mjs`, `tests/integration/generation-logs-pagination.integration.test.ts`, `tests/integration/wordpress.integration.test.ts`, `tests/e2e/aio-workflow.spec.ts`.
+- PR #61:
+  - Code: `src/lib/wordpress-rejection-hints.ts` (new), `src/lib/server/wordpress.ts`, `src/components/aio/article-generator-app.tsx`.
+  - Tests: `tests/integration/wordpress-post-destination.integration.test.ts`, `tests/integration/wordpress.integration.test.ts`, `tests/e2e/aio-workflow.spec.ts`.
+  - Docs: this file, `docs/aizawa-nov24-wordpress-destination.md`.
 
 ## 5. Current Status
 - Local quality gate: see section 9 (all steps run in this session on 2026-11-16).
@@ -177,7 +191,11 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Dev-only dependencies: `npm audit` reports 7 moderate advisories (typescript-eslint chain, minimatch); production dependencies 0.
 - The other Vercel account used first has no two-factor authentication (CLI warning). Its three tokens created for this release are unused now and can be revoked; the `kotakase2022-jpg` token saved on environment `aio` should be revoked when no longer needed.
 - WordPress post requests have no client timeout (existing reservation prevents duplicates).
-- WordPress errors show no HTTP status or hint. A 403 from the site appeared only as 「WordPressカテゴリーの検索に失敗しました。」 (section 3e). 保存 does not check the credentials, so a wrong Application Password shows up only when posting.
+- WordPress errors:
+  - Before PR #61, a 403 from the site appeared only as 「WordPressカテゴリーの検索に失敗しました。」 (section 3e).
+  - PR #61 adds hints for 401 and 403. It is not released yet.
+  - Other statuses still show only the failed step and what the site said.
+  - 保存 does not check the credentials, so a wrong Application Password shows up only when 投稿先 loads or when posting.
 - The WordPress connection lives only in page state. After a reload the user enters the Application Password and presses 保存 again. 投稿先 loads only after 保存 or 「再読み込み」.
 - Compare-and-set protects against delays after the server reads the revision, not before.
 - Unverified in this session: Codex history, the Windows working tree, production version and data counts, the customer Google Doc.
@@ -231,6 +249,13 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - 11/24 (PR #58), this session: typecheck / lint / integrity (65 files) PASS; 59 files / 646 tests PASS; contract 15 PASS; E2E 85/85 PASS (the first full run had the known favicon-abort flake); build PASS; CI PASS.
 - 11/24 (PR #59 at `06e283b`), this session: typecheck / lint / integrity (65 files) PASS; 59 files / 647 tests PASS; coverage S/B/F/L 88.41/80.48/93.03/89.08%; contract 15 PASS; E2E 89/89 PASS (build run by the E2E web server); CI PASS. The 3 new E2E tests and the new integration test fail on the previous code.
 - 11/24 (PR #59 at `9398baa`, docs only on top of `06e283b`), local Windows session: lint / typecheck / integrity (65 files) PASS; 59 files / 647 tests PASS; contract 15 PASS; CI (typecheck, lint, tests, E2E, build) PASS; the Vercel production build PASS. E2E and coverage were not run on the workstation.
+- 11/24 evening (PR #61, 401/403 hints), local Windows session. These ran with the project config on the workstation (bundled Chromium, no local override):
+  - typecheck, lint and integrity (65 files): PASS.
+  - Tests: 59 files and 652 tests PASS; contract 15 PASS.
+  - Coverage S/B/F/L: 88.49/80.62/93.29/89.09%.
+  - E2E: 90/90 PASS. The E2E web server ran the build.
+  - The 5 new integration tests, the updated 401 integration test and the new E2E test fail on the previous code.
+  - Two contract tests were updated to the new detail. The alt-text 403 mock now carries the `code` and `data` that WordPress sends.
 - Details and the list of new E2E flows: `docs/aizawa-nov16-followup.md` §検証 and §「11/17 厳密な自己検証」; for 11/24 `docs/aizawa-nov24-wordpress-destination.md` §検証.
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
@@ -242,9 +267,9 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
    - posts a 下書き.
 
    Read the production request log within an hour of that test (section 14). A 401 means the user or Application Password is wrong. If 403 continues, check other blockers such as a WAF or a security plugin.
-3. Optional app change, which needs the owner's approval before release:
-   - show the HTTP status and a hint for 401 and 403, under the post button and in 投稿先;
-   - check the credentials on 保存.
+3. PR #61 also carries the app change for the 401/403 hints (section 3e). Its merge and release need the owner's approval.
+   - After the release, run the no-sign-in checks as for PR #59 (section 2).
+   - Checking the credentials on 保存 is not done. It is a possible separate task.
 4. Access code: done by the owner on 11/17 (production value set, session secret rotated). Remove the code fallback in `src/app/api/demo-auth/route.ts` as a separate task (open PR #55 replaces the shared code with per-user login; review it separately).
 5. Cleanup, with approval: the three own test articles in section 12. Revoke Vercel tokens that are no longer needed and the Supabase token if unneeded.
 

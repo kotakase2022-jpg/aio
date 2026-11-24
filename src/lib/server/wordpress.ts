@@ -11,6 +11,7 @@ import path from "node:path";
 import type { ArticleDraft, WordpressConnection, WordpressPostType } from "@/types/aio";
 import { buildDraftArticleHtml } from "@/lib/draft-html";
 import { STANDARD_WORDPRESS_POST_TYPE, WORDPRESS_POST_TYPE_SLUG_PATTERN } from "@/lib/wordpress-post-types";
+import { wordpressRejectionHint } from "@/lib/wordpress-rejection-hints";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { ApiError } from "@/lib/server/http";
 import { saveDraft } from "@/lib/server/drafts";
@@ -219,11 +220,7 @@ export async function publishDraftToWordpress({
     // A server-side post hook can fail after creating the post. Only an explicit
     // client-error rejection is safe to release for another attempt.
     postAttempted = response.status >= 500;
-    throw new ApiError(
-      "WordPress投稿に失敗しました。",
-      response.status,
-      json.message ?? json.code ?? response.statusText,
-    );
+    throw wordpressRequestError("WordPress投稿に失敗しました。", response, json);
   }
   if (!Number.isInteger(json.id) || !json.link || typeof json.link !== "string") {
     throw new ApiError("WordPressの投稿結果を確認できませんでした。", 502);
@@ -308,11 +305,7 @@ async function fetchWordpressPostTypes(siteUrl: string, authHeader: string) {
   });
   const json = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
-    throw new ApiError(
-      "WordPressの投稿先一覧を取得できませんでした。",
-      response.status,
-      readWordpressError(json) ?? response.statusText,
-    );
+    throw wordpressRequestError("WordPressの投稿先一覧を取得できませんでした。", response, json);
   }
   if (!json || typeof json !== "object" || Array.isArray(json)) {
     throw new ApiError(
@@ -582,11 +575,7 @@ async function ensureTerms(
     );
     const searchJson = (await searchResponse.json().catch(() => null)) as unknown;
     if (!searchResponse.ok) {
-      throw new ApiError(
-        `WordPress${termLabel(type)}の検索に失敗しました。`,
-        searchResponse.status,
-        readWordpressError(searchJson) ?? searchResponse.statusText,
-      );
+      throw wordpressRequestError(`WordPress${termLabel(type)}の検索に失敗しました。`, searchResponse, searchJson);
     }
     if (!Array.isArray(searchJson)) {
       throw new ApiError(
@@ -610,11 +599,7 @@ async function ensureTerms(
     });
     const created = (await createResponse.json().catch(() => ({}))) as Record<string, unknown>;
     if (!createResponse.ok) {
-      throw new ApiError(
-        `WordPress${termLabel(type)}の作成に失敗しました。`,
-        createResponse.status,
-        readWordpressError(created),
-      );
+      throw wordpressRequestError(`WordPress${termLabel(type)}の作成に失敗しました。`, createResponse, created);
     }
     ids.push(readWordpressTermId(created, type, "create"));
   }
@@ -650,17 +635,46 @@ function termOperationLabel(operation: "search" | "create") {
   return operation === "search" ? "検索" : "作成";
 }
 
+// What the site put in a REST error body: the message (WordPress wraps some in <strong>, removed
+// here), else the code. Undefined when the body is no such error, e.g. a server's own HTML page.
 function readWordpressError(value: unknown) {
   if (!value || typeof value !== "object") {
     return undefined;
   }
 
   const record = value as Record<string, unknown>;
-  return typeof record.message === "string"
-    ? record.message
-    : typeof record.code === "string"
-      ? record.code
-      : undefined;
+  for (const field of [record.message, record.code]) {
+    const text = typeof field === "string" ? field.replace(/<[^>]*>/g, "").trim() : "";
+    if (text) {
+      return text;
+    }
+  }
+  return undefined;
+}
+
+function readWordpressErrorCode(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const code = (value as Record<string, unknown>).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+// A failed WordPress request. For 401 and 403 the detail starts with what usually causes the
+// refusal and what to do (November 24, Aizawa: a 403 from the site's server showed only the step
+// that failed), then what the site said, if anything.
+function wordpressRequestError(
+  message: string,
+  response: { status: number; statusText: string },
+  body: unknown,
+) {
+  const reported = readWordpressError(body);
+  const hint = wordpressRejectionHint(response.status, readWordpressErrorCode(body));
+  const detail = hint
+    ? [hint, reported ? `WordPressの応答：${reported}` : ""].filter(Boolean).join(" ")
+    : reported ?? (response.statusText || undefined);
+  return new ApiError(message, response.status, detail);
 }
 
 async function uploadMedia(
@@ -732,7 +746,10 @@ async function uploadMedia(
     message?: string;
   };
 
-  if (!response.ok || !json.id) {
+  if (!response.ok) {
+    throw wordpressRequestError("WordPressのメディアアップロードに失敗しました。", response, json);
+  }
+  if (!json.id) {
     throw new ApiError("WordPressのメディアアップロードに失敗しました。", response.status, json.message);
   }
 
@@ -808,7 +825,10 @@ async function updateMediaAltText(
     message?: string;
   };
 
-  if (!response.ok || json.id !== mediaId) {
+  if (!response.ok) {
+    throw wordpressRequestError("WordPressメディアの代替テキスト更新に失敗しました。", response, json);
+  }
+  if (json.id !== mediaId) {
     throw new ApiError(
       "WordPressメディアの代替テキスト更新に失敗しました。",
       response.status,

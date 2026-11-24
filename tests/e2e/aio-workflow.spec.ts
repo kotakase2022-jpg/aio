@@ -2535,6 +2535,44 @@ test("when the site's post types cannot be read, only the standard post is offer
   expect(errors()).toEqual([]);
 });
 
+test("a refused 投稿先 list shows the cause from the server and only the next step that helps", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, { allowedFailedResponses: [/\/api\/wordpress\/post-types$/] });
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft!.images = [];
+  await mockCommonApiRoutes(page, completedJob, { rememberWordpressPostType: false });
+  // November 24 evening (Aizawa): the server of the site refused the tool with 403. The detail from
+  // the server now says why; the screen adds only the next step.
+  let refusal = { status: 403, detail: "サーバーの海外からのアクセス制限で止められている可能性があります。" };
+  await page.route("**/api/wordpress/post-types", async (route) => {
+    await route.fulfill({
+      status: refusal.status,
+      json: { ok: false, error: "WordPressの投稿先一覧を取得できませんでした。", detail: refusal.detail },
+    });
+  });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for a refused destination list.");
+  await page.getByTestId("article-primary-button").click();
+  await page.getByTestId("approve-draft-button").click();
+  await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+  await page.getByTestId("wordpress-username").fill("editor");
+  await page.getByTestId("wordpress-application-password").fill("test-only-password");
+  await page.getByTestId("wordpress-connect-button").click();
+
+  const typeError = page.getByTestId("wordpress-post-type-error");
+  await expect(typeError).toContainText(
+    "WordPressの投稿先一覧を取得できませんでした。 / サーバーの海外からのアクセス制限で止められている可能性があります。",
+  );
+  await expect(typeError).toContainText("原因を解消したら「再読み込み」を押してください。");
+  await expect(typeError).not.toContainText("WordPressのユーザー権限とREST APIの設定を確認してください。");
+
+  // A wrong password is fixed by saving the connection again, which reloads the list by itself.
+  refusal = { status: 401, detail: "WordPressにログインできませんでした（HTTP 401）。" };
+  await page.getByTestId("wordpress-post-type-reload").click();
+  await expect(typeError).toContainText("WordPressにログインできませんでした（HTTP 401）。");
+  await expect(typeError).not.toContainText("再読み込み」を押");
+  expect(errors()).toEqual([]);
+});
+
 test("a failed WordPress post is reported right under the post button, where the editor is looking", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, { allowedFailedResponses: [/\/api\/wordpress\/post$/] });
   const completedJob = createCompletedGenerationJob();

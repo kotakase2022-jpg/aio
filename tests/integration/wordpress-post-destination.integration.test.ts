@@ -2,6 +2,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  WORDPRESS_FORBIDDEN_BY_SERVER_HINT,
+  WORDPRESS_FORBIDDEN_BY_WORDPRESS_HINT,
+  WORDPRESS_UNAUTHORIZED_HINT,
+} from "@/lib/wordpress-rejection-hints";
 import { createSampleDraft } from "../fixtures/article";
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 
@@ -383,5 +388,104 @@ describe("WordPress post destinations", () => {
     expect(listed.status).toBe(200);
     expect(listedJson.postTypes.map((type) => type.slug)).toEqual(["post", "column"]);
     expect(rejected.status).toBe(400);
+  });
+});
+
+describe("WordPress refusals say why they happen and what to do (November 24 evening)", () => {
+  // Aizawa retest: the server of the site answered 403 to every request from the tool (its overseas
+  // restriction of the REST API), and the screen said only which step had failed.
+  const forbiddenPage = () =>
+    new Response("<html><head><title>403 Forbidden</title></head><body>Forbidden</body></html>", {
+      status: 403,
+      headers: { "content-type": "text/html" },
+    });
+
+  test("a 403 refused before WordPress points to the overseas access restriction of the server", async () => {
+    const connection = await connect();
+    stubWordpress((request) => (request.url === `${site}/wp-json/wp/v2/types?context=edit` ? forbiddenPage() : undefined));
+    const { listWordpressPostTypes } = await import("@/lib/server/wordpress");
+
+    await expect(listWordpressPostTypes({ connectionId: connection.id })).rejects.toMatchObject({
+      status: 403,
+      message: "WordPressの投稿先一覧を取得できませんでした。",
+      detail: WORDPRESS_FORBIDDEN_BY_SERVER_HINT,
+    });
+  });
+
+  test("a 403 at the category search stops the post before anything is created, with the same hint", async () => {
+    const connection = await connect();
+    const requests = stubWordpress((request) =>
+      request.url.startsWith(`${site}/wp-json/wp/v2/categories?search=`) ? forbiddenPage() : undefined,
+    );
+    const { publishDraftToWordpress } = await import("@/lib/server/wordpress");
+
+    await expect(
+      publishDraftToWordpress({
+        draft: { ...approvedDraft(), tags: [], images: [] },
+        connectionId: connection.id,
+        status: "draft",
+        origin: "http://localhost",
+        postType: "post",
+      }),
+    ).rejects.toMatchObject({
+      status: 403,
+      message: "WordPressカテゴリーの検索に失敗しました。",
+      detail: WORDPRESS_FORBIDDEN_BY_SERVER_HINT,
+    });
+    expect(requests.map((request) => request.method)).toEqual(["GET"]);
+    expect(await readReservations()).toEqual({});
+  });
+
+  test("a 403 from WordPress itself points to the role of the connected user and keeps the WordPress message", async () => {
+    const connection = await connect();
+    stubWordpress((request) =>
+      request.url === `${site}/wp-json/wp/v2/types?context=edit`
+        ? Response.json(
+            { code: "rest_cannot_view", message: "Sorry, you are not allowed to edit posts in this post type.", data: { status: 403 } },
+            { status: 403 },
+          )
+        : undefined,
+    );
+    const { listWordpressPostTypes } = await import("@/lib/server/wordpress");
+
+    await expect(listWordpressPostTypes({ connectionId: connection.id })).rejects.toMatchObject({
+      status: 403,
+      message: "WordPressの投稿先一覧を取得できませんでした。",
+      detail: `${WORDPRESS_FORBIDDEN_BY_WORDPRESS_HINT} WordPressの応答：Sorry, you are not allowed to edit posts in this post type.`,
+    });
+  });
+
+  test("a 403 whose JSON has no WordPress REST code, as from a firewall plugin, gets the server hint", async () => {
+    const connection = await connect();
+    stubWordpress((request) =>
+      request.url === `${site}/wp-json/wp/v2/types?context=edit`
+        ? Response.json({ code: "blocked_by_firewall", message: "Blocked by the firewall." }, { status: 403 })
+        : undefined,
+    );
+    const { listWordpressPostTypes } = await import("@/lib/server/wordpress");
+
+    await expect(listWordpressPostTypes({ connectionId: connection.id })).rejects.toMatchObject({
+      status: 403,
+      detail: `${WORDPRESS_FORBIDDEN_BY_SERVER_HINT} WordPressの応答：Blocked by the firewall.`,
+    });
+  });
+
+  test("a 401 asks for the user name and Application Password again, without the markup of the WordPress message", async () => {
+    const connection = await connect();
+    stubWordpress((request) =>
+      request.url === `${site}/wp-json/wp/v2/types?context=edit`
+        ? Response.json(
+            { code: "incorrect_password", message: "<strong>エラー:</strong> 指定されたパスワードは無効です。", data: { status: 401 } },
+            { status: 401 },
+          )
+        : undefined,
+    );
+    const { listWordpressPostTypes } = await import("@/lib/server/wordpress");
+
+    await expect(listWordpressPostTypes({ connectionId: connection.id })).rejects.toMatchObject({
+      status: 401,
+      message: "WordPressの投稿先一覧を取得できませんでした。",
+      detail: `${WORDPRESS_UNAUTHORIZED_HINT} WordPressの応答：エラー: 指定されたパスワードは無効です。`,
+    });
   });
 });
