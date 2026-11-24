@@ -30,7 +30,8 @@
   - 別の場所に保存されたのか、処理が完了していないのかを知りたい。
 - 原因:
   - ツールには投稿先を選ぶ機能がなく、常に標準の「投稿」（`/wp-json/wp/v2/posts`）へ送っていた。
-  - 本番の投稿記録（`wordpress_posts`）は0件だった。読み取りのみで、所有者の承認済み。テスト投稿は完了しておらず、「投稿」「コラム」のどちらにも作られていない。
+  - 本番の投稿記録（`wordpress_posts`）は0件だった。読み取りのみで、所有者の承認済み。記録のうえでは、テスト投稿は完了していない。
+  - WordPress 側は確認していないため、「投稿」に記事があるかは未確認（CodeRabbit の指摘）。WordPress は記事を作成した後にカテゴリー・タグなどを設定するため、その段階で 4xx が返ると、記事が残ったまま記録は0件になりうる。投稿し直す前に、「投稿」の下書きを確認してもらう。
   - 失敗の表示が画面上部にあり、投稿ボタンから遠いため気づきにくかった。
   - 失敗の原因そのものは不明。記録が残らず、Vercel のログも期限切れ。
 - 対応:
@@ -156,12 +157,15 @@ gh api -X PUT repos/kotakase2022-jpg/aio/pulls/59/merge -f merge_method=squash \
    - `/api/wordpress/post-types` を含む全APIルートがあること。
    - エラーがないこと。
 5. 本番へ切り替える: `python3 <保存先>/vercel_release.py promote <id>`
+   - 終了コードが0以外なら、切り替えに失敗している。出力の `status` と `error` を確認し、そこで止める。
 6. 切り替わったか確認する: `python3 <保存先>/vercel_release.py alias`
    - `aliasDeployment` と `projectProduction` が、どちらも新しい `id` であること。
 7. ログインしなくてもできる確認を行う（付録B）: `NODE_USE_ENV_PROXY=1 node <保存先>/post-release-noauth.mjs`
    - 期待値: `loginPage` 200、`loginFormRendered` true、未認証の3つの API がすべて 401、`oldDefaultCode` 401。
    - スクリプトは状態コードだけを出す。アクセスコードの値は出さない。
 8. 問題があれば、すぐにロールバックする: `python3 <保存先>/vercel_release.py promote dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`
+   - 終了コードが0であることを確かめる（0以外なら、戻せていない）。
+   - 続けて `python3 <保存先>/vercel_release.py alias` を実行し、`aliasDeployment` と `projectProduction` が、どちらも `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN` に戻ったことを確認する（CodeRabbit の指摘）。
 
 - ログイン後の画面確認は、このセッションからはできない。アクセスコードは 11/17 に所有者が変更しており、値はセッションに渡されていない。チャットでコードを尋ねないこと。
 
@@ -402,6 +406,8 @@ def promote(deployment_id):
     project_id, team_id, production_id = project()
     st, res = call("POST", f"/v10/projects/{project_id}/promote/{deployment_id}?teamId={team_id}", {}, {"Content-Type": "application/json"})
     print(json.dumps({"status": st, "previousProduction": production_id, "error": (res or {}).get("error")}))
+    if not 200 <= st < 300:
+        sys.exit(1)
 
 
 def alias():

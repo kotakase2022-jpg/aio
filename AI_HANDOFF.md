@@ -81,7 +81,8 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 ## 3d. WordPress 投稿先 (2026-11-24, PR #58)
 - Report: the guide says to choose 「投稿先」=「コラム」 (preselected from the second time) and that drafts appear under コラム. The tool showed no such field, and a draft posted without it was not under コラム. The attached Google Drive file could not be opened from this session.
 - Cause: the tool had no destination and always posted to `/wp-json/wp/v2/posts` (standard 投稿). No branch or commit ever had a post-type choice; the guide came from outside this repository.
-- Production record (read-only, owner approved): `wordpress_posts` has 0 rows. The reservation stays after a completed post and is released after a WordPress 4xx or a failure before the post, so **the test post never completed**: nothing was created in 投稿 or コラム.
+- Production record (read-only, owner approved): `wordpress_posts` has 0 rows. The reservation stays after a completed post and is released after a WordPress 4xx or a failure before the post, so **according to the app's record the test post did not complete**.
+  - The WordPress side was not read, so whether a draft exists in 投稿 is not verified (CodeRabbit). WordPress creates the post before it sets terms and other fields, so a 4xx returned at that stage would leave the post in WordPress and 0 rows here. Ask for 投稿 drafts to be checked before posting again.
   - The failure message was shown only at the top of the page (`active-error`), out of sight of the post button.
   - The cause is unknown (no record kept, Vercel logs expired). Candidates: user permissions (term creation or media upload), Application Password, REST API blocked, network.
   - The article should still be 承認済み (not verified). No data change is needed to post it again to コラム.
@@ -156,7 +157,10 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - Not changed, left for the owner: remove the default demo access code from `src/app/api/demo-auth/route.ts` and reject login when `DEMO_ACCESS_CODE` is unset. A valid security finding, but if production relies on the default it would lock everyone out. The owner asked to set the access-code topic aside.
 - PR kotakase2022-jpg/aio#53: CodeRabbit review of `2aa463d` after the rate limit reset: no actionable comments, merge risk minimal.
 - PR kotakase2022-jpg/aio#58: 4 findings fixed in `935a66c` before the merge (types without title and editor excluded, keys starting with `_` allowed, why a type may be missing, wording of unverified items). After the release CodeRabbit added that a missing `supports` still passed; fixed in PR #59 `8b93cfc` and answered on the thread.
-- PR kotakase2022-jpg/aio#59, review of `8b93cfc`: 3 Minor findings, all fixed in `06e283b`, threads answered and resolved: the post error was not tied to its draft, the alert could be added off screen, the reply draft suggested deleting categories/tags that may be in use. The incremental review of `06e283b` was rate limited; request it again with `@coderabbitai review` after the reset.
+- PR kotakase2022-jpg/aio#59, review of `8b93cfc`: 3 Minor findings, all fixed in `06e283b`, threads answered and resolved: the post error was not tied to its draft, the alert could be added off screen, the reply draft suggested deleting categories/tags that may be in use. The incremental review of `06e283b` was rate limited at first.
+  - Re-review of `8b93cfc..1290d80` (requested 06:37 UTC, finished 06:43 UTC): 2 inline and 1 outside-diff Minor findings, all in docs, fixed in the next commit. No finding on the code.
+    - 0 rows in `wordpress_posts` do not show that WordPress has no post: WordPress creates the post before it sets terms, so a 4xx at that stage leaves the post. The record, this file, the session handoff and the reply draft now say that the WordPress side is not verified, and the reply asks to check 投稿 drafts before posting again.
+    - The release helper in the session handoff: `promote` exits non-zero on an HTTP error, and the rollback step checks `alias` afterwards.
 - Codex GitHub review: not performed on #50, #51, #53, #58 or #59 (usage limit); no credits added.
 
 ## 8. Optional Bugbot Findings
