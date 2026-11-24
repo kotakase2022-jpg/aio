@@ -12,7 +12,8 @@
 - Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) released: `aio-store` v7 (14:29 JST) and the app `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (16:03 JST), verified on production (section 2).
 - 2026-11-24: Aizawa reported that the guide's 「投稿先」 (コラム) was missing in the tool. PR #58 adds the post-type choice, released 13:48 JST. PR #59 shows WordPress post failures under the post button (section 3d). PR #59 was squash-merged as `3d73e43` after the CodeRabbit re-review and released at 15:57 JST (`dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`, section 2).
 - 2026-11-24 evening: Aizawa retested at 16:41–16:42 JST. Every REST call to the site got 403 from the site's server. The cause is inferred to be on the site side, in its server's overseas restriction of the REST API (section 3e). The site's settings were not seen, so this is not verified.
-- Last updated: 2026-11-24 evening JST (Claude Code, local Windows session)
+- 2026-11-24 20:12 JST: PR #61 released (`dpl_BgQns9d74GwbtDGfyRzF14eYeomX`, section 2). A 401 or 403 from WordPress now shows its usual cause and fix on the screen.
+- Last updated: 2026-11-24 20:15 JST (Claude Code, local Windows session)
 
 ## 1. Current Goal
 Aizawa 11/16 re-verification: the four article structures were confirmed fine. Remaining items:
@@ -61,6 +62,15 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - Sign-in-free checks at 15:57 JST: the login page is 200 with the form; unauthenticated logs, post-types and post all get 401; the old default code gets 401.
   - Not checked: the screens after login (the session has no access code).
   - Rollback = promote `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN` (PR #58), then check that `alias` points to it.
+- PR kotakase2022-jpg/aio#61 (401/403 hints, section 3e) squash-merged as `b5d2fcc` at 20:10 JST. Its tree is identical to the reviewed PR head `1ead2cd`; CI PASS; CodeRabbit had no actionable comments on `1ead2cd`.
+  - Released 2026-11-24 at 20:12 JST from the local Windows session, after the owner's approval in chat. Production is now `dpl_BgQns9d74GwbtDGfyRzF14eYeomX`.
+  - Method: the same as PR #59. Upload with `vercel deploy --prod --skip-domain` from a clean worktree at `b5d2fcc` (no `--yes`); the REST calls go through `vercel api`, so no token value was handled.
+  - 210 files. Against the previous production (209): 1 added (`src/lib/wordpress-rejection-hints.ts`), 9 changed, 0 removed. After staging, the deployment's sources matched the local list exactly.
+  - Build READY / STAGED: Compiled successfully, all 17 API routes including `/api/wordpress/post-types`, no error lines. Before the promote, the canonical domain still pointed to `dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`.
+  - Promote: 201 at 20:12:27 JST. Afterwards the canonical alias and the project's production target both point to the new deployment.
+  - Sign-in-free checks at 20:12 JST: the login page is 200 with the form; unauthenticated logs, post-types and post all get 401; the old default code gets 401.
+  - Not checked: the screens after login (the session has no access code), and a real 401/403 from a site (the hints are covered by the integration and E2E tests).
+  - Rollback = promote `dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp` (PR #59), then check that `alias` points to it.
 
 ## 3. What Was Done
 - ③ cursor pagination for generation logs: `GET /api/generation-logs?cursor=&limit=` returns `{ logs, nextCursor, complete }`; first-page URL unchanged. Stable order = creation time desc + id (saving/posting no longer moves a log between pages). Supabase direct: SQL keyset; gateway (production): pages inside the existing `list_jobs` window (100 jobs / 400 newest-updated rows) and reports `complete:false` when that window is full; local: in-memory keyset. UI: 「さらに古いログを表示（20件ずつ）」, count badge, end/incomplete notices, load-more error keeps the list, automatic refresh keeps the loaded range (≤100).
@@ -153,7 +163,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - The evening reply is a draft and has not been sent. It was given to the owner outside this repository, because it names the hosting company and other site specifics.
   - The earlier reply in `docs/aizawa-nov24-wordpress-destination.md` was sent: Aizawa answered its requests.
 - Vantage point: WebFetch from the Windows workstation goes out through the owner's line in Japan, so it cannot test overseas access. Use the production request log instead (section 14).
-- App change in the same PR (#61, not released yet). Its release needs the owner's approval (section 10).
+- App change in the same PR (#61), released on 2026-11-24 at 20:12 JST after the owner's approval (section 2).
   - For a WordPress 401 or 403, the error detail now says what usually causes it and what to do.
   - The detail then gives what the site said, with the markup removed (one linear pass) and cut to 300 characters. Other failures keep the site's message as it is (CodeRabbit).
   - A 403 is split into two cases:
@@ -196,7 +206,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - WordPress post requests have no client timeout (existing reservation prevents duplicates).
 - WordPress errors:
   - Before PR #61, a 403 from the site appeared only as 「WordPressカテゴリーの検索に失敗しました。」 (section 3e).
-  - PR #61 adds hints for 401 and 403. It is not released yet.
+  - PR #61 adds hints for 401 and 403 (released 11/24 20:12 JST).
   - Other statuses still show only the failed step and what the site said.
   - 保存 does not check the credentials, so a wrong Application Password shows up only when 投稿先 loads or when posting.
 - The WordPress connection lives only in page state. After a reload the user enters the Application Password and presses 保存 again. 投稿先 loads only after 保存 or 「再読み込み」.
@@ -276,16 +286,14 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
 ## 10. Next Recommended Action
-1. Send Aizawa the evening reply. It was given to the owner outside this repository and has not been sent. It withdraws the 投稿 check and asks the site side for two changes (section 3e). PR #58 and PR #59 stay released: current production `dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`, rollback `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`.
+1. Send Aizawa the evening reply. It was given to the owner outside this repository and has not been sent. It withdraws the 投稿 check from Aizawa and asks the site side for two changes (section 3e). Current production: `dpl_BgQns9d74GwbtDGfyRzF14eYeomX` (PR #61); rollback `dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`.
 2. After the site side reports the changes, and the developer's check of 投稿 drafts (no leftover test article, or what was found), Aizawa (or the owner):
    - saves the connection again;
    - checks that 「投稿先」 lists コラム;
    - posts a 下書き.
 
    Read the production request log within an hour of that test (section 14). A 401 means the user or Application Password is wrong. If 403 continues, check other blockers such as a WAF or a security plugin.
-3. PR #61 also carries the app change for the 401/403 hints (section 3e). Its merge and release need the owner's approval.
-   - After the release, run the no-sign-in checks as for PR #59 (section 2).
-   - Checking the credentials on 保存 is not done. It is a possible separate task.
+3. The 401/403 hints of PR #61 are released (section 2). Checking the credentials on 保存 is not done. It is a possible separate task.
 4. Access code: done by the owner on 11/17 (production value set, session secret rotated). Remove the code fallback in `src/app/api/demo-auth/route.ts` as a separate task (open PR #55 replaces the shared code with per-user login; review it separately).
 5. Cleanup, with approval: the three own test articles in section 12. Revoke Vercel tokens that are no longer needed and the Supabase token if unneeded.
 
