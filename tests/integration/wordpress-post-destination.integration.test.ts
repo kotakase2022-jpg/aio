@@ -488,4 +488,39 @@ describe("WordPress refusals say why they happen and what to do (November 24 eve
       detail: `${WORDPRESS_UNAUTHORIZED_HINT} WordPressの応答：エラー: 指定されたパスワードは無効です。`,
     });
   });
+
+  test("a failure other than 401 or 403 keeps the message of the site as it is", async () => {
+    // CodeRabbit: removing markup everywhere would cut "<0 または >" out of a message like this one.
+    const connection = await connect();
+    stubWordpress((request) =>
+      request.url === `${site}/wp-json/wp/v2/types?context=edit`
+        ? Response.json({ code: "rest_invalid_param", message: "値は <0 または >100 にしてください。" }, { status: 400 })
+        : undefined,
+    );
+    const { listWordpressPostTypes } = await import("@/lib/server/wordpress");
+
+    await expect(listWordpressPostTypes({ connectionId: connection.id })).rejects.toMatchObject({
+      status: 400,
+      message: "WordPressの投稿先一覧を取得できませんでした。",
+      detail: "値は <0 または >100 にしてください。",
+    });
+  });
+
+  test("a long message with no closing > is handled in linear time and shortened after the hint", async () => {
+    // CodeRabbit: a backtracking pattern took seconds for 64 KB of "<" (its work grew with the square).
+    const connection = await connect();
+    stubWordpress((request) =>
+      request.url === `${site}/wp-json/wp/v2/types?context=edit`
+        ? Response.json({ code: "rest_forbidden", message: "<".repeat(65_536) }, { status: 403 })
+        : undefined,
+    );
+    const { listWordpressPostTypes } = await import("@/lib/server/wordpress");
+
+    const started = performance.now();
+    await expect(listWordpressPostTypes({ connectionId: connection.id })).rejects.toMatchObject({
+      status: 403,
+      detail: `${WORDPRESS_FORBIDDEN_BY_WORDPRESS_HINT} WordPressの応答：${"<".repeat(300)}…`,
+    });
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
 });

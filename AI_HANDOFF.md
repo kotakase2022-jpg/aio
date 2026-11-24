@@ -155,7 +155,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Vantage point: WebFetch from the Windows workstation goes out through the owner's line in Japan, so it cannot test overseas access. Use the production request log instead (section 14).
 - App change in the same PR (#61, not released yet). Its release needs the owner's approval (section 10).
   - For a WordPress 401 or 403, the error detail now says what usually causes it and what to do.
-  - The detail then gives what the site said, with the markup removed.
+  - The detail then gives what the site said, with the markup removed (one linear pass) and cut to 300 characters. Other failures keep the site's message as it is (CodeRabbit).
   - A 403 is split into two cases:
     - WordPress itself refused, with a `rest_` error code. The hint points to the role of the connected user (編集者 or above).
     - It was refused before WordPress, with no such code (for example an HTML page). The hint points to the server's overseas restriction of the REST API, a WAF or a security plugin.
@@ -238,6 +238,14 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
     - 0 rows in `wordpress_posts` do not show that WordPress has no post: WordPress creates the post before it sets terms, so a 4xx at that stage leaves the post. The record, this file, the session handoff and the reply draft now say that the WordPress side is not verified, and the reply asks to check 投稿 drafts before posting again.
     - The release helper in the session handoff: `promote` exits non-zero on an HTTP error, and the rollback step checks `alias` afterwards.
   - Merged after CI PASS on `9398baa`. CodeRabbit did not review `9398baa` itself (rate limit: 1 review per hour); that commit only applies its suggestions.
+- PR #61 (401/403 hints and the evening retest record):
+  - Review of `8c22287` (docs only): 2 Minor findings, both fixed in `a6fdd58`.
+    - Say the cause is inferred, not that the app has no defect.
+    - Keep a check of 投稿 drafts before posting to コラム again, because the morning attempt is not verified. Aizawa cannot see 投稿, so the site's developer is asked to check.
+  - `59092ef` and `a6fdd58` were first rate limited. A review was requested again at 09:56 UTC and finished at 10:02 UTC with 2 findings on `readWordpressError`, both fixed in the next commit:
+    - Minor: markup was removed from every error detail, which could cut text such as 「<0 または >100」 out of a 400 message. Markup is now removed only after a 401/403 hint, and other failures keep the site's message as it is.
+    - Major: `/<[^>]*>/g` is quadratic on a long body without `>` (64 KB took seconds). It is replaced by a single linear pass, and the site's message after a hint is cut to 300 characters.
+    - Each finding has a test that fails on the previous code.
 - Codex GitHub review: not performed on #50, #51, #53, #58 or #59 (usage limit); no credits added.
 
 ## 8. Optional Bugbot Findings
@@ -253,11 +261,16 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - 11/24 (PR #59 at `06e283b`), this session: typecheck / lint / integrity (65 files) PASS; 59 files / 647 tests PASS; coverage S/B/F/L 88.41/80.48/93.03/89.08%; contract 15 PASS; E2E 89/89 PASS (build run by the E2E web server); CI PASS. The 3 new E2E tests and the new integration test fail on the previous code.
 - 11/24 (PR #59 at `9398baa`, docs only on top of `06e283b`), local Windows session: lint / typecheck / integrity (65 files) PASS; 59 files / 647 tests PASS; contract 15 PASS; CI (typecheck, lint, tests, E2E, build) PASS; the Vercel production build PASS. E2E and coverage were not run on the workstation.
 - 11/24 evening (PR #61, 401/403 hints), local Windows session. These ran with the project config on the workstation (bundled Chromium, no local override):
-  - typecheck, lint and integrity (65 files): PASS.
-  - Tests: 59 files and 652 tests PASS; contract 15 PASS.
-  - Coverage S/B/F/L: 88.49/80.62/93.29/89.09%.
-  - E2E: 90/90 PASS. The E2E web server ran the build.
-  - The 5 new integration tests, the updated 401 integration test and the new E2E test fail on the previous code.
+  - After the CodeRabbit fixes, `npm run quality` PASS in one run (217 s):
+    - typecheck, lint and integrity (65 files);
+    - 59 files and 654 tests; contract 15;
+    - coverage S/B/F/L 88.56/80.62/93.30/89.17%;
+    - E2E 90/90;
+    - build.
+  - These fail on the previous code:
+    - the 7 new integration tests (5, plus 2 for the CodeRabbit findings);
+    - the updated 401 integration test;
+    - the new E2E test.
   - Two contract tests were updated to the new detail. The alt-text 403 mock now carries the `code` and `data` that WordPress sends.
 - Details and the list of new E2E flows: `docs/aizawa-nov16-followup.md` §検証 and §「11/17 厳密な自己検証」; for 11/24 `docs/aizawa-nov24-wordpress-destination.md` §検証.
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.

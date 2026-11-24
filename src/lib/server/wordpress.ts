@@ -635,22 +635,41 @@ function termOperationLabel(operation: "search" | "create") {
   return operation === "search" ? "検索" : "作成";
 }
 
-// What the site put in a REST error body: the message (WordPress wraps some in <strong>, removed
-// here), else the code. Undefined when the body is no such error, e.g. a server's own HTML page.
+// What the site put in a REST error body: the message, else the code. Undefined when the body is
+// no such error, e.g. a server's own HTML page.
 function readWordpressError(value: unknown) {
   if (!value || typeof value !== "object") {
     return undefined;
   }
 
   const record = value as Record<string, unknown>;
-  for (const field of [record.message, record.code]) {
-    const text = typeof field === "string" ? field.replace(/<[^>]*>/g, "").trim() : "";
-    if (text) {
-      return text;
-    }
-  }
-  return undefined;
+  return typeof record.message === "string"
+    ? record.message
+    : typeof record.code === "string"
+      ? record.code
+      : undefined;
 }
+
+// Removes <...> markup in one pass; a "<" with no ">" after it stays as text. Linear in the length:
+// a backtracking pattern such as /<[^>]*>/g grows with the square of a long body without ">"
+// (CodeRabbit).
+function withoutMarkup(text: string) {
+  let result = "";
+  let index = 0;
+  while (index < text.length) {
+    const open = text.indexOf("<", index);
+    const close = open === -1 ? -1 : text.indexOf(">", open + 1);
+    if (close === -1) {
+      result += text.slice(index);
+      break;
+    }
+    result += text.slice(index, open);
+    index = close + 1;
+  }
+  return result;
+}
+
+const MAX_REPORTED_WORDPRESS_MESSAGE = 300;
 
 function readWordpressErrorCode(value: unknown) {
   if (!value || typeof value !== "object") {
@@ -663,7 +682,8 @@ function readWordpressErrorCode(value: unknown) {
 
 // A failed WordPress request. For 401 and 403 the detail starts with what usually causes the
 // refusal and what to do (November 24, Aizawa: a 403 from the site's server showed only the step
-// that failed), then what the site said, if anything.
+// that failed), then what the site said, without markup (WordPress wraps some messages in <strong>)
+// and shortened. Any other failure keeps the site's message as it is, else the HTTP status text.
 function wordpressRequestError(
   message: string,
   response: { status: number; statusText: string },
@@ -671,10 +691,18 @@ function wordpressRequestError(
 ) {
   const reported = readWordpressError(body);
   const hint = wordpressRejectionHint(response.status, readWordpressErrorCode(body));
-  const detail = hint
-    ? [hint, reported ? `WordPressの応答：${reported}` : ""].filter(Boolean).join(" ")
-    : reported ?? (response.statusText || undefined);
-  return new ApiError(message, response.status, detail);
+  if (!hint) {
+    return new ApiError(message, response.status, reported ?? (response.statusText || undefined));
+  }
+
+  const said = reported === undefined ? "" : withoutMarkup(reported).trim();
+  let shortened = said;
+  if (said.length > MAX_REPORTED_WORDPRESS_MESSAGE) {
+    const cut = said.slice(0, MAX_REPORTED_WORDPRESS_MESSAGE);
+    // Never end on half of a surrogate pair (an emoji, for example).
+    shortened = `${/[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut}…`;
+  }
+  return new ApiError(message, response.status, shortened ? `${hint} WordPressの応答：${shortened}` : hint);
 }
 
 async function uploadMedia(
