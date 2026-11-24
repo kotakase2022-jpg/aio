@@ -28,6 +28,7 @@ describe("WordPress post route", () => {
         status: "posted",
         wordpressPostUrl: "https://wordpress.example.com/post",
       },
+      postType: { slug: "post", name: "投稿" },
     });
     const { POST } = await import("@/app/api/wordpress/post/route");
 

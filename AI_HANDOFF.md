@@ -2,11 +2,12 @@
 
 ## 0. Current Loop Phase
 - Current owner: Claude Code
-- Next owner: User / Codex (remaining: the access-code security task; customer report send by the user; cleanup of own test records with approval)
+- Next owner: User / Codex (remaining: release of PR #58 and the owner's checks after login; the reply to Aizawa about 投稿先; the decision on re-sending the article that went to 投稿; cleanup of own test records with approval)
 - Loop: 10
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
 - Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) released: `aio-store` v7 (14:29 JST) and the app `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (16:03 JST), verified on production (section 2).
-- Last updated: 2026-11-17 (UTC session; Claude Code cloud container)
+- 2026-11-24: Aizawa reported that the guide's 「投稿先」 (コラム) was missing in the tool. PR #58 adds the post-type choice (section 3d).
+- Last updated: 2026-11-24 (UTC session; Claude Code cloud container)
 
 ## 1. Current Goal
 Aizawa 11/16 re-verification: the four article structures were confirmed fine. Remaining items:
@@ -76,6 +77,18 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - `findGenerationJobForDraft` looks the job up by draft ID: one-row query on the service-role path, `get_job_by_draft` on the gateway with the window fallback for old gateways, all jobs locally.
   - New tests: 7 integration + 1 WordPress-path integration + 1 E2E, all failing on the previous code.
 - Code check: the screen's 5 timers only clear transient messages, focus, abort requests (reported as unconfirmed) or pace polling; none hides a processing state.
+
+## 3d. WordPress 投稿先 (2026-11-24, PR #58)
+- Report: the guide says to choose 「投稿先」=「コラム」 (preselected from the second time) and that drafts appear under コラム. The tool showed no such field, and a draft posted without it was not under コラム. The attached Google Drive file could not be opened from this session.
+- Cause: the tool had no destination and always posted to `/wp-json/wp/v2/posts` (standard 投稿). No branch or commit ever had a post-type choice; the guide came from outside this repository. The test draft most likely sits in 投稿 → 下書き (not verified against production data; check the article's WordPress column in the logs or 投稿 → 下書き in WordPress). Posting also creates missing categories/tags as 投稿 terms.
+- Change:
+  - `POST /api/wordpress/post-types` lists creatable post types from `/wp/v2/types?context=edit`.
+  - The screen adds a 「投稿先」 select. A first post to a site needs an explicit choice; the choice is remembered per site in `localStorage`.
+  - The server posts to the type's own REST route after re-reading the list, before the reservation, and skips unsupported fields with one warning.
+  - Requests without a post type, or with `post`, behave exactly as before.
+- Not verified: the customer's WordPress (no post, no type read). コラム appears only if it has `show_in_rest`, the connected user can edit it, and it supports title and editor (types without both are excluded, CodeRabbit).
+- Not possible from this session: a production UI check after login, because the access code changed. Re-sending the article already in 投稿 needs its reservation released and its state reset (operator decision, production data change).
+- Record and customer reply draft: `docs/aizawa-nov24-wordpress-destination.md`.
 
 ## 4. Files Changed
 - `src/lib/server/generation-jobs.ts`, `src/lib/server/article-generation-job-runner.ts`, `src/lib/server/drafts.ts`, `src/types/aio.ts`
@@ -149,11 +162,11 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
 ## 10. Next Recommended Action
-1. Access-code task (security, owner first): confirm the production `DEMO_ACCESS_CODE` is a strong, non-default value; if not, set it for Production, redeploy, and tell Aizawa the new code. Then remove the fallback in `src/app/api/demo-auth/route.ts`.
-2. Send Aizawa the report. The draft is in `docs/aizawa-nov16-followup.md`, filled with verified facts only; the owner sends it.
-3. Cleanup, with approval: the three own test articles in section 12. Revoke the Vercel tokens no longer needed (see section 6) and the Supabase token if unneeded.
-4. Optional: delete the Windows release clone `aio-release-20261116`; it holds a Vercel OIDC token in `.env.local`.
-5. Optional follow-ups suggested earlier: a save-RPC guard for the late-write window, and a test-robustness fix for the favicon-abort E2E flake.
+1. PR #58: after CI and CodeRabbit, merge and release with the approved steps. After the release, the owner (or Aizawa) signs in, connects WordPress and checks that 「投稿先」 lists コラム.
+2. If コラム is not listed: check the 投稿先 error message, then whether the connected WordPress user can edit コラム, then ask the site's administrator to expose it to the REST API (`show_in_rest`).
+3. Send Aizawa the reply in `docs/aizawa-nov24-wordpress-destination.md`. Choose option A or B for the article already sent to 投稿: A = an operator releases its reservation and resets its state (production data change, owner approval), B = create a new article.
+4. Access code: done by the owner on 11/17 (production value set, session secret rotated). Remove the code fallback in `src/app/api/demo-auth/route.ts` as a separate task (open PR #55 replaces the shared code with per-user login; review it separately).
+5. Cleanup, with approval: the three own test articles in section 12. Revoke Vercel tokens that are no longer needed and the Supabase token if unneeded.
 
 ## 11. Suggested Review Scope for Codex
 - `listGenerationLogsPage` (three storage paths) and `decodeGenerationLogCursor` input validation.

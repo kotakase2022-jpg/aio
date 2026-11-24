@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ApiError, errorJson, okJson } from "@/lib/server/http";
 import { getDraft } from "@/lib/server/drafts";
 import { publishDraftToWordpress } from "@/lib/server/wordpress";
+import { WORDPRESS_POST_TYPE_SLUG_PATTERN } from "@/lib/wordpress-post-types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -11,6 +12,8 @@ const schema = z.object({
   connectionId: z.string().min(1),
   connection: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(["draft", "publish"]),
+  // The chosen 投稿先 (WordPress post type key). Absent from older clients: 投稿 as before.
+  postType: z.string().regex(WORDPRESS_POST_TYPE_SLUG_PATTERN).optional(),
 });
 
 export async function POST(request: Request) {
@@ -40,6 +43,7 @@ export async function POST(request: Request) {
       connection: body.connection as Parameters<typeof publishDraftToWordpress>[0]["connection"],
       status: body.status,
       origin,
+      postType: body.postType,
     });
     return okJson(result);
   } catch (error) {

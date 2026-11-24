@@ -211,6 +211,19 @@ export type WordpressConnection = {
   updatedAt: string;
 };
 
+// A WordPress post type the connected user can create, such as 投稿 (post) or a custom コラム.
+// The flags say which of the article's fields that post type accepts.
+export type WordpressPostType = {
+  slug: string;
+  name: string;
+  restBase: string;
+  restNamespace: string;
+  categories: boolean;
+  tags: boolean;
+  featuredImage: boolean;
+  excerpt: boolean;
+};
+
 export type GenerationJobStatus = "queued" | "running" | "completed" | "failed" | "canceled";
 
 export type GenerationJob = {

@@ -72,6 +72,7 @@ import {
   MAX_UPLOAD_LABEL,
 } from "@/lib/upload-policy";
 import { cn, joinCsv, splitCsv } from "@/lib/utils";
+import { STANDARD_WORDPRESS_POST_TYPE } from "@/lib/wordpress-post-types";
 import type {
   AttachedFileInput,
   ArticleStructure,
@@ -96,6 +97,7 @@ import type {
   VisualToneInput,
   WordCount,
   WordpressConnection,
+  WordpressPostType,
 } from "@/types/aio";
 
 const activeGenerationJobStorageKey = "aio-active-generation-job-id";
@@ -112,6 +114,8 @@ const generationPollTimeoutMs = 20_000;
 const generationPollUnconfirmedAttempts = 4;
 const lastClosingTextStorageKey = "aio-last-closing-text";
 const lastAuthorStorageKey = "aio-last-author";
+// The 投稿先 last chosen for a WordPress site, so the next visit to that site selects it again.
+const wordpressPostTypeStoragePrefix = "aio-wordpress-post-type:";
 const generatedImageSlotOrder = ["featured", "inline-1", "inline-2"] as const;
 
 function getGeneratedImageSlots(images: ArticleImage[]) {
@@ -268,7 +272,12 @@ export function ArticleGeneratorApp() {
     username: "",
     applicationPassword: "",
     status: "draft" as "draft" | "publish",
+    postType: "",
   });
+  const [wpPostTypes, setWpPostTypes] = useState<WordpressPostType[]>([]);
+  const [wpPostTypesLoading, setWpPostTypesLoading] = useState(false);
+  const [wpPostTypesError, setWpPostTypesError] = useState("");
+  const wpPostTypesRequestRef = useRef(0);
   const [activeInputStep, setActiveInputStep] =
     useState<InputWizardStepId>("references");
   const [inputWizardMessage, setInputWizardMessage] = useState("");
@@ -1097,13 +1106,51 @@ export function ArticleGeneratorApp() {
       setConnection(result.connection);
       setWpForm((current) => ({ ...current, applicationPassword: "" }));
       setWpConnectionMessage("WordPress接続情報を保存しました。");
+      void loadWordpressPostTypes(result.connection);
     } catch (error) {
       setWpConnectionError(normalizeWordpressConnectionError(readError(error)));
     }
   }
 
+  async function loadWordpressPostTypes(target: WordpressConnection) {
+    const requestId = wpPostTypesRequestRef.current + 1;
+    wpPostTypesRequestRef.current = requestId;
+    setWpPostTypesLoading(true);
+    setWpPostTypesError("");
+    setWpPostTypes([]);
+    setWpForm((current) => ({ ...current, postType: "" }));
+    try {
+      const result = await apiPost<{ postTypes: WordpressPostType[] }>("/api/wordpress/post-types", {
+        connectionId: target.id,
+        connection: target,
+      });
+      if (wpPostTypesRequestRef.current !== requestId) return;
+      const postTypes = result.postTypes ?? [];
+      setWpPostTypes(postTypes);
+      // Only a destination chosen before for this site is preselected; a first post needs a choice,
+      // so an article is never sent to 投稿 just because nothing else was listed.
+      const remembered = readRememberedWordpressPostType(target.siteUrl);
+      if (remembered && postTypes.some((postType) => postType.slug === remembered)) {
+        setWpForm((current) => ({ ...current, postType: remembered }));
+      }
+    } catch (error) {
+      if (wpPostTypesRequestRef.current !== requestId) return;
+      setWpPostTypes([STANDARD_WORDPRESS_POST_TYPE]);
+      setWpPostTypesError(
+        `${readError(error)} 「投稿」以外の投稿先を表示できません。「再読み込み」を押すか、WordPressのユーザー権限とREST APIの設定を確認してください。`,
+      );
+    } finally {
+      if (wpPostTypesRequestRef.current === requestId) setWpPostTypesLoading(false);
+    }
+  }
+
+  function chooseWordpressPostType(slug: string) {
+    updateWordpressForm({ postType: slug });
+    if (connection && slug) rememberWordpressPostType(connection.siteUrl, slug);
+  }
+
   async function postToWordpress() {
-    if (!draft || !connection || draftEditingLocked) return;
+    if (!draft || !connection || draftEditingLocked || !wpForm.postType) return;
     const validationMessage = validateDraftForSubmission(draft);
     if (validationMessage) {
       setActiveError("");
@@ -1119,13 +1166,19 @@ export function ArticleGeneratorApp() {
     setWpPostMessage("");
     setDraftActionError("");
     try {
-      const result = await apiPost<{ postUrl: string; draft: ArticleDraft; warnings?: string[] }>(
+      const result = await apiPost<{
+        postUrl: string;
+        draft: ArticleDraft;
+        warnings?: string[];
+        postType?: { slug: string; name: string };
+      }>(
         "/api/wordpress/post",
         {
           draft: prepareDraftForSave(draft),
           connectionId: connection.id,
           connection,
           status: wpForm.status,
+          postType: wpForm.postType,
         },
       );
       setDraft({
@@ -1135,10 +1188,14 @@ export function ArticleGeneratorApp() {
         updatedAt: result.draft.updatedAt,
       });
       void loadGenerationLogs();
+      const destinationName =
+        result.postType?.name ??
+        wpPostTypes.find((postType) => postType.slug === wpForm.postType)?.name ??
+        wpForm.postType;
       setWpPostMessage(
         [wpForm.status === "publish"
           ? "WordPressへ公開投稿しました。"
-          : "WordPressへ下書き投稿しました。", ...(result.warnings ?? [])].join(" "),
+          : "WordPressへ下書き投稿しました。", `投稿先：${destinationName}`, ...(result.warnings ?? [])].join(" "),
       );
     } catch (error) {
       setActiveError(
@@ -2631,7 +2688,27 @@ export function ArticleGeneratorApp() {
                       {wpConnectionMessage}
                     </div>
                   ) : null}
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                      投稿先
+                      <select
+                        data-testid="wordpress-post-type-select"
+                        aria-label="WordPress投稿先"
+                        value={wpForm.postType}
+                        onChange={(event) => chooseWordpressPostType(event.target.value)}
+                        disabled={!connection || wpPostTypesLoading}
+                        className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-normal"
+                      >
+                        <option value="">
+                          {wpPostTypesLoading ? "投稿先を読み込み中…" : "投稿先を選択してください"}
+                        </option>
+                        {wpPostTypes.map((postType) => (
+                          <option key={postType.slug} value={postType.slug}>
+                            {wordpressPostTypeLabel(postType, wpPostTypes)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <select
                       data-testid="wordpress-status-select"
                       aria-label="WordPress投稿ステータス"
@@ -2649,7 +2726,13 @@ export function ArticleGeneratorApp() {
                     <Button
                       data-testid="wordpress-post-button"
                       onClick={postToWordpress}
-                      disabled={!connection || draft.status !== "approved" || draftEditingLocked}
+                      disabled={
+                        !connection ||
+                        !wpForm.postType ||
+                        wpPostTypesLoading ||
+                        draft.status !== "approved" ||
+                        draftEditingLocked
+                      }
                     >
                       {posting ? <Loader2 className="animate-spin" /> : <Send />}
                       WordPressに投稿
@@ -2668,6 +2751,30 @@ export function ArticleGeneratorApp() {
                       </a>
                     ) : null}
                   </div>
+                  {connection ? (
+                    <p data-testid="wordpress-post-type-note" className="text-xs leading-5 text-slate-500">
+                      投稿先は、WordPress管理画面のメニュー名（例：投稿、コラム）で表示されます。一覧にない投稿先は、WordPress側でREST APIに公開されていないか、接続したユーザーにその投稿先の編集権限がない可能性があります。一度選んだ投稿先は、このブラウザでは次回から自動で選ばれます。
+                    </p>
+                  ) : null}
+                  {wpPostTypesError ? (
+                    <div
+                      data-testid="wordpress-post-type-error"
+                      className="flex items-start justify-between gap-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-800"
+                    >
+                      <span>{wpPostTypesError}</span>
+                      <Button
+                        data-testid="wordpress-post-type-reload"
+                        variant="secondary"
+                        size="sm"
+                        disabled={!connection || wpPostTypesLoading}
+                        onClick={() => {
+                          if (connection) void loadWordpressPostTypes(connection);
+                        }}
+                      >
+                        再読み込み
+                      </Button>
+                    </div>
+                  ) : null}
                   {wpPostMessage ? (
                     <div
                       data-testid="wordpress-post-message"
@@ -4178,6 +4285,29 @@ function generationJobStatusLabel(status: GenerationJob["status"]) {
     canceled: "停止",
   };
   return labels[status];
+}
+
+function readRememberedWordpressPostType(siteUrl: string) {
+  try {
+    return window.localStorage.getItem(`${wordpressPostTypeStoragePrefix}${siteUrl}`) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberWordpressPostType(siteUrl: string, slug: string) {
+  try {
+    window.localStorage.setItem(`${wordpressPostTypeStoragePrefix}${siteUrl}`, slug);
+  } catch {
+    // Without storage the editor simply chooses again next time.
+  }
+}
+
+// Two post types can share a label; the key tells them apart.
+function wordpressPostTypeLabel(postType: WordpressPostType, all: WordpressPostType[]) {
+  return all.filter((other) => other.name === postType.name).length > 1
+    ? `${postType.name}（${postType.slug}）`
+    : postType.name;
 }
 
 function wordpressStatusLabel(status?: "draft" | "publish") {
