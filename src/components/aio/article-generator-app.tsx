@@ -1147,7 +1147,7 @@ export function ArticleGeneratorApp() {
       if (wpPostTypesRequestRef.current !== requestId) return;
       setWpPostTypes([STANDARD_WORDPRESS_POST_TYPE]);
       setWpPostTypesError(
-        `${readError(error)} 「投稿」以外の投稿先を表示できません。「再読み込み」を押すか、WordPressのユーザー権限とREST APIの設定を確認してください。`,
+        `${readError(error)} 「投稿」以外の投稿先を表示できません。${wordpressPostTypesNextStep(error)}`,
       );
     } finally {
       if (wpPostTypesRequestRef.current === requestId) setWpPostTypesLoading(false);
@@ -4789,6 +4789,15 @@ function validateWordpressForm(form: {
   }
 
   return "";
+}
+
+// The next step after the 投稿先 list failed. For a refusal (401/403) the server's detail already says
+// what to fix. After a wrong password, saving the connection again reloads the list by itself.
+function wordpressPostTypesNextStep(error: unknown) {
+  const status = error instanceof ApiHttpError ? error.status : undefined;
+  if (status === 401) return "";
+  if (status === 403) return "原因を解消したら「再読み込み」を押してください。";
+  return "「再読み込み」を押すか、WordPressのユーザー権限とREST APIの設定を確認してください。";
 }
 
 function normalizeWordpressConnectionError(message: string) {

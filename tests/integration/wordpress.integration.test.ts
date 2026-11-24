@@ -6,6 +6,7 @@ import { createCompletedGenerationJob, createSampleDraft } from "../fixtures/art
 import { restoreProcessEnv, snapshotProcessEnv } from "../helpers/env";
 import { deltaNov11Form } from "../fixtures/delta-nov11";
 import { buildDraftArticleHtml } from "@/lib/draft-html";
+import { WORDPRESS_UNAUTHORIZED_HINT } from "@/lib/wordpress-rejection-hints";
 
 let tempDir = "";
 const processEnvSnapshot = snapshotProcessEnv();
@@ -242,7 +243,8 @@ describe("WordPress connection and posting", () => {
     ).rejects.toMatchObject({
       status: 401,
       message: "WordPress投稿に失敗しました。",
-      detail: "Invalid credentials",
+      // The cause and the fix come first, then what WordPress itself said.
+      detail: `${WORDPRESS_UNAUTHORIZED_HINT} WordPressの応答：Invalid credentials`,
     });
   });
 

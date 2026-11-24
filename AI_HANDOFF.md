@@ -2,12 +2,17 @@
 
 ## 0. Current Loop Phase
 - Current owner: Claude Code
-- Next owner: User / Codex (remaining: the owner's checks after login, including whether 「投稿先」 lists コラム; the reply to Aizawa about 投稿先; cleanup of own test records with approval). The session handoff of 2026-11-24 (`docs/session-handoff-2026-11-24.md`) is completed.
+- Next owner: User / Codex. Remaining:
+  - Send Aizawa the evening reply. It is drafted outside this repository and has not been sent.
+  - After the site side lifts its server's overseas REST restriction and exposes コラム to the REST API, retest 「投稿先」 and a draft post to コラム (section 3e).
+  - Clean up own test records, with approval.
+  - The session handoff of 2026-11-24 (`docs/session-handoff-2026-11-24.md`) is completed.
 - Loop: 10
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
 - Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) released: `aio-store` v7 (14:29 JST) and the app `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (16:03 JST), verified on production (section 2).
 - 2026-11-24: Aizawa reported that the guide's 「投稿先」 (コラム) was missing in the tool. PR #58 adds the post-type choice, released 13:48 JST. PR #59 shows WordPress post failures under the post button (section 3d). PR #59 was squash-merged as `3d73e43` after the CodeRabbit re-review and released at 15:57 JST (`dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`, section 2).
-- Last updated: 2026-11-24 JST (Claude Code, a local Windows session that took over the cloud session's handoff)
+- 2026-11-24 evening: Aizawa retested at 16:41–16:42 JST. Every REST call to the site got 403 from the site's server. The cause is inferred to be on the site side, in its server's overseas restriction of the REST API (section 3e). The site's settings were not seen, so this is not verified.
+- Last updated: 2026-11-24 evening JST (Claude Code, local Windows session)
 
 ## 1. Current Goal
 Aizawa 11/16 re-verification: the four article structures were confirmed fine. Remaining items:
@@ -110,6 +115,55 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - `06e283b` (CodeRabbit on PR #59): the post result (failure or success) carries its draft id and is shown only while that article is open. Before, opening another article from the logs kept showing it; the old page-top banner was cleared on open, so this part was a regression of PR #59. A result added below the visible area is scrolled into view (`block: "nearest"`). The reply draft no longer says unfamiliar categories or tags can be deleted, because the tool reuses existing terms with the same name.
 - Record and customer reply draft: `docs/aizawa-nov24-wordpress-destination.md`.
 
+## 3e. Aizawa's retest after PR #59 (2026-11-24 evening)
+- Report, after the 15:57 release:
+  - ① Their admin has no 投稿 menu. The reply had asked them to check 投稿 drafts.
+  - ② 「投稿先」 shows 投稿 but not コラム.
+  - ③ Posting with 投稿 and 下書き fails.
+  - This session read their screenshot (16:43) through the Google Drive connector.
+- Screen:
+  - Under the post button: 「WordPressカテゴリーの検索に失敗しました。」
+  - In 投稿先: 「WordPressの投稿先一覧を取得できませんでした。」, with the fallback to 投稿.
+- Production request log (Vercel, read only, no DB query), 16:41–16:42 JST, all on `dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`:
+  - `POST /api/wordpress/connect`: 200 ×2
+  - `POST /api/wordpress/post-types`: 403 ×2
+  - `POST /api/wordpress/post`: 403 ×2
+- Reading of the log:
+  - These routes pass on the WordPress response status, so the site's server answered 403. Wrong credentials give 401 in WordPress.
+  - The post's 403 came from the category search. That search runs before the post is created, and the reservation was released.
+  - So these attempts created nothing in WordPress. This comes from the log and the code; the WordPress side was not read.
+- Read-only checks from this PC in Japan, without credentials:
+  - The site's REST API answered 200 for the root, the category search and the types list.
+  - `types?context=edit` returned 401, as expected without credentials.
+  - The app's functions run in `iad1` (US).
+- Cause (inferred; the site's server settings were not seen): the hosting's overseas-access restriction for the REST API, which is on by default.
+  - Since 2025 it also covers Japanese IPs of major overseas clouds. Moving the functions to `hnd1` would therefore not help.
+  - Its allow list needs a fixed source IP. The Vercel Hobby plan does not provide one.
+  - The morning failure probably had the same cause, but its logs had expired.
+- コラム is still not exposed to the REST API: it was missing from the public `/wp/v2/types` list at about 17:40 JST. Even after the restriction is lifted, it needs `show_in_rest` on the site.
+- 投稿 is not a usable destination for them, since their admin has no 投稿 menu. The request to Aizawa to check 投稿 drafts is withdrawn for that reason.
+  - The evening attempts created nothing (from the log and the code).
+  - The morning attempt is still not verified. It was probably blocked the same way, but a 投稿 draft cannot be excluded (section 3d: a 4xx after WordPress creates the post leaves it, and the app releases the reservation).
+  - So the new reply asks the site's developer, who is asked for the コラム change anyway, to check 投稿 drafts too, before コラム is posted again (CodeRabbit).
+- Site-side fix, asked in the new reply:
+  1. Turn only the REST API item of the overseas restriction OFF.
+  2. Have the site's developer expose コラム to the REST API, keeping the classic editor. At the same time, the developer checks 投稿 drafts for a leftover test article and reports it.
+  3. Then save the connection again and post a draft to コラム.
+- Replies:
+  - The evening reply is a draft and has not been sent. It was given to the owner outside this repository, because it names the hosting company and other site specifics.
+  - The earlier reply in `docs/aizawa-nov24-wordpress-destination.md` was sent: Aizawa answered its requests.
+- Vantage point: WebFetch from the Windows workstation goes out through the owner's line in Japan, so it cannot test overseas access. Use the production request log instead (section 14).
+- App change in the same PR (#61, not released yet). Its release needs the owner's approval (section 10).
+  - For a WordPress 401 or 403, the error detail now says what usually causes it and what to do.
+  - The detail then gives what the site said, with the markup removed (one linear pass) and cut to 300 characters. Other failures keep the site's message as it is (CodeRabbit).
+  - A 403 is split into two cases:
+    - WordPress itself refused, with a `rest_` error code. The hint points to the role of the connected user (編集者 or above).
+    - It was refused before WordPress, with no such code (for example an HTML page). The hint points to the server's overseas restriction of the REST API, a WAF or a security plugin.
+  - The texts are in `src/lib/wordpress-rejection-hints.ts`. Every WordPress request in `src/lib/server/wordpress.ts` uses them.
+  - In 投稿先, the next step follows the status:
+    - after a 403, press 「再読み込み」 once the cause is fixed;
+    - after a 401, nothing more is needed, because 保存 reloads the list.
+
 ## 4. Files Changed
 - `src/lib/server/generation-jobs.ts`, `src/lib/server/article-generation-job-runner.ts`, `src/lib/server/drafts.ts`, `src/types/aio.ts`
 - `src/app/api/generation-logs/route.ts`, `src/app/api/generation-jobs/[id]/route.ts`, `src/app/api/save-draft/route.ts`, `src/app/api/approve-draft/route.ts`
@@ -118,6 +172,10 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - `scripts/production-smoke.mjs`: adds read-only paged-log checks (paged API deployed, all pages without duplicates, load-more grows the list) and prints counts only; mutation blocking unchanged. Verified against a local production build with a git-ignored copy (host/browser lines only); not run on production.
 - Docs: `docs/aizawa-nov16-followup.md`, `docs/testing.md`, this file. AGENTS.md / CLAUDE.md unchanged.
 - PR #53: `src/lib/server/generation-jobs.ts`, `supabase/functions/aio-store/index.ts`, `scripts/production-older-draft-check.mjs`, `tests/integration/generation-logs-pagination.integration.test.ts`, `tests/integration/wordpress.integration.test.ts`, `tests/e2e/aio-workflow.spec.ts`.
+- PR #61:
+  - Code: `src/lib/wordpress-rejection-hints.ts` (new), `src/lib/server/wordpress.ts`, `src/components/aio/article-generator-app.tsx`.
+  - Tests: `tests/integration/wordpress-post-destination.integration.test.ts`, `tests/integration/wordpress.integration.test.ts`, `tests/e2e/aio-workflow.spec.ts`.
+  - Docs: this file, `docs/aizawa-nov24-wordpress-destination.md`.
 
 ## 5. Current Status
 - Local quality gate: see section 9 (all steps run in this session on 2026-11-16).
@@ -136,6 +194,12 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Dev-only dependencies: `npm audit` reports 7 moderate advisories (typescript-eslint chain, minimatch); production dependencies 0.
 - The other Vercel account used first has no two-factor authentication (CLI warning). Its three tokens created for this release are unused now and can be revoked; the `kotakase2022-jpg` token saved on environment `aio` should be revoked when no longer needed.
 - WordPress post requests have no client timeout (existing reservation prevents duplicates).
+- WordPress errors:
+  - Before PR #61, a 403 from the site appeared only as 「WordPressカテゴリーの検索に失敗しました。」 (section 3e).
+  - PR #61 adds hints for 401 and 403. It is not released yet.
+  - Other statuses still show only the failed step and what the site said.
+  - 保存 does not check the credentials, so a wrong Application Password shows up only when 投稿先 loads or when posting.
+- The WordPress connection lives only in page state. After a reload the user enters the Application Password and presses 保存 again. 投稿先 loads only after 保存 or 「再読み込み」.
 - Compare-and-set protects against delays after the server reads the revision, not before.
 - Unverified in this session: Codex history, the Windows working tree, production version and data counts, the customer Google Doc.
 - Earlier items still open: shared demo auth (no per-user isolation), human source review, 11/13 pending own records cleanup (below).
@@ -174,6 +238,14 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
     - 0 rows in `wordpress_posts` do not show that WordPress has no post: WordPress creates the post before it sets terms, so a 4xx at that stage leaves the post. The record, this file, the session handoff and the reply draft now say that the WordPress side is not verified, and the reply asks to check 投稿 drafts before posting again.
     - The release helper in the session handoff: `promote` exits non-zero on an HTTP error, and the rollback step checks `alias` afterwards.
   - Merged after CI PASS on `9398baa`. CodeRabbit did not review `9398baa` itself (rate limit: 1 review per hour); that commit only applies its suggestions.
+- PR #61 (401/403 hints and the evening retest record):
+  - Review of `8c22287` (docs only): 2 Minor findings, both fixed in `a6fdd58`.
+    - Say the cause is inferred, not that the app has no defect.
+    - Keep a check of 投稿 drafts before posting to コラム again, because the morning attempt is not verified. Aizawa cannot see 投稿, so the site's developer is asked to check.
+  - `59092ef` and `a6fdd58` were first rate limited. A review was requested again at 09:56 UTC and finished at 10:02 UTC with 2 findings on `readWordpressError`, both fixed in the next commit:
+    - Minor: markup was removed from every error detail, which could cut text such as 「<0 または >100」 out of a 400 message. Markup is now removed only after a 401/403 hint, and other failures keep the site's message as it is.
+    - Major: `/<[^>]*>/g` is quadratic on a long body without `>` (64 KB took seconds). It is replaced by a single linear pass, and the site's message after a hint is cut to 300 characters.
+    - Each finding has a test that fails on the previous code.
 - Codex GitHub review: not performed on #50, #51, #53, #58 or #59 (usage limit); no credits added.
 
 ## 8. Optional Bugbot Findings
@@ -188,13 +260,32 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - 11/24 (PR #58), this session: typecheck / lint / integrity (65 files) PASS; 59 files / 646 tests PASS; contract 15 PASS; E2E 85/85 PASS (the first full run had the known favicon-abort flake); build PASS; CI PASS.
 - 11/24 (PR #59 at `06e283b`), this session: typecheck / lint / integrity (65 files) PASS; 59 files / 647 tests PASS; coverage S/B/F/L 88.41/80.48/93.03/89.08%; contract 15 PASS; E2E 89/89 PASS (build run by the E2E web server); CI PASS. The 3 new E2E tests and the new integration test fail on the previous code.
 - 11/24 (PR #59 at `9398baa`, docs only on top of `06e283b`), local Windows session: lint / typecheck / integrity (65 files) PASS; 59 files / 647 tests PASS; contract 15 PASS; CI (typecheck, lint, tests, E2E, build) PASS; the Vercel production build PASS. E2E and coverage were not run on the workstation.
+- 11/24 evening (PR #61, 401/403 hints), local Windows session. These ran with the project config on the workstation (bundled Chromium, no local override):
+  - After the CodeRabbit fixes, `npm run quality` PASS in one run (217 s):
+    - typecheck, lint and integrity (65 files);
+    - 59 files and 654 tests; contract 15;
+    - coverage S/B/F/L 88.56/80.62/93.30/89.17%;
+    - E2E 90/90;
+    - build.
+  - These fail on the previous code:
+    - the 7 new integration tests (5, plus 2 for the CodeRabbit findings);
+    - the updated 401 integration test;
+    - the new E2E test.
+  - Two contract tests were updated to the new detail. The alt-text 403 mock now carries the `code` and `data` that WordPress sends.
 - Details and the list of new E2E flows: `docs/aizawa-nov16-followup.md` §検証 and §「11/17 厳密な自己検証」; for 11/24 `docs/aizawa-nov24-wordpress-destination.md` §検証.
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
 ## 10. Next Recommended Action
-1. PR #58 and PR #59 are released (section 2; current production `dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`, rollback `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`). The owner (or Aizawa) signs in, connects WordPress and checks that 「投稿先」 lists コラム.
-2. If コラム is not listed: check the 投稿先 error message, then whether the connected WordPress user can edit コラム, then ask the site's administrator to expose it to the REST API (`show_in_rest`).
-3. Send Aizawa the reply in `docs/aizawa-nov24-wordpress-destination.md` (ready to send, not sent). It asks them to check 投稿 drafts for the test article before posting again (the WordPress side was not read), and for the failure message they saw, if any.
+1. Send Aizawa the evening reply. It was given to the owner outside this repository and has not been sent. It withdraws the 投稿 check and asks the site side for two changes (section 3e). PR #58 and PR #59 stay released: current production `dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`, rollback `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`.
+2. After the site side reports the changes, and the developer's check of 投稿 drafts (no leftover test article, or what was found), Aizawa (or the owner):
+   - saves the connection again;
+   - checks that 「投稿先」 lists コラム;
+   - posts a 下書き.
+
+   Read the production request log within an hour of that test (section 14). A 401 means the user or Application Password is wrong. If 403 continues, check other blockers such as a WAF or a security plugin.
+3. PR #61 also carries the app change for the 401/403 hints (section 3e). Its merge and release need the owner's approval.
+   - After the release, run the no-sign-in checks as for PR #59 (section 2).
+   - Checking the credentials on 保存 is not done. It is a possible separate task.
 4. Access code: done by the owner on 11/17 (production value set, session secret rotated). Remove the code fallback in `src/app/api/demo-auth/route.ts` as a separate task (open PR #55 replaces the shared code with per-user login; review it separately).
 5. Cleanup, with approval: the three own test articles in section 12. Revoke Vercel tokens that are no longer needed and the Supabase token if unneeded.
 
@@ -224,5 +315,10 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - Session handoff of 2026-11-24 (state, next steps, the REST release helper, the no-sign-in check, the local Playwright config): `docs/session-handoff-2026-11-24.md`. A new cloud container does not have `.verification-files/`; recreate the Playwright override from that file.
 - GitHub GraphQL is not available from cloud sessions: list review threads with `GET /repos/{o}/{r}/pulls/{n}/ccr/review_threads`, resolve with `POST /repos/{o}/{r}/pulls/{n}/ccr/comments/{id}/resolve`. On the Windows workstation the `ccr/` routes return 404 and GraphQL works (`gh api graphql`, `resolveReviewThread`).
 - Release from the Windows workstation (used for PR #59): the signed-in Vercel CLI 54 serves the REST calls of the handoff's helper through `vercel api` (beta), so no token is handled. Upload with `vercel deploy --prod --skip-domain` from a clean worktree with `.vercel/project.json` copied in, and without `--yes`: on an unlinked folder, `--yes` can let the CLI create a new project and connect the Git repository to it.
+- Production request logs (Vercel Hobby) can be read back for only about one hour. Older ranges return `Response Error (400)`. Read them right after a customer's test:
+  - Command: `vercel logs --project aio-article-generator --scope sl2026 --environment production --no-branch --since <ISO> --json`.
+  - Print only the time, path and status. `--query` with a path matched nothing, so filter locally.
+  - The WordPress routes return the site's own status code.
+- WebFetch on the Windows workstation goes out through the owner's line in Japan (ipinfo: JP), so it is not an overseas vantage point.
 - Extra git worktrees get no husky hooks (`core.hooksPath` is the relative `.husky/_`, which `npm ci` did not create there). Run the hook commands by hand before committing and pushing.
 - `npm run test:integrity` misreads a test whose body (comments included) has an odd number of apostrophes and reports "does not appear to contain an assertion"; avoid `'` in comments inside tests.
