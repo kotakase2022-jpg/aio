@@ -2445,6 +2445,96 @@ test("approved drafts can be published to WordPress with Japanese publish status
   expect(errors()).toEqual([]);
 });
 
+test("the WordPress destination is chosen from the site's post types and remembered for the next visit", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page);
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft!.images = [];
+  await mockCommonApiRoutes(page, completedJob, { rememberWordpressPostType: false });
+  let postTypeRequests = 0;
+  await page.route("**/api/wordpress/post-types", async (route) => {
+    postTypeRequests += 1;
+    const body = route.request().postDataJSON() as { connectionId?: string };
+    expect(body.connectionId).toBe("wp-connection-1");
+    await route.fulfill({ json: { ok: true, postTypes: [standardWordpressPostType, columnWordpressPostType] } });
+  });
+  const postedTypes: unknown[] = [];
+  await page.route("**/api/wordpress/post", async (route) => {
+    const body = route.request().postDataJSON() as { draft: ArticleDraft; postType?: string };
+    postedTypes.push(body.postType);
+    const postUrl = "https://wordpress.example.com/?post_type=column&p=501";
+    await route.fulfill({ json: { ok: true, postUrl, draft: { ...body.draft, status: "posted", wordpressPostUrl: postUrl }, postType: { slug: "column", name: "コラム" }, warnings: [] } });
+  });
+  const approveAndConnect = async () => {
+    await page.getByTestId("reference-text-0").fill("Reference for the WordPress destination.");
+    await page.getByTestId("article-primary-button").click();
+    await page.getByTestId("approve-draft-button").click();
+    await expect(page.getByTestId("draft-status-badge")).toHaveText("承認済み");
+    await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+    await page.getByTestId("wordpress-username").fill("editor");
+    await page.getByTestId("wordpress-application-password").fill("test-only-password");
+    await page.getByTestId("wordpress-connect-button").click();
+  };
+
+  await login(page);
+  await approveAndConnect();
+  const destination = page.getByTestId("wordpress-post-type-select");
+  await expect(destination).toHaveAccessibleName("WordPress投稿先");
+  await expect(destination.locator("option")).toHaveText(["投稿先を選択してください", "投稿", "コラム"]);
+  // First post to this site: nothing is preselected, so nothing goes to the standard posts by mistake.
+  await expect(destination).toHaveValue("");
+  await expect(page.getByTestId("wordpress-post-button")).toBeDisabled();
+  await destination.selectOption("column");
+  await page.getByTestId("wordpress-post-button").click();
+  await expect(page.getByTestId("wordpress-post-message")).toContainText("WordPressへ下書き投稿しました。");
+  await expect(page.getByTestId("wordpress-post-message")).toContainText("投稿先：コラム");
+  expect(postedTypes).toEqual(["column"]);
+
+  // A later visit (signed in again) to the same site chooses コラム by itself: the choice is kept in
+  // this browser, not in the session.
+  await page.context().clearCookies();
+  await login(page);
+  await approveAndConnect();
+  await expect(destination).toHaveValue("column");
+  await expect(page.getByTestId("wordpress-post-button")).toBeEnabled();
+  expect(postTypeRequests).toBe(2);
+  expect(errors()).toEqual([]);
+});
+
+test("when the site's post types cannot be read, only the standard post is offered and only as an explicit choice", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, { allowedFailedResponses: [/\/api\/wordpress\/post-types$/] });
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft!.images = [];
+  await mockCommonApiRoutes(page, completedJob, { rememberWordpressPostType: false });
+  let failTypes = true;
+  await page.route("**/api/wordpress/post-types", async (route) => {
+    if (failTypes) {
+      await route.fulfill({ status: 403, json: { ok: false, error: "WordPressの投稿先一覧を取得できませんでした。", detail: "Sorry, you are not allowed to do that." } });
+      return;
+    }
+    await route.fulfill({ json: { ok: true, postTypes: [standardWordpressPostType, columnWordpressPostType] } });
+  });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for an unreadable destination list.");
+  await page.getByTestId("article-primary-button").click();
+  await page.getByTestId("approve-draft-button").click();
+  await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+  await page.getByTestId("wordpress-username").fill("editor");
+  await page.getByTestId("wordpress-application-password").fill("test-only-password");
+  await page.getByTestId("wordpress-connect-button").click();
+
+  const destination = page.getByTestId("wordpress-post-type-select");
+  await expect(page.getByTestId("wordpress-post-type-error")).toContainText("WordPressの投稿先一覧を取得できませんでした。");
+  await expect(destination.locator("option")).toHaveText(["投稿先を選択してください", "投稿"]);
+  await expect(destination).toHaveValue("");
+  await expect(page.getByTestId("wordpress-post-button")).toBeDisabled();
+
+  failTypes = false;
+  await page.getByTestId("wordpress-post-type-reload").click();
+  await expect(destination.locator("option")).toHaveText(["投稿先を選択してください", "投稿", "コラム"]);
+  await expect(page.getByTestId("wordpress-post-type-error")).toHaveCount(0);
+  expect(errors()).toEqual([]);
+});
+
 test("WordPress post failure keeps the approved draft recoverable", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/wordpress\/post$/],
@@ -3813,6 +3903,9 @@ test("an unposted article older than the first 20 logs can be reopened, edited, 
     await page.route("**/api/wordpress/connect", async (route) => {
       await route.fulfill({ json: { ok: true, connection: { id: "wp-connection-old-article", siteUrl: "https://wordpress.example.com", username: "editor", createdAt: "2026-11-16T00:00:00.000Z", updatedAt: "2026-11-16T00:00:00.000Z" } } });
     });
+    await page.route("**/api/wordpress/post-types", async (route) => {
+      await route.fulfill({ json: { ok: true, postTypes: [standardWordpressPostType, columnWordpressPostType] } });
+    });
     await page.route("**/api/wordpress/post", async (route) => {
       wordpressRequest = route.request().postDataJSON() as { draft?: ArticleDraft; status?: string };
       await route.fulfill({ json: { ok: true, postUrl: "https://wordpress.example.com/?p=4100", draft: { ...wordpressRequest.draft, status: "posted", wordpressPostUrl: "https://wordpress.example.com/?p=4100" }, warnings: [] } });
@@ -3868,6 +3961,7 @@ test("an unposted article older than the first 20 logs can be reopened, edited, 
     await page.getByTestId("wordpress-username").fill("editor");
     await page.getByTestId("wordpress-application-password").fill("test-only-password");
     await page.getByTestId("wordpress-connect-button").click();
+    await page.getByTestId("wordpress-post-type-select").selectOption("post");
     const oldestRow = rows.filter({ has: page.getByTestId("generation-log-open-e2e-log-00") });
     await expect(oldestRow).toContainText("未投稿");
     // The posting API is mocked, so record the post on the job as the real route does; only the
@@ -4722,8 +4816,15 @@ async function mockCommonApiRoutes(
     wordpressConnectShouldReturnRawValidation?: boolean;
     saveDraftShouldFail?: boolean;
     approveDraftShouldFail?: boolean;
+    // Existing flows act as a returning editor who already chose 「投稿」 for this site.
+    rememberWordpressPostType?: boolean;
   } = {},
 ) {
+  if (options.rememberWordpressPostType !== false) {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("aio-wordpress-post-type:https://wordpress.example.com", "post");
+    });
+  }
   let latestCompletedJob = completedJob;
   const calls = {
     saveDraft: 0,
@@ -5069,6 +5170,10 @@ async function mockCommonApiRoutes(
     });
   });
 
+  await page.route("**/api/wordpress/post-types", async (route) => {
+    await route.fulfill({ json: { ok: true, postTypes: [standardWordpressPostType] } });
+  });
+
   await page.route("**/api/wordpress/post", async (route) => {
     calls.wordpressPost += 1;
     const body = route.request().postDataJSON() as {
@@ -5102,6 +5207,28 @@ async function mockCommonApiRoutes(
 
   return calls;
 }
+
+const standardWordpressPostType = {
+  slug: "post",
+  name: "投稿",
+  restBase: "posts",
+  restNamespace: "wp/v2",
+  categories: true,
+  tags: true,
+  featuredImage: true,
+  excerpt: true,
+};
+
+const columnWordpressPostType = {
+  slug: "column",
+  name: "コラム",
+  restBase: "column",
+  restNamespace: "wp/v2",
+  categories: false,
+  tags: false,
+  featuredImage: false,
+  excerpt: false,
+};
 
 function buildCompletedJobForForm(
   completedJob: ReturnType<typeof createCompletedGenerationJob>,

@@ -8,8 +8,9 @@ import {
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ArticleDraft, WordpressConnection } from "@/types/aio";
+import type { ArticleDraft, WordpressConnection, WordpressPostType } from "@/types/aio";
 import { buildDraftArticleHtml } from "@/lib/draft-html";
+import { STANDARD_WORDPRESS_POST_TYPE, WORDPRESS_POST_TYPE_SLUG_PATTERN } from "@/lib/wordpress-post-types";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { ApiError } from "@/lib/server/http";
 import { saveDraft } from "@/lib/server/drafts";
@@ -29,6 +30,24 @@ import { finishWordpressPost, releaseWordpressPost, reserveWordpressPost } from 
 type StoredConnection = WordpressConnection & {
   encryptedApplicationPassword: string;
 };
+
+// Not article destinations: fixed pages and WordPress's own internal post types.
+const EXCLUDED_WORDPRESS_POST_TYPES = new Set([
+  "page",
+  "attachment",
+  "nav_menu_item",
+  "wp_block",
+  "wp_template",
+  "wp_template_part",
+  "wp_navigation",
+  "wp_global_styles",
+  "wp_font_family",
+  "wp_font_face",
+]);
+// REST route parts as WordPress registers them (e.g. "wp/v2" + "posts"); each part starts with a
+// letter or digit, so no ".." can appear.
+const WORDPRESS_REST_BASE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+const WORDPRESS_REST_NAMESPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*)*$/;
 
 const MAX_WORDPRESS_MEDIA_BYTES = 10 * 1024 * 1024;
 const MAX_WORDPRESS_API_RESPONSE_BYTES = 1024 * 1024;
@@ -90,18 +109,33 @@ export async function saveWordpressConnection(input: {
   );
 }
 
+// The post types the connected user can create, for the 投稿先 choice. Read from the site each time,
+// so a post type added or exposed to the REST API later appears without reconnecting.
+export async function listWordpressPostTypes({
+  connectionId,
+  connection: fallbackConnection,
+}: {
+  connectionId: string;
+  connection?: WordpressConnection;
+}) {
+  const { connection, authHeader } = await resolveWordpressAuth(connectionId, fallbackConnection);
+  return fetchWordpressPostTypes(connection.siteUrl, authHeader);
+}
+
 export async function publishDraftToWordpress({
   draft,
   connectionId,
   connection: fallbackConnection,
   status,
   origin,
+  postType: requestedPostType,
 }: {
   draft: ArticleDraft;
   connectionId: string;
   connection?: WordpressConnection;
   status: "draft" | "publish";
   origin: string;
+  postType?: string;
 }) {
   if (draft.status !== "approved") {
     throw new ApiError(
@@ -111,33 +145,27 @@ export async function publishDraftToWordpress({
     );
   }
 
-  const connection =
-    (await loadStoredConnection(connectionId)) ||
-    connectionFromToken(fallbackConnection);
-  if (!connection) {
-    throw new ApiError(
-      "WordPress接続情報が見つかりません。",
-      404,
-      "WordPress接続情報を保存し直してから、もう一度投稿してください。",
-    );
-  }
-
-  const password = decryptSecret(connection.encryptedApplicationPassword);
-  const authHeader = `Basic ${Buffer.from(`${connection.username}:${password}`).toString("base64")}`;
+  const { connection, authHeader } = await resolveWordpressAuth(connectionId, fallbackConnection);
+  // Settle the destination before reserving: an unknown or unreadable one leaves nothing behind.
+  const destination = await resolveWordpressPostType(connection.siteUrl, authHeader, requestedPostType);
   await reserveWordpressPost(draft.id, connection.id, status);
   let postAttempted = false;
   try {
 
   const [categoryIds, tagIds] = await Promise.all([
-    ensureTerms(connection.siteUrl, authHeader, "categories", draft.categories),
-    ensureTerms(connection.siteUrl, authHeader, "tags", draft.tags),
+    destination.categories
+      ? ensureTerms(connection.siteUrl, authHeader, "categories", draft.categories)
+      : Promise.resolve([]),
+    destination.tags
+      ? ensureTerms(connection.siteUrl, authHeader, "tags", draft.tags)
+      : Promise.resolve([]),
   ]);
 
   let featuredMedia: number | undefined;
   const featured = draft.images.find(
     (image) => image.slot === "featured" && image.url.trim(),
   );
-  if (featured) {
+  if (featured && destination.featuredImage) {
     featuredMedia = await uploadMedia(
       connection.siteUrl,
       authHeader,
@@ -146,10 +174,17 @@ export async function publishDraftToWordpress({
       featured.altText,
     );
   }
+  // Fields this post type cannot hold are not sent (and no terms or media are created for them).
+  const skipped = [
+    !destination.categories && draft.categories.some((name) => name.trim()) ? "カテゴリー" : "",
+    !destination.tags && draft.tags.some((name) => name.trim()) ? "タグ" : "",
+    !destination.featuredImage && featured ? "アイキャッチ画像" : "",
+    !destination.excerpt && draft.editedMetaDescription?.trim() ? "抜粋" : "",
+  ].filter(Boolean);
 
   postAttempted = true;
   const response = await wordpressApiFetch(
-    `${connection.siteUrl}/wp-json/wp/v2/posts`,
+    `${connection.siteUrl}/wp-json/${destination.restNamespace}/${destination.restBase}`,
     {
       method: "POST",
       headers: {
@@ -159,13 +194,13 @@ export async function publishDraftToWordpress({
       body: JSON.stringify({
         title: draft.editedTitle,
         slug: draft.editedSlug,
-        excerpt: draft.editedMetaDescription,
+        ...(destination.excerpt ? { excerpt: draft.editedMetaDescription } : {}),
         content: buildDraftArticleHtml(draft, {
           imageUrlResolver: (url) => resolveAssetUrl(url, origin),
         }),
         status,
-        categories: categoryIds,
-        tags: tagIds,
+        ...(destination.categories ? { categories: categoryIds } : {}),
+        ...(destination.tags ? { tags: tagIds } : {}),
         featured_media: featuredMedia,
       }),
     },
@@ -199,7 +234,9 @@ export async function publishDraftToWordpress({
     wordpressPostUrl: json.link,
     updatedAt: new Date().toISOString(),
   };
-  const warnings: string[] = [];
+  const warnings: string[] = skipped.length
+    ? [`投稿先「${destination.name}」は${skipped.join("・")}に対応していないため、これらは設定せずに投稿しました。必要な場合はWordPress管理画面で設定してください。`]
+    : [];
   const warn = (label: string, error: unknown) => {
     warnings.push(`${label}。WordPress投稿は完了しています。再投稿せず投稿URLを確認してください: ${json.link} (${error instanceof Error ? error.message : "Unknown error"})`);
   };
@@ -211,7 +248,12 @@ export async function publishDraftToWordpress({
     postUrl: json.link ?? "",
   }).catch((error: unknown) => warn("生成ログの同期に失敗しました", error));
 
-  return { postUrl: json.link, draft: updatedDraft, warnings };
+  return {
+    postUrl: json.link,
+    draft: updatedDraft,
+    warnings,
+    postType: { slug: destination.slug, name: destination.name },
+  };
   } catch (error) {
     if (!postAttempted) {
       await releaseWordpressPost(draft.id);
@@ -220,6 +262,112 @@ export async function publishDraftToWordpress({
     throw new ApiError("WordPress投稿結果が不明です。重複投稿を防ぐため再送信を停止しました。", 502,
       `WordPress管理画面で確認し、管理者が投稿予約を照合してください。${error instanceof Error ? error.message : ""}`);
   }
+}
+
+async function resolveWordpressAuth(connectionId: string, fallbackConnection?: WordpressConnection) {
+  const connection =
+    (await loadStoredConnection(connectionId)) ||
+    connectionFromToken(fallbackConnection);
+  if (!connection) {
+    throw new ApiError(
+      "WordPress接続情報が見つかりません。",
+      404,
+      "WordPress接続情報を保存し直してから、もう一度投稿してください。",
+    );
+  }
+
+  const password = decryptSecret(connection.encryptedApplicationPassword);
+  const authHeader = `Basic ${Buffer.from(`${connection.username}:${password}`).toString("base64")}`;
+  return { connection, authHeader };
+}
+
+async function resolveWordpressPostType(siteUrl: string, authHeader: string, requested?: string) {
+  // Clients from before 投稿先 existed send no post type: post to 投稿 exactly as before.
+  if (!requested || requested === STANDARD_WORDPRESS_POST_TYPE.slug) {
+    return STANDARD_WORDPRESS_POST_TYPE;
+  }
+  // Use the site's own REST route for the type, never one sent by the browser.
+  const match = (await fetchWordpressPostTypes(siteUrl, authHeader)).find(
+    (postType) => postType.slug === requested,
+  );
+  if (!match) {
+    throw new ApiError(
+      `選択した投稿先（${requested}）がWordPressで見つかりません。`,
+      400,
+      "「投稿先」の一覧を読み込み直し、投稿先を選び直してから投稿してください。",
+    );
+  }
+  return match;
+}
+
+async function fetchWordpressPostTypes(siteUrl: string, authHeader: string) {
+  // context=edit lists only the types this user can create, with their supported fields.
+  const response = await wordpressApiFetch(`${siteUrl}/wp-json/wp/v2/types?context=edit`, {
+    headers: { Authorization: authHeader },
+  });
+  const json = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new ApiError(
+      "WordPressの投稿先一覧を取得できませんでした。",
+      response.status,
+      readWordpressError(json) ?? response.statusText,
+    );
+  }
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
+    throw new ApiError(
+      "WordPressの投稿先一覧の応答形式が不正です。",
+      502,
+      "WordPress REST APIが投稿タイプの一覧を返しませんでした。",
+    );
+  }
+
+  const postTypes = Object.values(json as Record<string, unknown>).flatMap(readWordpressPostType);
+  return [
+    ...postTypes.filter((postType) => postType.slug === STANDARD_WORDPRESS_POST_TYPE.slug),
+    ...postTypes.filter((postType) => postType.slug !== STANDARD_WORDPRESS_POST_TYPE.slug),
+  ];
+}
+
+function readWordpressPostType(value: unknown): WordpressPostType[] {
+  if (!value || typeof value !== "object") return [];
+  const item = value as Record<string, unknown>;
+  const slug = typeof item.slug === "string" ? item.slug : "";
+  const restBase = typeof item.rest_base === "string" ? item.rest_base : "";
+  // rest_namespace exists from WordPress 5.9; older sites serve every type under wp/v2.
+  const restNamespace =
+    typeof item.rest_namespace === "string" && item.rest_namespace ? item.rest_namespace : "wp/v2";
+  const visibility =
+    item.visibility && typeof item.visibility === "object" ? (item.visibility as Record<string, unknown>) : {};
+  if (
+    !WORDPRESS_POST_TYPE_SLUG_PATTERN.test(slug) ||
+    EXCLUDED_WORDPRESS_POST_TYPES.has(slug) ||
+    !WORDPRESS_REST_BASE_PATTERN.test(restBase) ||
+    !WORDPRESS_REST_NAMESPACE_PATTERN.test(restNamespace) ||
+    visibility.show_ui === false
+  ) {
+    return [];
+  }
+
+  // Without these lists (unexpected for context=edit) send everything, as for 投稿; WordPress
+  // ignores fields a post type does not register.
+  const supports =
+    item.supports && typeof item.supports === "object" ? (item.supports as Record<string, unknown>) : null;
+  const taxonomies = Array.isArray(item.taxonomies)
+    ? item.taxonomies.filter((taxonomy): taxonomy is string => typeof taxonomy === "string")
+    : null;
+  const name = typeof item.name === "string" && item.name.trim() ? item.name.trim() : slug;
+  return [
+    {
+      slug,
+      name,
+      restBase,
+      restNamespace,
+      categories: taxonomies ? taxonomies.includes("category") : true,
+      tags: taxonomies ? taxonomies.includes("post_tag") : true,
+      featuredImage: supports ? supports.thumbnail === true : true,
+      excerpt: supports ? supports.excerpt === true : true,
+    },
+  ];
 }
 
 function normalizeSiteUrl(value: string) {
