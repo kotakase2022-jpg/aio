@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   AlertCircle,
   Check,
@@ -269,6 +270,11 @@ export function ArticleGeneratorApp() {
   const [wpPostMessage, setWpPostMessage] = useState("");
   // Shown under the post button: the page-top message is out of sight while posting.
   const [wpPostError, setWpPostError] = useState("");
+  // The article the post message or error is about: another article opened from the logs must not
+  // show it as its own result.
+  const [wpPostDraftId, setWpPostDraftId] = useState("");
+  const wpPostErrorRef = useRef<HTMLDivElement>(null);
+  const wpPostMessageRef = useRef<HTMLDivElement>(null);
   const [wpForm, setWpForm] = useState({
     siteUrl: "",
     username: "",
@@ -1170,6 +1176,7 @@ export function ArticleGeneratorApp() {
     setActiveError("");
     setWpPostMessage("");
     setWpPostError("");
+    setWpPostDraftId(draft.id);
     setDraftActionError("");
     try {
       const result = await apiPost<{
@@ -1198,17 +1205,23 @@ export function ArticleGeneratorApp() {
         result.postType?.name ??
         wpPostTypes.find((postType) => postType.slug === wpForm.postType)?.name ??
         wpForm.postType;
-      setWpPostMessage(
-        [wpForm.status === "publish"
-          ? "WordPressへ公開投稿しました。"
-          : "WordPressへ下書き投稿しました。", `投稿先：${destinationName}`, ...(result.warnings ?? [])].join(" "),
-      );
+      flushSync(() => {
+        setWpPostMessage(
+          [wpForm.status === "publish"
+            ? "WordPressへ公開投稿しました。"
+            : "WordPressへ下書き投稿しました。", `投稿先：${destinationName}`, ...(result.warnings ?? [])].join(" "),
+        );
+      });
+      bringWordpressPostResultIntoView(wpPostMessageRef.current);
     } catch (error) {
-      setWpPostError(
-        error instanceof ApiOutcomeUnknownError
-          ? `WordPress投稿の結果を確認できませんでした（${error.message}）。重複投稿を防ぐため、もう一度投稿する前にWordPress管理画面で投稿の有無を確認してください。`
-          : readError(error),
-      );
+      flushSync(() => {
+        setWpPostError(
+          error instanceof ApiOutcomeUnknownError
+            ? `WordPress投稿の結果を確認できませんでした（${error.message}）。重複投稿を防ぐため、もう一度投稿する前にWordPress管理画面で投稿の有無を確認してください。`
+            : readError(error),
+        );
+      });
+      bringWordpressPostResultIntoView(wpPostErrorRef.current);
     } finally {
       setPosting(false);
     }
@@ -2757,8 +2770,9 @@ export function ArticleGeneratorApp() {
                       </a>
                     ) : null}
                   </div>
-                  {wpPostError ? (
+                  {wpPostError && wpPostDraftId === draft.id ? (
                     <div
+                      ref={wpPostErrorRef}
                       data-testid="wordpress-post-error"
                       role="alert"
                       className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-800"
@@ -2791,8 +2805,9 @@ export function ArticleGeneratorApp() {
                       </Button>
                     </div>
                   ) : null}
-                  {wpPostMessage ? (
+                  {wpPostMessage && wpPostDraftId === draft.id ? (
                     <div
+                      ref={wpPostMessageRef}
                       data-testid="wordpress-post-message"
                       className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
                       aria-live="polite"
@@ -4317,6 +4332,12 @@ function rememberWordpressPostType(siteUrl: string, slug: string) {
   } catch {
     // Without storage the editor simply chooses again next time.
   }
+}
+
+// A post sent from the bottom of the screen would add its result out of sight. "nearest" scrolls
+// only as far as needed and leaves a result that is already visible where it is.
+function bringWordpressPostResultIntoView(element: HTMLElement | null) {
+  element?.scrollIntoView({ block: "nearest" });
 }
 
 // Two post types can share a label; the key tells them apart.
