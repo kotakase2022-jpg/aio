@@ -2535,6 +2535,38 @@ test("when the site's post types cannot be read, only the standard post is offer
   expect(errors()).toEqual([]);
 });
 
+test("a failed WordPress post is reported right under the post button, where the editor is looking", async ({ page }) => {
+  const errors = collectUnexpectedBrowserErrors(page, { allowedFailedResponses: [/\/api\/wordpress\/post$/] });
+  const completedJob = createCompletedGenerationJob();
+  completedJob.draft!.images = [];
+  await mockCommonApiRoutes(page, completedJob, { wordpressPostShouldFail: true });
+  await login(page);
+  await page.getByTestId("reference-text-0").fill("Reference for a WordPress post that fails.");
+  await page.getByTestId("article-primary-button").click();
+  await page.getByTestId("approve-draft-button").click();
+  await expect(page.getByTestId("draft-status-badge")).toHaveText("承認済み");
+  await page.getByTestId("wordpress-site-url").fill("https://wordpress.example.com");
+  await page.getByTestId("wordpress-username").fill("editor");
+  await page.getByTestId("wordpress-application-password").fill("test-only-password");
+  await page.getByTestId("wordpress-connect-button").click();
+  await page.getByTestId("wordpress-post-button").scrollIntoViewIfNeeded();
+  await page.getByTestId("wordpress-post-button").click();
+
+  // November 24 (Aizawa): the failure was shown only at the top of the page, out of sight of the
+  // button, so it was unclear whether the article had been sent.
+  const postError = page.getByTestId("wordpress-post-error");
+  await expect(postError).toContainText("WordPress投稿に失敗しました。");
+  await expect(postError).toBeInViewport();
+  await expect(postError).toHaveAttribute("role", "alert");
+  await expect(page.getByTestId("active-error")).toHaveCount(0);
+  await expect(page.getByTestId("wordpress-post-message")).toBeHidden();
+
+  // Changing the WordPress form clears the old failure.
+  await page.getByTestId("wordpress-status-select").selectOption("publish");
+  await expect(postError).toHaveCount(0);
+  expect(errors()).toEqual([]);
+});
+
 test("WordPress post failure keeps the approved draft recoverable", async ({ page }) => {
   const errors = collectUnexpectedBrowserErrors(page, {
     allowedFailedResponses: [/\/api\/wordpress\/post$/],
@@ -4263,7 +4295,7 @@ test("a WordPress post cut off by a gateway error page asks to check WordPress b
   await page.getByTestId("wordpress-application-password").fill("test-only-password");
   await page.getByTestId("wordpress-connect-button").click();
   await page.getByTestId("wordpress-post-button").click();
-  await expect(page.getByTestId("active-error")).toContainText(
+  await expect(page.getByTestId("wordpress-post-error")).toContainText(
     "WordPress投稿の結果を確認できませんでした（サーバーの応答が途中で途切れました）。重複投稿を防ぐため、もう一度投稿する前にWordPress管理画面で投稿の有無を確認してください。",
   );
   await expect(page.getByTestId("wordpress-post-message")).toBeHidden();

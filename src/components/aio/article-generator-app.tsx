@@ -267,6 +267,8 @@ export function ArticleGeneratorApp() {
   const [wpConnectionError, setWpConnectionError] = useState("");
   const [wpConnectionMessage, setWpConnectionMessage] = useState("");
   const [wpPostMessage, setWpPostMessage] = useState("");
+  // Shown under the post button: the page-top message is out of sight while posting.
+  const [wpPostError, setWpPostError] = useState("");
   const [wpForm, setWpForm] = useState({
     siteUrl: "",
     username: "",
@@ -1081,6 +1083,7 @@ export function ArticleGeneratorApp() {
     setWpConnectionError("");
     setWpConnectionMessage("");
     setWpPostMessage("");
+    setWpPostError("");
     setWpForm((current) => ({
       ...current,
       ...patch,
@@ -1092,6 +1095,7 @@ export function ArticleGeneratorApp() {
     setWpConnectionError("");
     setWpConnectionMessage("");
     setWpPostMessage("");
+    setWpPostError("");
     const validationMessage = validateWordpressForm(wpForm);
     if (validationMessage) {
       setWpConnectionError(validationMessage);
@@ -1155,6 +1159,7 @@ export function ArticleGeneratorApp() {
     if (validationMessage) {
       setActiveError("");
       setWpPostMessage("");
+      setWpPostError("");
       setDraftActionMessage("");
       setDraftActionError(validationMessage);
       setTab("edit");
@@ -1164,6 +1169,7 @@ export function ArticleGeneratorApp() {
     generationLogOpenRequestRef.current += 1;
     setActiveError("");
     setWpPostMessage("");
+    setWpPostError("");
     setDraftActionError("");
     try {
       const result = await apiPost<{
@@ -1198,7 +1204,7 @@ export function ArticleGeneratorApp() {
           : "WordPressへ下書き投稿しました。", `投稿先：${destinationName}`, ...(result.warnings ?? [])].join(" "),
       );
     } catch (error) {
-      setActiveError(
+      setWpPostError(
         error instanceof ApiOutcomeUnknownError
           ? `WordPress投稿の結果を確認できませんでした（${error.message}）。重複投稿を防ぐため、もう一度投稿する前にWordPress管理画面で投稿の有無を確認してください。`
           : readError(error),
@@ -2751,6 +2757,16 @@ export function ArticleGeneratorApp() {
                       </a>
                     ) : null}
                   </div>
+                  {wpPostError ? (
+                    <div
+                      data-testid="wordpress-post-error"
+                      role="alert"
+                      className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-800"
+                    >
+                      <AlertCircle className="mt-1 size-4 shrink-0" />
+                      <span>{wpPostError}</span>
+                    </div>
+                  ) : null}
                   {connection ? (
                     <p data-testid="wordpress-post-type-note" className="text-xs leading-5 text-slate-500">
                       投稿先は、WordPress管理画面のメニュー名（例：投稿、コラム）で表示されます。一覧にない投稿先は、WordPress側でREST APIに公開されていないか、接続したユーザーにその投稿先の編集権限がない可能性があります。一度選んだ投稿先は、このブラウザでは次回から自動で選ばれます。
