@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   AlertCircle,
   Check,
@@ -267,6 +268,13 @@ export function ArticleGeneratorApp() {
   const [wpConnectionError, setWpConnectionError] = useState("");
   const [wpConnectionMessage, setWpConnectionMessage] = useState("");
   const [wpPostMessage, setWpPostMessage] = useState("");
+  // Shown under the post button: the page-top message is out of sight while posting.
+  const [wpPostError, setWpPostError] = useState("");
+  // The article the post message or error is about: another article opened from the logs must not
+  // show it as its own result.
+  const [wpPostDraftId, setWpPostDraftId] = useState("");
+  const wpPostErrorRef = useRef<HTMLDivElement>(null);
+  const wpPostMessageRef = useRef<HTMLDivElement>(null);
   const [wpForm, setWpForm] = useState({
     siteUrl: "",
     username: "",
@@ -1081,6 +1089,7 @@ export function ArticleGeneratorApp() {
     setWpConnectionError("");
     setWpConnectionMessage("");
     setWpPostMessage("");
+    setWpPostError("");
     setWpForm((current) => ({
       ...current,
       ...patch,
@@ -1092,6 +1101,7 @@ export function ArticleGeneratorApp() {
     setWpConnectionError("");
     setWpConnectionMessage("");
     setWpPostMessage("");
+    setWpPostError("");
     const validationMessage = validateWordpressForm(wpForm);
     if (validationMessage) {
       setWpConnectionError(validationMessage);
@@ -1155,6 +1165,7 @@ export function ArticleGeneratorApp() {
     if (validationMessage) {
       setActiveError("");
       setWpPostMessage("");
+      setWpPostError("");
       setDraftActionMessage("");
       setDraftActionError(validationMessage);
       setTab("edit");
@@ -1164,6 +1175,8 @@ export function ArticleGeneratorApp() {
     generationLogOpenRequestRef.current += 1;
     setActiveError("");
     setWpPostMessage("");
+    setWpPostError("");
+    setWpPostDraftId(draft.id);
     setDraftActionError("");
     try {
       const result = await apiPost<{
@@ -1192,17 +1205,23 @@ export function ArticleGeneratorApp() {
         result.postType?.name ??
         wpPostTypes.find((postType) => postType.slug === wpForm.postType)?.name ??
         wpForm.postType;
-      setWpPostMessage(
-        [wpForm.status === "publish"
-          ? "WordPressへ公開投稿しました。"
-          : "WordPressへ下書き投稿しました。", `投稿先：${destinationName}`, ...(result.warnings ?? [])].join(" "),
-      );
+      flushSync(() => {
+        setWpPostMessage(
+          [wpForm.status === "publish"
+            ? "WordPressへ公開投稿しました。"
+            : "WordPressへ下書き投稿しました。", `投稿先：${destinationName}`, ...(result.warnings ?? [])].join(" "),
+        );
+      });
+      bringWordpressPostResultIntoView(wpPostMessageRef.current);
     } catch (error) {
-      setActiveError(
-        error instanceof ApiOutcomeUnknownError
-          ? `WordPress投稿の結果を確認できませんでした（${error.message}）。重複投稿を防ぐため、もう一度投稿する前にWordPress管理画面で投稿の有無を確認してください。`
-          : readError(error),
-      );
+      flushSync(() => {
+        setWpPostError(
+          error instanceof ApiOutcomeUnknownError
+            ? `WordPress投稿の結果を確認できませんでした（${error.message}）。重複投稿を防ぐため、もう一度投稿する前にWordPress管理画面で投稿の有無を確認してください。`
+            : readError(error),
+        );
+      });
+      bringWordpressPostResultIntoView(wpPostErrorRef.current);
     } finally {
       setPosting(false);
     }
@@ -2751,6 +2770,17 @@ export function ArticleGeneratorApp() {
                       </a>
                     ) : null}
                   </div>
+                  {wpPostError && wpPostDraftId === draft.id ? (
+                    <div
+                      ref={wpPostErrorRef}
+                      data-testid="wordpress-post-error"
+                      role="alert"
+                      className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-800"
+                    >
+                      <AlertCircle className="mt-1 size-4 shrink-0" />
+                      <span>{wpPostError}</span>
+                    </div>
+                  ) : null}
                   {connection ? (
                     <p data-testid="wordpress-post-type-note" className="text-xs leading-5 text-slate-500">
                       投稿先は、WordPress管理画面のメニュー名（例：投稿、コラム）で表示されます。一覧にない投稿先は、WordPress側でREST APIに公開されていないか、接続したユーザーにその投稿先の編集権限がない可能性があります。一度選んだ投稿先は、このブラウザでは次回から自動で選ばれます。
@@ -2775,8 +2805,9 @@ export function ArticleGeneratorApp() {
                       </Button>
                     </div>
                   ) : null}
-                  {wpPostMessage ? (
+                  {wpPostMessage && wpPostDraftId === draft.id ? (
                     <div
+                      ref={wpPostMessageRef}
                       data-testid="wordpress-post-message"
                       className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
                       aria-live="polite"
@@ -4301,6 +4332,12 @@ function rememberWordpressPostType(siteUrl: string, slug: string) {
   } catch {
     // Without storage the editor simply chooses again next time.
   }
+}
+
+// A post sent from the bottom of the screen would add its result out of sight. "nearest" scrolls
+// only as far as needed and leaves a result that is already visible where it is.
+function bringWordpressPostResultIntoView(element: HTMLElement | null) {
+  element?.scrollIntoView({ block: "nearest" });
 }
 
 // Two post types can share a label; the key tells them apart.
