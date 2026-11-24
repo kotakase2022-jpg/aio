@@ -11,7 +11,7 @@
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
 - Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) released: `aio-store` v7 (14:29 JST) and the app `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (16:03 JST), verified on production (section 2).
 - 2026-11-24: Aizawa reported that the guide's 「投稿先」 (コラム) was missing in the tool. PR #58 adds the post-type choice, released 13:48 JST. PR #59 shows WordPress post failures under the post button (section 3d). PR #59 was squash-merged as `3d73e43` after the CodeRabbit re-review and released at 15:57 JST (`dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`, section 2).
-- 2026-11-24 evening: Aizawa retested at 16:41–16:42 JST. Every REST call to the site got 403 from the site's server. The cause is not an app defect; the fix is on the site side (section 3e).
+- 2026-11-24 evening: Aizawa retested at 16:41–16:42 JST. Every REST call to the site got 403 from the site's server. The cause is inferred to be on the site side, in its server's overseas restriction of the REST API (section 3e). The site's settings were not seen, so this is not verified.
 - Last updated: 2026-11-24 evening JST (Claude Code, local Windows session)
 
 ## 1. Current Goal
@@ -141,10 +141,13 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - Its allow list needs a fixed source IP. The Vercel Hobby plan does not provide one.
   - The morning failure probably had the same cause, but its logs had expired.
 - コラム is still not exposed to the REST API: it was missing from the public `/wp/v2/types` list at about 17:40 JST. Even after the restriction is lifted, it needs `show_in_rest` on the site.
-- 投稿 is not a usable destination for them, since their admin has no 投稿 menu. The request to check 投稿 drafts is withdrawn.
+- 投稿 is not a usable destination for them, since their admin has no 投稿 menu. The request to Aizawa to check 投稿 drafts is withdrawn for that reason.
+  - The evening attempts created nothing (from the log and the code).
+  - The morning attempt is still not verified. It was probably blocked the same way, but a 投稿 draft cannot be excluded (section 3d: a 4xx after WordPress creates the post leaves it, and the app releases the reservation).
+  - So the new reply asks the site's developer, who is asked for the コラム change anyway, to check 投稿 drafts too, before コラム is posted again (CodeRabbit).
 - Site-side fix, asked in the new reply:
   1. Turn only the REST API item of the overseas restriction OFF.
-  2. Have the site's developer expose コラム to the REST API, keeping the classic editor.
+  2. Have the site's developer expose コラム to the REST API, keeping the classic editor. At the same time, the developer checks 投稿 drafts for a leftover test article and reports it.
   3. Then save the connection again and post a draft to コラム.
 - Replies:
   - The evening reply is a draft and has not been sent. It was given to the owner outside this repository, because it names the hosting company and other site specifics.
@@ -261,7 +264,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 
 ## 10. Next Recommended Action
 1. Send Aizawa the evening reply. It was given to the owner outside this repository and has not been sent. It withdraws the 投稿 check and asks the site side for two changes (section 3e). PR #58 and PR #59 stay released: current production `dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`, rollback `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`.
-2. After the site side reports the changes, Aizawa (or the owner):
+2. After the site side reports the changes, and the developer's check of 投稿 drafts (no leftover test article, or what was found), Aizawa (or the owner):
    - saves the connection again;
    - checks that 「投稿先」 lists コラム;
    - posts a 下書き.
