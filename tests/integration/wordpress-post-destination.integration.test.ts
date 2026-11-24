@@ -337,6 +337,31 @@ describe("WordPress post destinations", () => {
     expect(await readReservations()).toEqual({});
   });
 
+  test("a custom post type whose supported fields are not reported is neither listed nor posted to", async () => {
+    const connection = await connect();
+    // Without "supports" the tool cannot tell whether WordPress would store the body (CodeRabbit).
+    const { supports, ...withoutSupports } = wordpressTypes.column;
+    void supports;
+    const { supports: postSupports, ...postWithoutSupports } = wordpressTypes.post;
+    void postSupports;
+    const requests = stubWordpress((request) =>
+      request.url === `${site}/wp-json/wp/v2/types?context=edit`
+        ? Response.json({ post: postWithoutSupports, column: withoutSupports })
+        : undefined,
+    );
+    const { listWordpressPostTypes, publishDraftToWordpress } = await import("@/lib/server/wordpress");
+
+    const postTypes = await listWordpressPostTypes({ connectionId: connection.id });
+    await expect(
+      publishDraftToWordpress({ draft: approvedDraft(), connectionId: connection.id, status: "draft", origin: "http://localhost", postType: "column" }),
+    ).rejects.toMatchObject({ status: 400, message: "選択した投稿先（column）がWordPressで見つかりません。" });
+
+    // The standard 投稿 keeps working as before even without the list.
+    expect(postTypes.map((postType) => postType.slug)).toEqual(["post"]);
+    expect(requests.every((request) => request.method === "GET")).toBe(true);
+    expect(await readReservations()).toEqual({});
+  });
+
   test("the post-types route returns the destinations, and the post route rejects a malformed destination", async () => {
     const connection = await connect();
     stubWordpress((request) =>

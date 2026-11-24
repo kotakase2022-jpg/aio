@@ -349,13 +349,15 @@ function readWordpressPostType(value: unknown): WordpressPostType[] {
     return [];
   }
 
-  // Without these lists (unexpected for context=edit) send everything, as for 投稿; WordPress
-  // ignores fields a post type does not register.
   const supports =
     item.supports && typeof item.supports === "object" ? (item.supports as Record<string, unknown>) : null;
   // WordPress stores the title and body only for types that support them. Without both the article
-  // would arrive empty yet count as posted, so such a type is not a destination.
-  if (supports && (supports.title !== true || supports.editor !== true)) return [];
+  // would arrive empty yet count as posted, so such a type is not a destination. A custom type whose
+  // supports are not reported cannot be checked, so it is left out too; 投稿 always has both, and
+  // without the list it is posted as before (WordPress ignores fields a type does not register).
+  if (supports ? supports.title !== true || supports.editor !== true : slug !== STANDARD_WORDPRESS_POST_TYPE.slug) {
+    return [];
+  }
   const taxonomies = Array.isArray(item.taxonomies)
     ? item.taxonomies.filter((taxonomy): taxonomy is string => typeof taxonomy === "string")
     : null;
