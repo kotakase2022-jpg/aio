@@ -2,12 +2,12 @@
 
 ## 0. Current Loop Phase
 - Current owner: Claude Code
-- Next owner: the next Claude Code session (handoff of 2026-11-24 06:08 UTC: `docs/session-handoff-2026-11-24.md`), then User / Codex (remaining: CodeRabbit re-review and release of PR #59; the owner's checks after login; the reply to Aizawa about 投稿先; cleanup of own test records with approval)
+- Next owner: User / Codex (remaining: the owner's checks after login, including whether 「投稿先」 lists コラム; the reply to Aizawa about 投稿先; cleanup of own test records with approval). The session handoff of 2026-11-24 (`docs/session-handoff-2026-11-24.md`) is completed.
 - Loop: 10
 - Loop number inferred from: Loop 9 (Codex, 11/13) handed off to Claude Code; this is the first Claude record after it, for Aizawa's 11/16 re-verification items ② and ③.
 - Phase: PR #50 (11/16) and PR #51 (11/17) released. Strict self-verification on 11/17 (section 3c): production write checks PASS on the current production; PR #53 (log sync beyond 100 jobs) released: `aio-store` v7 (14:29 JST) and the app `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m` (16:03 JST), verified on production (section 2).
-- 2026-11-24: Aizawa reported that the guide's 「投稿先」 (コラム) was missing in the tool. PR #58 adds the post-type choice, released 13:48 JST. PR #59 shows WordPress post failures under the post button (section 3d). PR #59 is not merged: CI PASS on `06e283b`, CodeRabbit's 3 findings fixed, its re-review was rate limited (next slot about 06:37 UTC).
-- Last updated: 2026-11-24 (UTC session; Claude Code cloud container)
+- 2026-11-24: Aizawa reported that the guide's 「投稿先」 (コラム) was missing in the tool. PR #58 adds the post-type choice, released 13:48 JST. PR #59 shows WordPress post failures under the post button (section 3d). PR #59 was squash-merged as `3d73e43` after the CodeRabbit re-review and released at 15:57 JST (`dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`, section 2).
+- Last updated: 2026-11-24 JST (Claude Code, a local Windows session that took over the cloud session's handoff)
 
 ## 1. Current Goal
 Aizawa 11/16 re-verification: the four article structures were confirmed fine. Remaining items:
@@ -45,6 +45,17 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
     - `aio-store` stats 16:03–16:04: 4 + 25 requests, all 2xx, 0 client and 0 server errors, so `get_job_by_draft` served the sync.
   - More than 100 jobs has not yet happened on production (37); that state is covered by the integration and E2E tests.
   - Rollback = promote `dpl_4GpH2wKgF3rAmoYN8HSvt7h6LtVJ` (`efebb89`). `aio-store` v7 can stay (compatible with both).
+- PR kotakase2022-jpg/aio#58 (投稿先) squash-merged as `d41bd1f`, released 2026-11-24 13:48 JST as `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN` from the cloud session (rollback `dpl_7p9Gv5UwUaHaiywBZXtkZeqCDyh8`). Details: `docs/aizawa-nov24-wordpress-destination.md` §検証.
+- PR kotakase2022-jpg/aio#59 squash-merged as `3d73e43` at 15:54 JST (tree identical to the PR head `9398baa`, CI PASS). App release 2026-11-24 15:57 JST from a local Windows session: production `dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`.
+  - Method: the same flow as PR #58 (production build without domains, checks, then promote), authenticated by the workstation's signed-in Vercel CLI.
+    - REST calls go through `vercel api`; no token value was handled.
+    - Upload: `vercel deploy --prod --skip-domain` from a clean worktree at `3d73e43` with the project link copied in. It ran without `--yes` in non-interactive mode, so a missing link would fail instead of creating a project.
+  - 209 files. Against the previous production (208): 1 added (`docs/session-handoff-2026-11-24.md`), 6 changed, 0 removed. After staging, the deployment's sources matched the local list exactly.
+  - Build READY / STAGED: Compiled successfully, 20 static pages, all 17 API routes including `/api/wordpress/post-types`, no error lines. Before the promote, the canonical domain still pointed to `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`.
+  - Promote (`POST /v10/projects/{id}/promote/{deployment}`, 201) at 15:57:35 JST. Afterwards the canonical alias and the project's production target both point to the new deployment.
+  - Sign-in-free checks at 15:57 JST: the login page is 200 with the form; unauthenticated logs, post-types and post all get 401; the old default code gets 401.
+  - Not checked: the screens after login (the session has no access code).
+  - Rollback = promote `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN` (PR #58), then check that `alias` points to it.
 
 ## 3. What Was Done
 - ③ cursor pagination for generation logs: `GET /api/generation-logs?cursor=&limit=` returns `{ logs, nextCursor, complete }`; first-page URL unchanged. Stable order = creation time desc + id (saving/posting no longer moves a log between pages). Supabase direct: SQL keyset; gateway (production): pages inside the existing `list_jobs` window (100 jobs / 400 newest-updated rows) and reports `complete:false` when that window is full; local: in-memory keyset. UI: 「さらに古いログを表示（20件ずつ）」, count badge, end/incomplete notices, load-more error keeps the list, automatic refresh keeps the loaded range (≤100).
@@ -115,6 +126,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - `aio-store` v7 deployed and boot-checked; `list_job_page` is confirmed in use (section 3c).
 - The approved write checks PASSED on 11/17 before the release (section 3c). After the release of PR #53, the older-draft check passed again and the `get_job_by_draft` path was confirmed on production (section 2).
 - Production changes made from this session: `aio-store` v6 → v7; the app release `dpl_4vhEWVZSwNqnF3eeF3XKjPM4k55m`; one unchanged save of the team's own 11/13 article; one synthetic article (one paid generation) with its own edit save, later saved once more unchanged by the post-release check. No WordPress post. No customer article changed. No message to Aizawa (draft only).
+- 2026-11-24: PR #58 and PR #59 are released (section 2). The local session that released PR #59 changed production only by that app release: no WordPress post, no production DB query, no message to Aizawa (the reply is a draft).
 
 ## 6. Known Issues
 - Gateway window: resolved by `aio-store` v6 (`list_job_page`), confirmed in use on 11/17.
@@ -161,6 +173,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
   - Re-review of `8b93cfc..1290d80` (requested 06:37 UTC, finished 06:43 UTC): 2 inline and 1 outside-diff Minor findings, all in docs, fixed in the next commit. No finding on the code.
     - 0 rows in `wordpress_posts` do not show that WordPress has no post: WordPress creates the post before it sets terms, so a 4xx at that stage leaves the post. The record, this file, the session handoff and the reply draft now say that the WordPress side is not verified, and the reply asks to check 投稿 drafts before posting again.
     - The release helper in the session handoff: `promote` exits non-zero on an HTTP error, and the rollback step checks `alias` afterwards.
+  - Merged after CI PASS on `9398baa`. CodeRabbit did not review `9398baa` itself (rate limit: 1 review per hour); that commit only applies its suggestions.
 - Codex GitHub review: not performed on #50, #51, #53, #58 or #59 (usage limit); no credits added.
 
 ## 8. Optional Bugbot Findings
@@ -174,13 +187,14 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - 11/17 (PR #53), this session: typecheck / lint / integrity (64 files) PASS; 58 files / 636 tests PASS; contract 15 PASS; coverage S/B/F/L 88.35/80.23/93.05/88.97%; build PASS; E2E first full run 82 passed / 1 failed (the known favicon-abort flake), second full run 83/83 PASS. CI PASS on both PR heads.
 - 11/24 (PR #58), this session: typecheck / lint / integrity (65 files) PASS; 59 files / 646 tests PASS; contract 15 PASS; E2E 85/85 PASS (the first full run had the known favicon-abort flake); build PASS; CI PASS.
 - 11/24 (PR #59 at `06e283b`), this session: typecheck / lint / integrity (65 files) PASS; 59 files / 647 tests PASS; coverage S/B/F/L 88.41/80.48/93.03/89.08%; contract 15 PASS; E2E 89/89 PASS (build run by the E2E web server); CI PASS. The 3 new E2E tests and the new integration test fail on the previous code.
+- 11/24 (PR #59 at `9398baa`, docs only on top of `06e283b`), local Windows session: lint / typecheck / integrity (65 files) PASS; 59 files / 647 tests PASS; contract 15 PASS; CI (typecheck, lint, tests, E2E, build) PASS; the Vercel production build PASS. E2E and coverage were not run on the workstation.
 - Details and the list of new E2E flows: `docs/aizawa-nov16-followup.md` §検証 and §「11/17 厳密な自己検証」; for 11/24 `docs/aizawa-nov24-wordpress-destination.md` §検証.
 - E2E ran with the container's Chromium rev 1243 through the git-ignored `.verification-files/playwright.local.config.ts` (project config targets the Chrome channel locally / bundled Chromium in CI). CI result must be checked on the PR.
 
 ## 10. Next Recommended Action
-1. PR #58 is released (`dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`, rollback `dpl_7p9Gv5UwUaHaiywBZXtkZeqCDyh8`). PR #59 (approved as "wait for CodeRabbit, then release"): request the CodeRabbit re-review after the rate limit resets, squash merge, release through the Vercel REST API and record it. Steps, scripts and checks: `docs/session-handoff-2026-11-24.md`. Rollback for that release: `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`. Then the owner (or Aizawa) signs in, connects WordPress and checks that 「投稿先」 lists コラム.
+1. PR #58 and PR #59 are released (section 2; current production `dpl_AkQuX4NMABeYSZSy24dFfoAb3BSp`, rollback `dpl_DXXsKdhtS74DFyfaLftBeLuhuNQN`). The owner (or Aizawa) signs in, connects WordPress and checks that 「投稿先」 lists コラム.
 2. If コラム is not listed: check the 投稿先 error message, then whether the connected WordPress user can edit コラム, then ask the site's administrator to expose it to the REST API (`show_in_rest`).
-3. Send Aizawa the reply in `docs/aizawa-nov24-wordpress-destination.md` after PR #59 is released, and ask for the failure message they saw, if any.
+3. Send Aizawa the reply in `docs/aizawa-nov24-wordpress-destination.md` (ready to send, not sent). It asks them to check 投稿 drafts for the test article before posting again (the WordPress side was not read), and for the failure message they saw, if any.
 4. Access code: done by the owner on 11/17 (production value set, session secret rotated). Remove the code fallback in `src/app/api/demo-auth/route.ts` as a separate task (open PR #55 replaces the shared code with per-user login; review it separately).
 5. Cleanup, with approval: the three own test articles in section 12. Revoke Vercel tokens that are no longer needed and the Supabase token if unneeded.
 
@@ -208,5 +222,7 @@ Customer was told results/operation guidance around 2026-11-18〜19 (external es
 - `.verification-files/` is ignored and deploy-excluded. It holds the local Playwright override, run manifests (IDs and booleans only), the `aio-store` v5/v6 backups, and `*.local.mjs` copies of the production scripts that change only the browser launch (container Chromium + session proxy) or, for local runs, the target host.
 - Previous release evidence: `docs/aizawa-nov11-followup.md`, `docs/adversarial-verification-2026-11-09.md`.
 - Session handoff of 2026-11-24 (state, next steps, the REST release helper, the no-sign-in check, the local Playwright config): `docs/session-handoff-2026-11-24.md`. A new cloud container does not have `.verification-files/`; recreate the Playwright override from that file.
-- GitHub GraphQL is not available from cloud sessions: list review threads with `GET /repos/{o}/{r}/pulls/{n}/ccr/review_threads`, resolve with `POST /repos/{o}/{r}/pulls/{n}/ccr/comments/{id}/resolve`.
+- GitHub GraphQL is not available from cloud sessions: list review threads with `GET /repos/{o}/{r}/pulls/{n}/ccr/review_threads`, resolve with `POST /repos/{o}/{r}/pulls/{n}/ccr/comments/{id}/resolve`. On the Windows workstation the `ccr/` routes return 404 and GraphQL works (`gh api graphql`, `resolveReviewThread`).
+- Release from the Windows workstation (used for PR #59): the signed-in Vercel CLI 54 serves the REST calls of the handoff's helper through `vercel api` (beta), so no token is handled. Upload with `vercel deploy --prod --skip-domain` from a clean worktree with `.vercel/project.json` copied in, and without `--yes`: on an unlinked folder, `--yes` can let the CLI create a new project and connect the Git repository to it.
+- Extra git worktrees get no husky hooks (`core.hooksPath` is the relative `.husky/_`, which `npm ci` did not create there). Run the hook commands by hand before committing and pushing.
 - `npm run test:integrity` misreads a test whose body (comments included) has an odd number of apostrophes and reports "does not appear to contain an assertion"; avoid `'` in comments inside tests.
